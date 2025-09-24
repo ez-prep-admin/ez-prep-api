@@ -12,21 +12,21 @@ export class User {
   @Prop({ required: true, trim: true, maxlength: 100 })
   name: string;
 
-  @Prop({ 
-    required: true, 
-    unique: true, 
+  @Prop({
+    required: true,
+    unique: true,
     lowercase: true,
     match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   })
   email: string;
 
-  @Prop({ 
+  @Prop({
     required: true,
     match: /^[\+]?[1-9][\d]{0,15}$/,
   })
   phoneNumber: string;
 
-  @Prop({ 
+  @Prop({
     type: String,
     enum: UserRole,
     default: UserRole.USER,
@@ -47,7 +47,6 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Indexes for better query performance
-UserSchema.index({ email: 1 });
 UserSchema.index({ phoneNumber: 1 });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
 

@@ -21,9 +21,10 @@ export const securityConfig = {
     },
   },
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? ['https://yourdomain.com'] // Replace with your actual domains
-      : true, // Allow all origins in development
+    origin:
+      process.env.NODE_ENV === 'production'
+        ? ['https://yourdomain.com'] // Replace with your actual domains
+        : true, // Allow all origins in development
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
@@ -38,7 +39,7 @@ export const securityConfig = {
   rateLimit: {
     ttl: 60000, // 1 minute
     limit: 100, // 100 requests per minute
-    skipIf: (context) => {
+    skipIf: context => {
       // Skip rate limiting for health checks
       const request = context.switchToHttp().getRequest();
       return request.url === '/api/v1/health';

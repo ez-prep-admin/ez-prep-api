@@ -13,18 +13,21 @@ export class AppController {
   }
 
   @Get('health')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Health check',
-    description: 'Returns the current health status of the API'
+    description: 'Returns the current health status of the API',
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'API is healthy and running',
     schema: {
       type: 'object',
       properties: {
         status: { type: 'string', example: 'OK' },
-        message: { type: 'string', example: 'EZ Prep API is running successfully' },
+        message: {
+          type: 'string',
+          example: 'EZ Prep API is running successfully',
+        },
         timestamp: { type: 'string', example: '2025-09-17T02:30:00.000Z' },
         environment: { type: 'string', example: 'development' },
       },

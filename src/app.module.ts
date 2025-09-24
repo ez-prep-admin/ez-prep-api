@@ -23,21 +23,29 @@ import { winstonConfig } from './common/config/winston.config';
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => {
         const mongoUri = configService.get<string>('MONGODB_URI');
-        console.log('🔍 MongoDB URI from config:', mongoUri ? 'Found' : 'NOT FOUND');
-        
+        console.log(
+          '🔍 MongoDB URI from config:',
+          mongoUri ? 'Found' : 'NOT FOUND',
+        );
+
         if (!mongoUri) {
-          console.error('❌ MONGODB_URI is not defined in environment variables');
-          console.log('📋 Available environment variables:', Object.keys(process.env).filter(key => key.startsWith('MONGODB')));
+          console.error(
+            '❌ MONGODB_URI is not defined in environment variables',
+          );
+          console.log(
+            '📋 Available environment variables:',
+            Object.keys(process.env).filter(key => key.startsWith('MONGODB')),
+          );
           throw new Error('MONGODB_URI environment variable is required');
         }
-        
+
         return {
           uri: mongoUri,
-          connectionFactory: (connection) => {
+          connectionFactory: connection => {
             connection.on('connected', () => {
               console.log('✅ MongoDB connected successfully');
             });
-            connection.on('error', (error) => {
+            connection.on('error', error => {
               console.error('❌ MongoDB connection error:', error);
             });
             connection.on('disconnected', () => {

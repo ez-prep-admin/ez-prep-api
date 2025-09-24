@@ -1,10 +1,11 @@
-import { 
-  IsEmail, 
-  IsString, 
-  IsEnum, 
-  IsOptional, 
-  MinLength, 
-  MaxLength 
+/* eslint-disable prettier/prettier */
+import {
+  IsEmail,
+  IsString,
+  IsEnum,
+  IsOptional,
+  MinLength,
+  MaxLength,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -24,7 +25,9 @@ export class CreateUserDto {
   @IsString({ message: 'Name must be a valid string' })
   @MinLength(2, { message: 'Name must be at least 2 characters long' })
   @MaxLength(100, { message: 'Name cannot exceed 100 characters' })
-  @IsProperName({ message: 'Name can only contain letters, spaces, hyphens, and apostrophes' })
+  @IsProperName({
+    message: 'Name can only contain letters, spaces, hyphens, and apostrophes',
+  })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
       // Normalize spaces and convert to proper case
@@ -59,18 +62,20 @@ export class CreateUserDto {
     example: '+1234567890',
   })
   @IsString({ message: 'Phone number must be a valid string' })
-  @IsValidPhone({ message: 'Please provide a valid phone number with country code' })
+  @IsValidPhone({
+    message: 'Please provide a valid phone number with country code',
+  })
   @IsUniquePhone({ message: 'This phone number is already registered' })
   @Transform(({ value }) => {
     if (typeof value === 'string') {
       // Clean the phone number but preserve the + sign
       let cleaned = value.trim().replace(/[^\d+]/g, '');
-      
+
       // Ensure it starts with + if it doesn't already
       if (!cleaned.startsWith('+')) {
         cleaned = '+' + cleaned;
       }
-      
+
       return cleaned;
     }
     return value;
@@ -84,8 +89,8 @@ export class CreateUserDto {
     example: UserRole.USER,
   })
   @IsOptional()
-  @IsEnum(UserRole, { 
-    message: `Role must be one of: ${Object.values(UserRole).join(', ')}` 
+  @IsEnum(UserRole, {
+    message: `Role must be one of: ${Object.values(UserRole).join(', ')}`,
   })
   role?: UserRole = UserRole.USER;
 }

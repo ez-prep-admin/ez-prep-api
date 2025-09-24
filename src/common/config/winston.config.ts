@@ -24,7 +24,7 @@ export const winstonConfig: WinstonModuleOptions = {
       level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
       format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
     }),
-    
+
     // File transport for errors
     new winston.transports.File({
       filename: 'logs/error.log',
@@ -33,7 +33,7 @@ export const winstonConfig: WinstonModuleOptions = {
       maxsize: 5242880, // 5MB
       maxFiles: 5,
     }),
-    
+
     // File transport for all logs
     new winston.transports.File({
       filename: 'logs/combined.log',
@@ -42,15 +42,13 @@ export const winstonConfig: WinstonModuleOptions = {
       maxFiles: 5,
     }),
   ],
-  
+
   // Default metadata
   defaultMeta: {
     service: 'ez-prep-api',
     environment: process.env.NODE_ENV || 'development',
   },
-  
+
   // Exit on error
   exitOnError: false,
 };
-
-

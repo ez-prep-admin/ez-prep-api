@@ -13,9 +13,7 @@ import { User, UserDocument } from '../../users/schemas/user.schema';
 @ValidatorConstraint({ name: 'isUniqueEmail', async: true })
 @Injectable()
 export class IsUniqueEmailConstraint implements ValidatorConstraintInterface {
-  constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
   async validate(email: string, args: ValidationArguments): Promise<boolean> {
     if (!email) return true; // Let other validators handle empty values
@@ -39,7 +37,7 @@ export class IsUniqueEmailConstraint implements ValidatorConstraintInterface {
 }
 
 export function IsUniqueEmail(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       target: object.constructor,
       propertyName: propertyName,
@@ -49,5 +47,3 @@ export function IsUniqueEmail(validationOptions?: ValidationOptions) {
     });
   };
 }
-
-

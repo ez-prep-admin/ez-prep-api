@@ -13,11 +13,12 @@ import { User, UserDocument } from '../../users/schemas/user.schema';
 @ValidatorConstraint({ name: 'isUniquePhone', async: true })
 @Injectable()
 export class IsUniquePhoneConstraint implements ValidatorConstraintInterface {
-  constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
-  async validate(phoneNumber: string, args: ValidationArguments): Promise<boolean> {
+  async validate(
+    phoneNumber: string,
+    args: ValidationArguments,
+  ): Promise<boolean> {
     if (!phoneNumber) return true; // Let other validators handle empty values
 
     const object = args.object as any;
@@ -42,7 +43,7 @@ export class IsUniquePhoneConstraint implements ValidatorConstraintInterface {
 }
 
 export function IsUniquePhone(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       target: object.constructor,
       propertyName: propertyName,
@@ -52,5 +53,3 @@ export function IsUniquePhone(validationOptions?: ValidationOptions) {
     });
   };
 }
-
-

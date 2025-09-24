@@ -13,5 +13,3 @@ import { User, UserSchema } from './schemas/user.schema';
   exports: [UsersService], // Export service for use in other modules
 })
 export class UsersModule {}
-
-

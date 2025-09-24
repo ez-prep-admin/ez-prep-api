@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
@@ -9,9 +13,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-  ) {}
+  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     try {
@@ -24,16 +26,20 @@ export class UsersService {
       });
 
       if (existingUser) {
-        throw new ConflictException('User with this email or phone number already exists');
+        throw new ConflictException(
+          'User with this email or phone number already exists',
+        );
       }
 
       const createdUser = new this.userModel(createUserDto);
       const savedUser = await createdUser.save();
-      
+
       return new UserResponseDto(savedUser.toObject());
     } catch (error) {
       if (error.code === 11000) {
-        throw new ConflictException('User with this email or phone number already exists');
+        throw new ConflictException(
+          'User with this email or phone number already exists',
+        );
       }
       throw error;
     }
@@ -62,19 +68,26 @@ export class UsersService {
     return users.map(user => new UserResponseDto(user.toObject()));
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<UserResponseDto> {
+  async update(
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
     // Check if email or phone is being updated and already exists
     if (updateUserDto.email || updateUserDto.phoneNumber) {
       const existingUser = await this.userModel.findOne({
         _id: { $ne: id },
         $or: [
           ...(updateUserDto.email ? [{ email: updateUserDto.email }] : []),
-          ...(updateUserDto.phoneNumber ? [{ phoneNumber: updateUserDto.phoneNumber }] : []),
+          ...(updateUserDto.phoneNumber
+            ? [{ phoneNumber: updateUserDto.phoneNumber }]
+            : []),
         ],
       });
 
       if (existingUser) {
-        throw new ConflictException('User with this email or phone number already exists');
+        throw new ConflictException(
+          'User with this email or phone number already exists',
+        );
       }
     }
 
@@ -91,7 +104,11 @@ export class UsersService {
 
   async softDelete(id: string): Promise<UserResponseDto> {
     const deletedUser = await this.userModel
-      .findByIdAndUpdate(id, { isDeleted: true, isActive: false }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        { isDeleted: true, isActive: false },
+        { new: true },
+      )
       .exec();
 
     if (!deletedUser) {
@@ -107,7 +124,7 @@ export class UsersService {
       .findOneAndUpdate(
         { _id: id, isDeleted: true },
         { isDeleted: false, isActive: true },
-        { new: true }
+        { new: true },
       )
       .exec();
 
@@ -144,12 +161,13 @@ export class UsersService {
   }
 
   async getUserStats() {
-    const [totalUsers, activeUsers, adminUsers, deletedUsers] = await Promise.all([
-      this.userModel.countDocuments({}),
-      this.userModel.countDocuments({ isActive: true }),
-      this.userModel.countDocuments({ role: UserRole.ADMIN }),
-      this.userModel.countDocuments({ isDeleted: true }),
-    ]);
+    const [totalUsers, activeUsers, adminUsers, deletedUsers] =
+      await Promise.all([
+        this.userModel.countDocuments({}),
+        this.userModel.countDocuments({ isActive: true }),
+        this.userModel.countDocuments({ role: UserRole.ADMIN }),
+        this.userModel.countDocuments({ isDeleted: true }),
+      ]);
 
     return {
       totalUsers,

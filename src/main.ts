@@ -10,7 +10,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  
+
   try {
     const app = await NestFactory.create(AppModule);
     const configService = app.get(ConfigService);
@@ -45,7 +45,9 @@ async function bootstrap() {
     // Swagger API documentation
     const config = new DocumentBuilder()
       .setTitle('EZ Prep API')
-      .setDescription('A comprehensive mock test application API with user management, authentication, and test functionality')
+      .setDescription(
+        'A comprehensive mock test application API with user management, authentication, and test functionality',
+      )
       .setVersion('1.0.0')
       .addTag('health', 'Health check endpoints')
       .addTag('users', 'User management endpoints')
@@ -78,12 +80,14 @@ async function bootstrap() {
 
     const port = configService.get<number>('PORT') || 3000;
     await app.listen(port);
-    
+
     logger.log(`🚀 Application is running on: http://localhost:${port}`);
     logger.log(`📚 API Documentation: http://localhost:${port}/api/v1`);
     logger.log(`📖 Swagger Documentation: http://localhost:${port}/api/docs`);
     logger.log(`🛡️ Security headers enabled with Helmet`);
-    logger.log(`⚡ Rate limiting: ${securityConfig.rateLimit.limit} requests per ${securityConfig.rateLimit.ttl}ms`);
+    logger.log(
+      `⚡ Rate limiting: ${securityConfig.rateLimit.limit} requests per ${securityConfig.rateLimit.ttl}ms`,
+    );
     logger.log(`✅ Advanced validation with custom validators enabled`);
     logger.log(`📝 Winston logging configured - logs saved to ./logs/`);
   } catch (error) {
