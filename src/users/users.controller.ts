@@ -9,6 +9,7 @@ import {
   HttpStatus,
   HttpCode,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,12 +18,18 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiQuery,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 
 @ApiTags('users')
 @Controller('users')
@@ -91,6 +98,21 @@ export class UsersController {
   }
 
   @Get('stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get user statistics (Admin only)',
+    description:
+      'Retrieves comprehensive user statistics. Requires admin privileges.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User statistics retrieved successfully',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required or insufficient privileges',
+  })
   async getUserStats(): Promise<{
     message: string;
     data: any;
@@ -103,6 +125,22 @@ export class UsersController {
   }
 
   @Get('with-deleted')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get all users including deleted ones (Admin only)',
+    description:
+      'Retrieves all users including soft-deleted ones. Requires admin privileges.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'All users retrieved successfully',
+    type: [UserResponseDto],
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required or insufficient privileges',
+  })
   async findAllWithDeleted(): Promise<{
     message: string;
     data: UserResponseDto[];
@@ -113,6 +151,74 @@ export class UsersController {
       message: 'All users (including deleted) retrieved successfully',
       data: users,
       count: users.length,
+    };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get current user profile',
+    description: 'Retrieves the profile of the currently authenticated user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+    type: UserResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async getMyProfile(@GetUser() currentUser: UserResponseDto): Promise<{
+    message: string;
+    data: UserResponseDto;
+  }> {
+    return {
+      message: 'Profile retrieved successfully',
+      data: currentUser,
+    };
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update current user profile',
+    description:
+      'Updates the profile of the currently authenticated user. Users can only update their own profile.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile updated successfully',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed or invalid input data',
+  })
+  @ApiConflictResponse({
+    description: 'Email or phone number already exists',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async updateMyProfile(
+    @GetUser() currentUser: UserResponseDto,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<{
+    message: string;
+    data: UserResponseDto;
+  }> {
+    // Prevent users from updating certain fields like isDeleted
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { isDeleted, ...safeUpdateData } = updateUserDto;
+
+    const updatedUser = await this.usersService.update(
+      currentUser.id,
+      safeUpdateData,
+    );
+    return {
+      message: 'Profile updated successfully',
+      data: updatedUser,
     };
   }
 

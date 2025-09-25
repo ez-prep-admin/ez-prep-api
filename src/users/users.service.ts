@@ -63,6 +63,11 @@ export class UsersService {
     return user ? new UserResponseDto(user.toObject()) : null;
   }
 
+  async findByPhone(phoneNumber: string): Promise<UserResponseDto | null> {
+    const user = await this.userModel.findOne({ phoneNumber }).exec();
+    return user ? new UserResponseDto(user.toObject()) : null;
+  }
+
   async findByRole(role: UserRole): Promise<UserResponseDto[]> {
     const users = await this.userModel.find({ role }).exec();
     return users.map(user => new UserResponseDto(user.toObject()));
