@@ -7,6 +7,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -64,6 +65,7 @@ import { winstonConfig } from './common/config/winston.config';
     // Custom validation module
     ValidationModule,
     UsersModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
