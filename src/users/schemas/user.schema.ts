@@ -65,6 +65,16 @@ UserSchema.set('toJSON', {
   },
 });
 
+// Also set toObject to include virtuals
+UserSchema.set('toObject', {
+  virtuals: true,
+  transform: function (doc, ret) {
+    delete ret._id;
+    delete ret.__v;
+    return ret;
+  },
+});
+
 // Pre-find middleware to handle soft delete queries
 UserSchema.pre(/^find/, function (this: any) {
   // Only return non-deleted users by default
