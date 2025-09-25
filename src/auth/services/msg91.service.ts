@@ -82,7 +82,10 @@ export class Msg91Service {
         this.logger.log(`Phone number from mobile field: ${phoneNumber}`);
       } else {
         // Invalid response format
-        this.logger.warn('MSG91 token verification failed - invalid response format:', responseText);
+        this.logger.warn(
+          'MSG91 token verification failed - invalid response format:',
+          responseText,
+        );
         throw new HttpException(
           'Invalid or expired access token',
           HttpStatus.UNAUTHORIZED,
@@ -91,7 +94,10 @@ export class Msg91Service {
 
       // Validate phone number
       if (!phoneNumber || phoneNumber.length < 10) {
-        this.logger.warn('Invalid phone number received from MSG91:', phoneNumber);
+        this.logger.warn(
+          'Invalid phone number received from MSG91:',
+          phoneNumber,
+        );
         throw new HttpException(
           'Invalid phone number received',
           HttpStatus.UNAUTHORIZED,
@@ -103,7 +109,9 @@ export class Msg91Service {
         ? phoneNumber
         : `+${phoneNumber}`;
 
-      this.logger.log(`Access token verified successfully for phone: ${formattedPhone}`);
+      this.logger.log(
+        `Access token verified successfully for phone: ${formattedPhone}`,
+      );
       return formattedPhone;
     } catch (error) {
       if (error instanceof HttpException) {
