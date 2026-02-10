@@ -1,6 +1,8 @@
 import { WinstonModuleOptions } from 'nest-winston';
 import * as winston from 'winston';
 
+const isVercel = process.env.VERCEL === '1';
+
 const logFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
@@ -17,31 +19,41 @@ const consoleFormat = winston.format.combine(
   }),
 );
 
+const transports: winston.transport[] = isVercel
+  ? [
+      // Console-only logging on Vercel (no file system access)
+      new winston.transports.Console({
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
+      }),
+    ]
+  : [
+      // Console transport for local / non-Vercel environments
+      new winston.transports.Console({
+        level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+        format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
+      }),
+
+      // File transport for errors
+      new winston.transports.File({
+        filename: 'logs/error.log',
+        level: 'error',
+        format: logFormat,
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+
+      // File transport for all logs
+      new winston.transports.File({
+        filename: 'logs/combined.log',
+        format: logFormat,
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+    ];
+
 export const winstonConfig: WinstonModuleOptions = {
-  transports: [
-    // Console transport for development
-    new winston.transports.Console({
-      level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-      format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
-    }),
-
-    // File transport for errors
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-
-    // File transport for all logs
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      format: logFormat,
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-  ],
+  transports,
 
   // Default metadata
   defaultMeta: {
