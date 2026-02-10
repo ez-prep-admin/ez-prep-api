@@ -23,7 +23,7 @@ export const securityConfig = {
   cors: {
     origin:
       process.env.NODE_ENV === 'production'
-        ? ['https://yourdomain.com'] // Replace with your actual domains
+        ? ['https://ezprep.in'] // Replace with your actual domains
         : true, // Allow all origins in development
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
