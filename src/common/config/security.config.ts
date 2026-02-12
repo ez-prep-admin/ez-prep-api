@@ -24,7 +24,7 @@ export const securityConfig = {
     origin:
       process.env.NODE_ENV === 'production'
         ? ['https://ezprep.in'] // Replace with your actual domains
-        : true, // Allow all origins in development
+        : ['http://localhost:3000'], // Allow localhost:3000 in development
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
