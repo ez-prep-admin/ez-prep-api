@@ -8,6 +8,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { MockTestsModule } from './mock-tests/mock-tests.module';
+import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -66,6 +68,8 @@ import { winstonConfig } from './common/config/winston.config';
     ValidationModule,
     UsersModule,
     AuthModule,
+    MockTestsModule,
+    MockTestAttemptsModule,
   ],
   controllers: [AppController],
   providers: [
