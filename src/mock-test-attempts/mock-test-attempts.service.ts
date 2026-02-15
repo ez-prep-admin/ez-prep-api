@@ -17,6 +17,7 @@ import {
 import { Question, QuestionDocument } from './schemas/question.schema';
 import { StartAttemptDto } from './dto/start-attempt.dto';
 import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
+import { UpdateAnswerDto } from './dto/update-answer.dto';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -218,5 +219,93 @@ export class MockTestAttemptsService {
       .exec();
 
     return attempts;
+  }
+
+  /**
+   * Update answer for a question in an attempt
+   * @param attemptId - Attempt ID
+   * @param userId - User ID
+   * @param updateAnswerDto - Contains questionId and selectedOptionId
+   * @returns Success indicator
+   */
+  async updateAnswer(
+    attemptId: string,
+    userId: string,
+    updateAnswerDto: UpdateAnswerDto,
+  ): Promise<void> {
+    const { questionId, selectedOptionId } = updateAnswerDto;
+
+    // Step 1: Validate attempt ID format
+    if (!Types.ObjectId.isValid(attemptId)) {
+      throw new BadRequestException('Invalid attempt ID format');
+    }
+
+    // Step 2: Validate question ID format
+    if (!Types.ObjectId.isValid(questionId)) {
+      throw new BadRequestException('Invalid question ID format');
+    }
+
+    // Step 3: Fetch the attempt
+    const attempt = await this.attemptModel
+      .findOne({
+        _id: attemptId,
+        user: new Types.ObjectId(userId),
+      })
+      .exec();
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Attempt with ID "${attemptId}" not found or you don't have access to it`,
+      );
+    }
+
+    // Step 4: Validate attempt status
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Cannot update answers for attempt with status "${attempt.status}". Only IN_PROGRESS attempts can be updated.`,
+      );
+    }
+
+    // Step 5: Check if attempt has expired
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000; // in seconds
+    const allowedTime = attempt.durationInMinutes * 60; // in seconds
+
+    if (timeElapsed > allowedTime) {
+      // Mark attempt as expired
+      await this.attemptModel.updateOne(
+        { _id: attemptId },
+        { $set: { status: 'EXPIRED' } },
+      );
+
+      throw new BadRequestException(
+        'Test has expired. You can no longer update answers.',
+      );
+    }
+
+    // Step 6: Verify question exists in the attempt
+    const questionExists = attempt.questions.some(
+      q => q.question.toString() === questionId,
+    );
+
+    if (!questionExists) {
+      throw new BadRequestException(
+        `Question with ID "${questionId}" is not part of this attempt`,
+      );
+    }
+
+    // Step 7: Update the selected answer using positional operator
+    await this.attemptModel
+      .updateOne(
+        {
+          _id: attemptId,
+          'questions.question': new Types.ObjectId(questionId),
+        },
+        {
+          $set: {
+            'questions.$.selectedOption': selectedOptionId,
+          },
+        },
+      )
+      .exec();
   }
 }

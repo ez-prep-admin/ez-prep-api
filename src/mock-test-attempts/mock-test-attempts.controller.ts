@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   UseGuards,
@@ -21,6 +22,7 @@ import {
 import { MockTestAttemptsService } from './mock-test-attempts.service';
 import { StartAttemptDto } from './dto/start-attempt.dto';
 import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
+import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -158,6 +160,50 @@ export class MockTestAttemptsController {
       data: attempts,
       count: attempts.length,
     };
+  }
+
+  @Patch(':attemptId/answer')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: 'Update answer for a question in an attempt',
+    description: `
+    Updates the selected answer for a specific question during an active test attempt.
+    
+    Validations:
+    - Attempt must exist and belong to the authenticated user
+    - Attempt status must be IN_PROGRESS
+    - Test must not have expired (based on startedAt + durationInMinutes)
+    - Question must be part of the attempt
+    
+    If the test has expired, the attempt status is automatically updated to EXPIRED.
+    
+    Note: This endpoint only saves the answer. Evaluation happens during submission.
+    `,
+  })
+  @ApiResponse({
+    status: 204,
+    description: 'Answer updated successfully',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid IDs, attempt not IN_PROGRESS, test expired, or question not in attempt',
+  })
+  @ApiNotFoundResponse({
+    description: 'Attempt not found or access denied',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async updateAnswer(
+    @Param('attemptId') attemptId: string,
+    @Body() updateAnswerDto: UpdateAnswerDto,
+    @GetUser() user: UserResponseDto,
+  ): Promise<void> {
+    await this.mockTestAttemptsService.updateAnswer(
+      attemptId,
+      user.id,
+      updateAnswerDto,
+    );
   }
 
   @Get(':id')
