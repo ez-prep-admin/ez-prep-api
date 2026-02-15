@@ -23,6 +23,8 @@ import { MockTestAttemptsService } from './mock-test-attempts.service';
 import { StartAttemptDto } from './dto/start-attempt.dto';
 import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
+import { SubmitAttemptDto } from './dto/submit-attempt.dto';
+import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -204,6 +206,66 @@ export class MockTestAttemptsController {
       user.id,
       updateAnswerDto,
     );
+  }
+
+  @Post(':attemptId/submit')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Submit mock test attempt and get results',
+    description: `
+    Submits the mock test attempt for evaluation.
+    
+    Process:
+    1. Validates attempt (exists, belongs to user, status = IN_PROGRESS)
+    2. Server-side timer check (if expired, marks as EXPIRED but still evaluates)
+    3. Optionally accepts final answers array (protects against last-second internet loss)
+    4. Evaluates all questions:
+       - Correct answer: +marksPerQuestion
+       - Incorrect answer: -negativeMarking
+       - Unanswered: 0 (no negative marking)
+    5. Calculates total score and pass/fail status
+    6. Updates attempt (score, status = SUBMITTED/EXPIRED, submittedAt)
+    7. Returns results:
+       - If showResultsImmediately = true: Full results with correct answers and explanations
+       - If showResultsImmediately = false: Only submission confirmation and basic stats
+    
+    Note: Auto-expiry is handled - if time limit exceeded, attempt is marked as EXPIRED.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Attempt submitted and evaluated successfully',
+    type: SubmitAttemptResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid attempt ID or attempt not IN_PROGRESS',
+  })
+  @ApiNotFoundResponse({
+    description: 'Attempt not found or access denied',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async submitAttempt(
+    @Param('attemptId') attemptId: string,
+    @Body() submitAttemptDto: SubmitAttemptDto,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{
+    message: string;
+    data: SubmitAttemptResponseDto;
+  }> {
+    const result = await this.mockTestAttemptsService.submitAttempt(
+      attemptId,
+      user.id,
+      submitAttemptDto,
+    );
+
+    return {
+      message: result.questionResults
+        ? 'Test submitted successfully. Results are available.'
+        : 'Test submitted successfully. Results will be available later.',
+      data: result,
+    };
   }
 
   @Get(':id')

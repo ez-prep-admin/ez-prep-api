@@ -18,6 +18,8 @@ import { Question, QuestionDocument } from './schemas/question.schema';
 import { StartAttemptDto } from './dto/start-attempt.dto';
 import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
+import { SubmitAttemptDto } from './dto/submit-attempt.dto';
+import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -307,5 +309,178 @@ export class MockTestAttemptsService {
         },
       )
       .exec();
+  }
+
+  /**
+   * Submit attempt and evaluate results
+   * @param attemptId - Attempt ID
+   * @param userId - User ID
+   * @param submitAttemptDto - Optional answers to update before submission
+   * @returns Submission results with score and details
+   */
+  async submitAttempt(
+    attemptId: string,
+    userId: string,
+    submitAttemptDto?: SubmitAttemptDto,
+  ): Promise<SubmitAttemptResponseDto> {
+    // Step 1: Validate attempt ID format
+    if (!Types.ObjectId.isValid(attemptId)) {
+      throw new BadRequestException('Invalid attempt ID format');
+    }
+
+    // Step 2: Fetch the attempt
+    const attempt = await this.attemptModel
+      .findOne({
+        _id: attemptId,
+        user: new Types.ObjectId(userId),
+      })
+      .exec();
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Attempt with ID "${attemptId}" not found or you don't have access to it`,
+      );
+    }
+
+    // Step 3: Validate attempt status
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Cannot submit attempt with status "${attempt.status}". Only IN_PROGRESS attempts can be submitted.`,
+      );
+    }
+
+    // Step 4: Server-side timer check
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000; // in seconds
+    const allowedTime = attempt.durationInMinutes * 60; // in seconds
+    const isExpired = timeElapsed > allowedTime;
+
+    // If expired, mark as EXPIRED but continue to evaluate
+    if (isExpired) {
+      attempt.status = 'EXPIRED';
+    }
+
+    // Step 5: Optional - Update answers from request (protects against last-second internet loss)
+    if (submitAttemptDto?.answers && submitAttemptDto.answers.length > 0) {
+      for (const answer of submitAttemptDto.answers) {
+        if (!Types.ObjectId.isValid(answer.questionId)) {
+          continue; // Skip invalid IDs
+        }
+
+        // Update each answer
+        await this.attemptModel
+          .updateOne(
+            {
+              _id: attemptId,
+              'questions.question': new Types.ObjectId(answer.questionId),
+            },
+            {
+              $set: {
+                'questions.$.selectedOption': answer.selectedOptionId,
+              },
+            },
+          )
+          .exec();
+      }
+
+      // Refresh attempt after updates
+      const updatedAttempt = await this.attemptModel.findById(attemptId).exec();
+      if (updatedAttempt) {
+        attempt.questions = updatedAttempt.questions;
+      }
+    }
+
+    // Step 6: Fetch all questions with correct answers and explanations
+    const questionIds = attempt.questions.map(q => q.question);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds } })
+      .lean()
+      .exec();
+
+    // Create a map for quick lookup
+    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+
+    // Step 7: Evaluate each question
+    let totalScore = 0;
+    let correctCount = 0;
+    let incorrectCount = 0;
+    let unansweredCount = 0;
+
+    for (const attemptQuestion of attempt.questions) {
+      const questionId = attemptQuestion.question.toString();
+      const question = questionMap.get(questionId);
+
+      if (!question) {
+        continue; // Skip if question not found
+      }
+
+      const selectedOption = attemptQuestion.selectedOption;
+      const correctAnswer = question.correctAnswer;
+
+      if (!selectedOption) {
+        // Unanswered - no marks, no negative marking
+        attemptQuestion.isCorrect = false;
+        attemptQuestion.marksAwarded = 0;
+        unansweredCount++;
+      } else if (selectedOption === correctAnswer) {
+        // Correct answer
+        attemptQuestion.isCorrect = true;
+        attemptQuestion.marksAwarded = attempt.marksPerQuestion;
+        totalScore += attempt.marksPerQuestion;
+        correctCount++;
+      } else {
+        // Incorrect answer - apply negative marking
+        attemptQuestion.isCorrect = false;
+        attemptQuestion.marksAwarded = -attempt.negativeMarking;
+        totalScore -= attempt.negativeMarking;
+        incorrectCount++;
+      }
+    }
+
+    // Step 8: Update attempt with final results
+    const submittedAt = new Date();
+    attempt.score = totalScore;
+    attempt.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
+    attempt.submittedAt = submittedAt;
+
+    await attempt.save();
+
+    // Step 9: Prepare response
+    const totalPossibleScore =
+      attempt.totalQuestions * attempt.marksPerQuestion;
+    const passed = attempt.passingScore
+      ? totalScore >= attempt.passingScore
+      : false;
+
+    const response: SubmitAttemptResponseDto = {
+      attemptId: attempt.id,
+      score: totalScore,
+      totalScore: totalPossibleScore,
+      passingScore: attempt.passingScore,
+      passed,
+      correctAnswers: correctCount,
+      incorrectAnswers: incorrectCount,
+      unansweredQuestions: unansweredCount,
+      submittedAt,
+      timeTaken: Math.floor(timeElapsed),
+    };
+
+    // Step 10: Include detailed results if showResultsImmediately is true
+    if (attempt.showResultsImmediately) {
+      response.questionResults = attempt.questions.map(aq => {
+        const questionId = aq.question.toString();
+        const question = questionMap.get(questionId);
+
+        return {
+          questionId,
+          selectedOption: aq.selectedOption,
+          correctAnswer: question?.correctAnswer || '',
+          isCorrect: aq.isCorrect || false,
+          marksAwarded: aq.marksAwarded,
+          explanation: question?.explanation,
+        };
+      });
+    }
+
+    return response;
   }
 }
