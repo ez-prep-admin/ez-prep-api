@@ -25,6 +25,8 @@ import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
+import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
+import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -271,17 +273,92 @@ export class MockTestAttemptsController {
     };
   }
 
-  @Get(':id')
+  @Get(':attemptId/resume')
   @ApiOperation({
-    summary: 'Get a specific attempt by ID',
+    summary: 'Resume attempt (Reload/Reconnection fallback)',
     description: `
-    Retrieves detailed information about a specific attempt.
+    Retrieves attempt details for resuming an IN_PROGRESS test.
+    Perfect for handling page reloads, network reconnections, or navigation back.
+    
+    Response includes:
+    - Test configuration (frozen at start)
+    - All questions with options
+    - Selected answers so far (to restore user's progress)
+    - Time elapsed and time remaining
+    - NO correct answers or explanations (security: test is still active)
+    
+    Restrictions:
+    - Only works for IN_PROGRESS attempts
+    - For completed attempts (SUBMITTED/EXPIRED), use GET /:id endpoint
+    
     Users can only access their own attempts.
     `,
   })
   @ApiResponse({
     status: 200,
-    description: 'Attempt retrieved successfully',
+    description: 'Attempt details for resuming retrieved successfully',
+    type: ResumeAttemptResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid attempt ID or attempt is not IN_PROGRESS (use GET /:id for completed attempts)',
+  })
+  @ApiNotFoundResponse({
+    description: 'Attempt not found or access denied',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async resumeAttempt(
+    @Param('attemptId') attemptId: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{
+    message: string;
+    data: ResumeAttemptResponseDto;
+  }> {
+    const attempt = await this.mockTestAttemptsService.resumeAttempt(
+      attemptId,
+      user.id,
+    );
+
+    return {
+      message: 'Attempt resumed successfully',
+      data: attempt,
+    };
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get detailed attempt information (View results)',
+    description: `
+    Retrieves comprehensive details about a specific attempt.
+    This endpoint is primarily for viewing completed test results.
+    
+    For resuming IN_PROGRESS attempts, use GET /:attemptId/resume instead.
+    
+    Response varies by attempt status and configuration:
+    
+    IN_PROGRESS attempts:
+    - Basic test information and status
+    - Questions with selected answers (if any)
+    - NO correct answers or explanations
+    - Time metrics (elapsed/remaining)
+    
+    SUBMITTED/EXPIRED attempts:
+    - All of the above PLUS:
+    - Final score and statistics
+    - Submission timestamp
+    - Correct/incorrect/unanswered breakdown
+    - If showResultsImmediately=true: Correct answers and explanations for each question
+    - If showResultsImmediately=false: Only summary statistics, no per-question details
+    
+    Users can only access their own attempts.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Attempt details retrieved successfully',
+    type: AttemptDetailResponseDto,
   })
   @ApiBadRequestResponse({
     description: 'Invalid attempt ID format',
@@ -297,12 +374,12 @@ export class MockTestAttemptsController {
     @GetUser() user: UserResponseDto,
   ): Promise<{
     message: string;
-    data: any;
+    data: AttemptDetailResponseDto;
   }> {
     const attempt = await this.mockTestAttemptsService.findOne(id, user.id);
 
     return {
-      message: 'Attempt retrieved successfully',
+      message: 'Attempt details retrieved successfully',
       data: attempt,
     };
   }

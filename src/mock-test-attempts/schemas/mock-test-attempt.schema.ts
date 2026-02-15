@@ -44,6 +44,9 @@ export class MockTestAttempt {
 
   // Freeze configuration snapshot from the test
   @Prop()
+  testTitle: string;
+
+  @Prop()
   totalQuestions: number;
 
   @Prop()

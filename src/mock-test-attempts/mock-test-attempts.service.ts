@@ -21,6 +21,8 @@ import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
+import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
+import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -103,6 +105,7 @@ export class MockTestAttemptsService {
     const attempt = await this.attemptModel.create({
       user: new Types.ObjectId(userId),
       test: test._id,
+      testTitle: test.title,
       totalQuestions: test.totalQuestions,
       durationInMinutes: test.durationInMinutes,
       marksPerQuestion: test.marksPerQuestion,
@@ -168,11 +171,22 @@ export class MockTestAttemptsService {
    * @param userId - User ID
    * @returns Attempt details
    */
-  async findOne(attemptId: string, userId: string) {
+  /**
+   * Get detailed attempt information (serves as resume/fallback endpoint)
+   * @param attemptId - Attempt ID
+   * @param userId - User ID
+   * @returns Comprehensive attempt details with questions and progress
+   */
+  async findOne(
+    attemptId: string,
+    userId: string,
+  ): Promise<AttemptDetailResponseDto> {
+    // Step 1: Validate attempt ID
     if (!Types.ObjectId.isValid(attemptId)) {
       throw new BadRequestException('Invalid attempt ID format');
     }
 
+    // Step 2: Fetch attempt
     const attempt = await this.attemptModel
       .findOne({
         _id: attemptId,
@@ -186,7 +200,225 @@ export class MockTestAttemptsService {
       );
     }
 
-    return attempt;
+    // Step 3: Fetch full question details (with options)
+    const questionIds = attempt.questions.map(q => q.question);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds } })
+      .lean()
+      .exec();
+
+    // Create question map for quick lookup
+    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+
+    // Step 4: Calculate time metrics
+    const timeElapsed = Math.floor(
+      (Date.now() - attempt.startedAt.getTime()) / 1000,
+    ); // seconds
+    const allowedTime = attempt.durationInMinutes * 60; // seconds
+    const timeRemaining = Math.max(0, allowedTime - timeElapsed);
+
+    // Step 5: Build response based on attempt status
+    const isInProgress = attempt.status === 'IN_PROGRESS';
+    const isSubmitted =
+      attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED';
+    const showResults = isSubmitted && attempt.showResultsImmediately;
+
+    // Step 6: Map questions with appropriate details
+    const mappedQuestions = attempt.questions
+      .map(aq => {
+        const questionId = aq.question.toString();
+        const question = questionMap.get(questionId);
+
+        if (!question) {
+          return null; // Skip if question not found
+        }
+
+        const questionDto: any = {
+          _id: questionId,
+          questionText: question.questionText,
+          options: question.options,
+          subject: question.subject.toString(),
+        };
+
+        // Always include selected answer if user has answered
+        if (aq.selectedOption) {
+          questionDto.selectedOption = aq.selectedOption;
+        }
+
+        // Include evaluation results only if submitted and allowed
+        if (showResults) {
+          questionDto.correctAnswer = question.correctAnswer;
+          questionDto.isCorrect = aq.isCorrect;
+          questionDto.marksAwarded = aq.marksAwarded;
+          if (question.explanation) {
+            questionDto.explanation = question.explanation;
+          }
+        }
+
+        return questionDto;
+      })
+      .filter(Boolean); // Remove nulls
+
+    // Step 7: Build base response
+    const response: AttemptDetailResponseDto = {
+      attemptId: attempt.id,
+      status: attempt.status,
+      test: {
+        title: attempt.testTitle,
+        durationInMinutes: attempt.durationInMinutes,
+        totalQuestions: attempt.totalQuestions,
+        startedAt: attempt.startedAt,
+        marksPerQuestion: attempt.marksPerQuestion,
+        negativeMarking: attempt.negativeMarking,
+        passingScore: attempt.passingScore,
+        showResultsImmediately: attempt.showResultsImmediately,
+      },
+      questions: mappedQuestions,
+    };
+
+    // Step 8: Add time metrics for in-progress attempts
+    if (isInProgress) {
+      response.timeElapsed = timeElapsed;
+      response.timeRemaining = timeRemaining;
+    }
+
+    // Step 9: Add results for submitted attempts
+    if (isSubmitted) {
+      response.score = attempt.score;
+      response.submittedAt = attempt.submittedAt;
+
+      // Calculate answer statistics
+      let correctCount = 0;
+      let incorrectCount = 0;
+      let unansweredCount = 0;
+
+      attempt.questions.forEach(q => {
+        if (!q.selectedOption) {
+          unansweredCount++;
+        } else if (q.isCorrect) {
+          correctCount++;
+        } else {
+          incorrectCount++;
+        }
+      });
+
+      response.correctAnswers = correctCount;
+      response.incorrectAnswers = incorrectCount;
+      response.unansweredQuestions = unansweredCount;
+      response.isPassed = attempt.passingScore
+        ? attempt.score >= attempt.passingScore
+        : false;
+    }
+
+    return response;
+  }
+
+  /**
+   * Resume attempt (for reload/reconnection scenarios)
+   * Returns questions with selected options but WITHOUT correct answers or explanations
+   * @param attemptId - Attempt ID
+   * @param userId - User ID
+   * @returns Attempt details for resuming test
+   */
+  async resumeAttempt(
+    attemptId: string,
+    userId: string,
+  ): Promise<ResumeAttemptResponseDto> {
+    // Step 1: Validate attempt ID
+    if (!Types.ObjectId.isValid(attemptId)) {
+      throw new BadRequestException('Invalid attempt ID format');
+    }
+
+    // Step 2: Fetch attempt
+    const attempt = await this.attemptModel
+      .findOne({
+        _id: attemptId,
+        user: new Types.ObjectId(userId),
+      })
+      .exec();
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Attempt with ID "${attemptId}" not found or you don't have access to it`,
+      );
+    }
+
+    // Step 3: Only allow resuming IN_PROGRESS attempts
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Cannot resume attempt with status "${attempt.status}". Use GET /:id endpoint to view results.`,
+      );
+    }
+
+    // Step 4: Fetch questions WITHOUT correct answers or explanations
+    const questionIds = attempt.questions.map(q => q.question);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds } })
+      .select('-correctAnswer -explanation')
+      .lean()
+      .exec();
+
+    // Create question map for quick lookup
+    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+
+    // Step 5: Calculate time metrics
+    const timeElapsed = Math.floor(
+      (Date.now() - attempt.startedAt.getTime()) / 1000,
+    ); // seconds
+    const allowedTime = attempt.durationInMinutes * 60; // seconds
+    const timeRemaining = Math.max(0, allowedTime - timeElapsed);
+
+    // Step 6: Map questions with selected options (no answers/explanations)
+    const mappedQuestions = attempt.questions
+      .map(aq => {
+        const questionId = aq.question.toString();
+        const question = questionMap.get(questionId);
+
+        if (!question) {
+          return null;
+        }
+
+        const questionDto: any = {
+          _id: questionId,
+          questionText: question.questionText,
+          options: question.options.map(opt => ({
+            id: opt.id,
+            type: opt.type,
+            en: opt.en,
+            ml: opt.ml,
+            url: opt.url,
+            _id: opt._id?.toString(),
+          })),
+          subject: question.subject.toString(),
+        };
+
+        // Include selected option if user has answered
+        if (aq.selectedOption) {
+          questionDto.selectedOption = aq.selectedOption;
+        }
+
+        return questionDto;
+      })
+      .filter(Boolean);
+
+    // Step 7: Build response
+    const response: ResumeAttemptResponseDto = {
+      attemptId: attempt.id,
+      test: {
+        title: attempt.testTitle,
+        durationInMinutes: attempt.durationInMinutes,
+        totalQuestions: attempt.totalQuestions,
+        startedAt: attempt.startedAt,
+        marksPerQuestion: attempt.marksPerQuestion,
+        negativeMarking: attempt.negativeMarking,
+        passingScore: attempt.passingScore,
+      },
+      questions: mappedQuestions,
+      timeElapsed,
+      timeRemaining,
+    };
+
+    return response;
   }
 
   /**
