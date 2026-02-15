@@ -53,6 +53,7 @@ async function bootstrap() {
       .addTag('users', 'User management endpoints')
       .addTag('auth', 'Authentication endpoints (coming soon)')
       .addTag('mock-tests', 'Mock test endpoints')
+      .addTag('mock-test-attempts', 'Mock test attempt endpoints')
       .addTag('tests', 'Test management endpoints (coming soon)')
       .addBearerAuth(
         {

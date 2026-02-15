@@ -12,6 +12,11 @@ import { MockTest, MockTestSchema } from './schemas/mock-test.schema';
   ],
   controllers: [MockTestsController],
   providers: [MockTestsService],
-  exports: [MockTestsService], // Export service for use in other modules
+  exports: [
+    MockTestsService,
+    MongooseModule.forFeature([
+      { name: MockTest.name, schema: MockTestSchema },
+    ]),
+  ], // Export service and model for use in other modules
 })
 export class MockTestsModule {}
