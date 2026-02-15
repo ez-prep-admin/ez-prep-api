@@ -23,7 +23,11 @@ export const securityConfig = {
   cors: {
     origin:
       process.env.NODE_ENV === 'production'
-        ? ['https://ezprep.in','https://www.ezprep.in', 'https://ezprep-app.vercel.app'] // Replace with your actual domains
+        ? [
+            'https://ezprep.in',
+            'https://www.ezprep.in',
+            'https://ezprep-app.vercel.app',
+          ] // Replace with your actual domains
         : ['http://localhost:3000'], // Allow localhost:3000 in development
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

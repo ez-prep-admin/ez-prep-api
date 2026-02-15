@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <script type="text/javascript">
+        var configuration = {
+            widgetId: "356978705467343332303532",
+            tokenAuth: "470606TKO40Abg68d4221dP1",
+            identifier: "Enter your mobile number",
+            exposeMethods: "<true | false> (optional)",  // When true will expose the methods for OTP verification. Refer 'How it works?' for more details
+            success: function (data) {
+                console.log('\n\nMSG91 OTP verification successful:', data);
+                // Extract the access token
+                const accessToken = data && data.message; // or check data.token, depending on the actual MSG91 response
+                if (accessToken) {
+                    // Send token to backend using fetch
+                    fetch('http://localhost:3000/api/v1/auth/verify-otp', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ accessToken: accessToken })
+                    })
+                        .then(response => response.json())
+                        .then(result => {
+                            console.log('Backend verification result:', result);
+                            // Optionally show success in UI
+                        })
+                        .catch(error => {
+                            console.error('Error sending token to backend:', error);
+                            // Optionally show error to user
+                        });
+                } else {
+                    console.error('Access token missing in MSG91 callback data.');
+                }
+            },
+            failure: function (error) {
+                console.error('MSG91 OTP verification failed:', error);
+                // Optionally display failure to user here (e.g., show a message)
+                alert('OTP verification failed. Please try again.');
+            }
+
+        };
+    </script>
+    <script type="text/javascript" onload="initSendOTP(configuration)"
+        src="https://verify.msg91.com/otp-provider.js"> </script>
+</body>
+
+</html>

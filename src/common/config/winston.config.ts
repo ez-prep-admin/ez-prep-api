@@ -24,14 +24,16 @@ const transports: winston.transport[] = isVercel
       // Console-only logging on Vercel (no file system access)
       new winston.transports.Console({
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
+        format:
+          process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
       }),
     ]
   : [
       // Console transport for local / non-Vercel environments
       new winston.transports.Console({
         level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-        format: process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
+        format:
+          process.env.NODE_ENV === 'production' ? logFormat : consoleFormat,
       }),
 
       // File transport for errors
