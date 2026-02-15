@@ -38,6 +38,73 @@ export class MockTestAttemptsService {
   ) {}
 
   /**
+   * Helper: Auto-expire and evaluate an attempt if time limit exceeded
+   * @param attempt - The attempt document
+   * @returns true if attempt was auto-expired, false otherwise
+   */
+  private async autoExpireIfNeeded(
+    attempt: MockTestAttemptDocument,
+  ): Promise<boolean> {
+    if (attempt.status !== 'IN_PROGRESS') {
+      return false; // Already completed
+    }
+
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000;
+    const allowedTime = attempt.durationInMinutes * 60;
+
+    if (timeElapsed <= allowedTime) {
+      return false; // Still within time limit
+    }
+
+    // Time exceeded - auto-expire and evaluate
+    this.logger.warn(
+      `Auto-expiring abandoned attempt ${attempt.id} (exceeded by ${Math.floor(timeElapsed - allowedTime)}s)`,
+    );
+
+    // Fetch questions with correct answers for evaluation
+    const questionIds = attempt.questions.map(q => q.question);
+    const questions = await this.questionModel
+      .find({ _id: { $in: questionIds } })
+      .lean()
+      .exec();
+
+    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+
+    // Evaluate each question
+    let totalScore = 0;
+    for (const attemptQuestion of attempt.questions) {
+      const questionId = attemptQuestion.question.toString();
+      const question = questionMap.get(questionId);
+
+      if (!question) continue;
+
+      const selectedOption = attemptQuestion.selectedOption;
+      const correctAnswer = question.correctAnswer;
+
+      if (!selectedOption) {
+        attemptQuestion.isCorrect = false;
+        attemptQuestion.marksAwarded = 0;
+      } else if (selectedOption === correctAnswer) {
+        attemptQuestion.isCorrect = true;
+        attemptQuestion.marksAwarded = attempt.marksPerQuestion;
+        totalScore += attempt.marksPerQuestion;
+      } else {
+        attemptQuestion.isCorrect = false;
+        attemptQuestion.marksAwarded = -attempt.negativeMarking;
+        totalScore -= attempt.negativeMarking;
+      }
+    }
+
+    // Update attempt
+    attempt.score = totalScore;
+    attempt.status = 'EXPIRED';
+    attempt.submittedAt = new Date();
+    await attempt.save();
+
+    return true;
+  }
+
+  /**
    * Start a new mock test attempt
    * @param startAttemptDto - Contains mockTestId
    * @param userId - ID of the authenticated user
@@ -86,7 +153,7 @@ export class MockTestAttemptsService {
       }
     }
 
-    // Step 4: Check for existing IN_PROGRESS attempt
+    // Step 4: Check for existing IN_PROGRESS attempt and auto-expire if needed
     const inProgressAttempt = await this.attemptModel
       .findOne({
         user: new Types.ObjectId(userId),
@@ -96,9 +163,16 @@ export class MockTestAttemptsService {
       .exec();
 
     if (inProgressAttempt) {
-      throw new ConflictException(
-        'You already have an in-progress attempt for this test. Please complete or submit it first.',
-      );
+      // Auto-expire if time exceeded
+      const wasExpired = await this.autoExpireIfNeeded(inProgressAttempt);
+
+      if (!wasExpired) {
+        // Still active - block new attempt
+        throw new ConflictException(
+          'You already have an in-progress attempt for this test. Please complete or submit it first.',
+        );
+      }
+      // If expired, allow starting new attempt
     }
 
     // Step 5: Create the attempt with frozen configuration
@@ -200,7 +274,10 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 3: Fetch full question details (with options)
+    // Step 3: Auto-expire if needed (handles abandoned attempts)
+    await this.autoExpireIfNeeded(attempt);
+
+    // Step 4: Fetch full question details (with options)
     const questionIds = attempt.questions.map(q => q.question);
     const questions = await this.questionModel
       .find({ _id: { $in: questionIds } })
@@ -210,20 +287,20 @@ export class MockTestAttemptsService {
     // Create question map for quick lookup
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
-    // Step 4: Calculate time metrics
+    // Step 5: Calculate time metrics
     const timeElapsed = Math.floor(
       (Date.now() - attempt.startedAt.getTime()) / 1000,
     ); // seconds
     const allowedTime = attempt.durationInMinutes * 60; // seconds
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
-    // Step 5: Build response based on attempt status
+    // Step 6: Build response based on attempt status
     const isInProgress = attempt.status === 'IN_PROGRESS';
     const isSubmitted =
       attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED';
     const showResults = isSubmitted && attempt.showResultsImmediately;
 
-    // Step 6: Map questions with appropriate details
+    // Step 7: Map questions with appropriate details
     const mappedQuestions = attempt.questions
       .map(aq => {
         const questionId = aq.question.toString();
@@ -259,7 +336,7 @@ export class MockTestAttemptsService {
       })
       .filter(Boolean); // Remove nulls
 
-    // Step 7: Build base response
+    // Step 8: Build base response
     const response: AttemptDetailResponseDto = {
       attemptId: attempt.id,
       status: attempt.status,
@@ -276,13 +353,13 @@ export class MockTestAttemptsService {
       questions: mappedQuestions,
     };
 
-    // Step 8: Add time metrics for in-progress attempts
+    // Step 9: Add time metrics for in-progress attempts
     if (isInProgress) {
       response.timeElapsed = timeElapsed;
       response.timeRemaining = timeRemaining;
     }
 
-    // Step 9: Add results for submitted attempts
+    // Step 10: Add results for submitted attempts
     if (isSubmitted) {
       response.score = attempt.score;
       response.submittedAt = attempt.submittedAt;
@@ -343,14 +420,23 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 3: Only allow resuming IN_PROGRESS attempts
+    // Step 3: Check if attempt should be auto-expired
+    const wasExpired = await this.autoExpireIfNeeded(attempt);
+
+    if (wasExpired) {
+      throw new BadRequestException(
+        'This attempt has expired due to time limit. Use GET /:id endpoint to view results.',
+      );
+    }
+
+    // Step 4: Only allow resuming IN_PROGRESS attempts
     if (attempt.status !== 'IN_PROGRESS') {
       throw new BadRequestException(
         `Cannot resume attempt with status "${attempt.status}". Use GET /:id endpoint to view results.`,
       );
     }
 
-    // Step 4: Fetch questions WITHOUT correct answers or explanations
+    // Step 5: Fetch questions WITHOUT correct answers or explanations
     const questionIds = attempt.questions.map(q => q.question);
     const questions = await this.questionModel
       .find({ _id: { $in: questionIds } })
@@ -361,14 +447,14 @@ export class MockTestAttemptsService {
     // Create question map for quick lookup
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
-    // Step 5: Calculate time metrics
+    // Step 6: Calculate time metrics
     const timeElapsed = Math.floor(
       (Date.now() - attempt.startedAt.getTime()) / 1000,
     ); // seconds
     const allowedTime = attempt.durationInMinutes * 60; // seconds
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
-    // Step 6: Map questions with selected options (no answers/explanations)
+    // Step 7: Map questions with selected options (no answers/explanations)
     const mappedQuestions = attempt.questions
       .map(aq => {
         const questionId = aq.question.toString();
@@ -401,7 +487,7 @@ export class MockTestAttemptsService {
       })
       .filter(Boolean);
 
-    // Step 7: Build response
+    // Step 8: Build response
     const response: ResumeAttemptResponseDto = {
       attemptId: attempt.id,
       test: {
@@ -433,6 +519,11 @@ export class MockTestAttemptsService {
       .sort({ createdAt: -1 })
       .exec();
 
+    // Auto-expire any abandoned IN_PROGRESS attempts
+    for (const attempt of attempts) {
+      await this.autoExpireIfNeeded(attempt);
+    }
+
     return attempts;
   }
 
@@ -454,6 +545,11 @@ export class MockTestAttemptsService {
       })
       .sort({ createdAt: -1 })
       .exec();
+
+    // Auto-expire any abandoned IN_PROGRESS attempts
+    for (const attempt of attempts) {
+      await this.autoExpireIfNeeded(attempt);
+    }
 
     return attempts;
   }
