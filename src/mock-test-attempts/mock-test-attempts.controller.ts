@@ -218,7 +218,10 @@ export class MockTestAttemptsController {
     Process:
     1. Validates attempt (exists, belongs to user, status = IN_PROGRESS)
     2. Server-side timer check (if expired, marks as EXPIRED but still evaluates)
-    3. Optionally accepts final answers array (protects against last-second internet loss)
+    3. Optionally accepts final answers array with grace period protection:
+       - If within time limit: Accepts all answers
+       - If expired within 10s grace period: Accepts answers (network delay tolerance)
+       - If exceeded beyond grace period: Rejects answers (anti-cheat), evaluates existing answers only
     4. Evaluates all questions:
        - Correct answer: +marksPerQuestion
        - Incorrect answer: -negativeMarking
@@ -229,7 +232,7 @@ export class MockTestAttemptsController {
        - If showResultsImmediately = true: Full results with correct answers and explanations
        - If showResultsImmediately = false: Only submission confirmation and basic stats
     
-    Note: Auto-expiry is handled - if time limit exceeded, attempt is marked as EXPIRED.
+    Security: Grace period prevents manipulation while allowing for network delays.
     `,
   })
   @ApiResponse({

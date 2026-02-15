@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -23,6 +24,8 @@ import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 
 @Injectable()
 export class MockTestAttemptsService {
+  private readonly logger = new Logger(MockTestAttemptsService.name);
+
   constructor(
     @InjectModel(MockTestAttempt.name)
     private attemptModel: Model<MockTestAttemptDocument>,
@@ -352,7 +355,10 @@ export class MockTestAttemptsService {
     // Step 4: Server-side timer check
     const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000; // in seconds
     const allowedTime = attempt.durationInMinutes * 60; // in seconds
+    const GRACE_PERIOD_SECONDS = 10; // Allow 10 seconds for network delays
     const isExpired = timeElapsed > allowedTime;
+    const exceededBySeconds = timeElapsed - allowedTime;
+    const isWithinGracePeriod = exceededBySeconds <= GRACE_PERIOD_SECONDS;
 
     // If expired, mark as EXPIRED but continue to evaluate
     if (isExpired) {
@@ -360,32 +366,46 @@ export class MockTestAttemptsService {
     }
 
     // Step 5: Optional - Update answers from request (protects against last-second internet loss)
+    // Only accept answers if within time OR within grace period after expiry
+    const shouldAcceptAnswers =
+      !isExpired || (isExpired && isWithinGracePeriod);
+
     if (submitAttemptDto?.answers && submitAttemptDto.answers.length > 0) {
-      for (const answer of submitAttemptDto.answers) {
-        if (!Types.ObjectId.isValid(answer.questionId)) {
-          continue; // Skip invalid IDs
+      if (shouldAcceptAnswers) {
+        // Accept and process answers
+        for (const answer of submitAttemptDto.answers) {
+          if (!Types.ObjectId.isValid(answer.questionId)) {
+            continue; // Skip invalid IDs
+          }
+
+          // Update each answer
+          await this.attemptModel
+            .updateOne(
+              {
+                _id: attemptId,
+                'questions.question': new Types.ObjectId(answer.questionId),
+              },
+              {
+                $set: {
+                  'questions.$.selectedOption': answer.selectedOptionId,
+                },
+              },
+            )
+            .exec();
         }
 
-        // Update each answer
-        await this.attemptModel
-          .updateOne(
-            {
-              _id: attemptId,
-              'questions.question': new Types.ObjectId(answer.questionId),
-            },
-            {
-              $set: {
-                'questions.$.selectedOption': answer.selectedOptionId,
-              },
-            },
-          )
+        // Refresh attempt after updates
+        const updatedAttempt = await this.attemptModel
+          .findById(attemptId)
           .exec();
-      }
-
-      // Refresh attempt after updates
-      const updatedAttempt = await this.attemptModel.findById(attemptId).exec();
-      if (updatedAttempt) {
-        attempt.questions = updatedAttempt.questions;
+        if (updatedAttempt) {
+          attempt.questions = updatedAttempt.questions;
+        }
+      } else {
+        // Reject answers - time exceeded beyond grace period
+        this.logger.warn(
+          `Attempt ${attemptId}: Answers rejected - timer exceeded by ${Math.floor(exceededBySeconds)} seconds (grace period: ${GRACE_PERIOD_SECONDS}s)`,
+        );
       }
     }
 
