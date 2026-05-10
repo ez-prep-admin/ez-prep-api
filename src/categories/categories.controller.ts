@@ -47,7 +47,8 @@ export class CategoriesController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a new category (Admin only)',
-    description: 'Creates a new exam category like Banking, SSC, Railways, etc.',
+    description:
+      'Creates a new exam category like Banking, SSC, Railways, etc.',
   })
   @ApiResponse({
     status: 201,
@@ -71,7 +72,8 @@ export class CategoriesController {
   @Get()
   @ApiOperation({
     summary: 'Get all categories with pagination',
-    description: 'Retrieves all categories with optional search and filtering. Public endpoint.',
+    description:
+      'Retrieves all categories with optional search and filtering. Public endpoint.',
   })
   @ApiQuery({
     name: 'page',
@@ -135,7 +137,8 @@ export class CategoriesController {
   @Get('active')
   @ApiOperation({
     summary: 'Get all active categories',
-    description: 'Retrieves all active categories without pagination. Public endpoint.',
+    description:
+      'Retrieves all active categories without pagination. Public endpoint.',
   })
   @ApiResponse({
     status: 200,

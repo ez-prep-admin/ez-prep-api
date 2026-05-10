@@ -5,13 +5,16 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Exam, ExamDocument } from './schemas/exam.schema';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
-import { Category, CategoryDocument } from '../categories/schemas/category.schema';
+import {
+  Category,
+  CategoryDocument,
+} from '../categories/schemas/category.schema';
 
 export interface PaginatedExamsResponse {
   data: ExamResponseDto[];
@@ -137,10 +140,7 @@ export class ExamsService {
       .exec();
 
     // Get all active exams
-    const exams = await this.examModel
-      .find(examQuery)
-      .lean()
-      .exec();
+    const exams = await this.examModel.find(examQuery).lean().exec();
 
     // Get mock test counts per exam (from mocktests collection)
     const mockTestCounts = await this.examModel
@@ -182,7 +182,8 @@ export class ExamsService {
 
     for (const category of categories) {
       const categoryExams = exams.filter(
-        exam => exam.category && exam.category.toString() === category._id.toString(),
+        exam =>
+          exam.category && exam.category.toString() === category._id.toString(),
       );
 
       // Include category even if it has no exams
@@ -197,7 +198,9 @@ export class ExamsService {
           id: exam._id.toString(),
           title: exam.name,
           fullName: exam.description,
-          duration: exam.duration ? this.formatDuration(exam.duration) : undefined,
+          duration: exam.duration
+            ? this.formatDuration(exam.duration)
+            : undefined,
           totalQuestions: exam.totalQuestions,
           totalMarks: exam.totalMarks,
           testsCount: testCountMap.get(exam._id.toString()) || 0,

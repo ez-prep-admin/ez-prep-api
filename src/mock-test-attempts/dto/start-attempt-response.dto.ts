@@ -10,7 +10,8 @@ export class QuestionTextLanguageDto {
 
   @ApiPropertyOptional({
     description: 'Question image URL (pre-signed S3 URL)',
-    example: 'https://ez-prep-images.s3.ap-south-1.amazonaws.com/questions/abc123.jpg?X-Amz-...',
+    example:
+      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/questions/abc123.jpg?X-Amz-...',
   })
   imageUrl?: string | null;
 }
@@ -57,7 +58,8 @@ export class QuestionOptionDto {
 
   @ApiPropertyOptional({
     description: 'Option image URL (pre-signed S3 URL)',
-    example: 'https://ez-prep-images.s3.ap-south-1.amazonaws.com/options/xyz789.jpg?X-Amz-...',
+    example:
+      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/options/xyz789.jpg?X-Amz-...',
   })
   imageUrl?: string | null;
 }

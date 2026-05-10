@@ -146,7 +146,9 @@ export class CategoriesService {
         .findOne({
           _id: { $ne: id },
           $or: [
-            ...(updateCategoryDto.name ? [{ name: updateCategoryDto.name }] : []),
+            ...(updateCategoryDto.name
+              ? [{ name: updateCategoryDto.name }]
+              : []),
             ...(updateCategoryDto.shortName
               ? [{ shortName: updateCategoryDto.shortName }]
               : []),

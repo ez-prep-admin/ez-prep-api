@@ -109,7 +109,9 @@ export class ExamsController {
     description: 'Exam created successfully',
     type: ExamResponseDto,
   })
-  @ApiBadRequestResponse({ description: 'Validation failed or invalid category' })
+  @ApiBadRequestResponse({
+    description: 'Validation failed or invalid category',
+  })
   @ApiConflictResponse({ description: 'Exam already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
   async create(@Body() createExamDto: CreateExamDto): Promise<{
@@ -126,7 +128,8 @@ export class ExamsController {
   @Get()
   @ApiOperation({
     summary: 'Get all exams with pagination',
-    description: 'Retrieves all exams with optional filtering and search. Public endpoint.',
+    description:
+      'Retrieves all exams with optional filtering and search. Public endpoint.',
   })
   @ApiQuery({
     name: 'page',
@@ -199,7 +202,8 @@ export class ExamsController {
   @Get('category/:categoryId')
   @ApiOperation({
     summary: 'Get exams by category with pagination',
-    description: 'Retrieves all exams for a specific category. Public endpoint.',
+    description:
+      'Retrieves all exams for a specific category. Public endpoint.',
   })
   @ApiParam({
     name: 'categoryId',

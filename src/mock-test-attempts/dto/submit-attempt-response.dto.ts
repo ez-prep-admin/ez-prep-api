@@ -16,7 +16,8 @@ export class ExplanationDto {
 
   @ApiPropertyOptional({
     description: 'Explanation image URL (pre-signed S3 URL)',
-    example: 'https://ez-prep-images.s3.ap-south-1.amazonaws.com/explanations/def456.jpg?X-Amz-...',
+    example:
+      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/explanations/def456.jpg?X-Amz-...',
   })
   imageUrl?: string | null;
 }

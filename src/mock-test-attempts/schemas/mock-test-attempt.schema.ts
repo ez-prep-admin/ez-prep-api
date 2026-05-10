@@ -126,7 +126,6 @@ export const MockTestAttemptSchema =
 
 // Compound indexes for better query performance
 MockTestAttemptSchema.index({ user: 1, test: 1 });
-MockTestAttemptSchema.index({ status: 1 });
 
 // Virtual for id field (removes _id and adds id)
 MockTestAttemptSchema.virtual('id').get(function () {
