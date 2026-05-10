@@ -110,6 +110,60 @@ export class SafeQuestionDto {
   difficultyLevel?: string;
 }
 
+export class ExamSummaryDto {
+  @ApiProperty({
+    description: 'Exam ID',
+    example: '64f123456789abcdef123456',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Exam name',
+    example: 'SSC CGL',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Exam description',
+    example: 'Staff Selection Commission Combined Graduate Level',
+  })
+  description?: string;
+}
+
+export class SubjectSummaryDto {
+  @ApiProperty({
+    description: 'Subject ID',
+    example: '64f123456789abcdef123456',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Subject name',
+    example: 'Quantitative Aptitude',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Subject description',
+    example: 'Mathematics and problem solving',
+  })
+  description?: string;
+}
+
+export class TopicSummaryDto {
+  @ApiProperty({
+    description: 'Topic ID',
+    example: '64f123456789abcdef123456',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Topic name',
+    example: 'Ratio & Proportion',
+  })
+  name: string;
+}
+
 export class AttemptTestMetadataDto {
   @ApiProperty({
     description: 'Mock test title',
@@ -152,6 +206,24 @@ export class AttemptTestMetadataDto {
     example: 50,
   })
   passingScore?: number;
+
+  @ApiProperty({
+    description: 'Exam details',
+    type: ExamSummaryDto,
+  })
+  exam: ExamSummaryDto;
+
+  @ApiProperty({
+    description: 'Subject details',
+    type: SubjectSummaryDto,
+  })
+  subject: SubjectSummaryDto;
+
+  @ApiPropertyOptional({
+    description: 'Topic details (optional)',
+    type: TopicSummaryDto,
+  })
+  topic?: TopicSummaryDto;
 }
 
 export class StartAttemptResponseDto {
@@ -162,10 +234,10 @@ export class StartAttemptResponseDto {
   attemptId: string;
 
   @ApiProperty({
-    description: 'Test metadata',
+    description: 'Mock test metadata',
     type: AttemptTestMetadataDto,
   })
-  test: AttemptTestMetadataDto;
+  mockTestData: AttemptTestMetadataDto;
 
   @ApiProperty({
     description: 'Array of questions without answers',

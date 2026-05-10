@@ -130,8 +130,13 @@ export class MockTestAttemptsService {
       throw new BadRequestException('Invalid mock test ID format');
     }
 
-    // Step 2: Fetch the mock test
-    const test = await this.mockTestModel.findById(mockTestId).exec();
+    // Step 2: Fetch the mock test with populated exam, subject, and topic
+    const test = await this.mockTestModel
+      .findById(mockTestId)
+      .populate('exam', '_id name description')
+      .populate('subject', '_id name description')
+      .populate('topic', '_id name')
+      .exec();
 
     if (!test) {
       throw new NotFoundException(
@@ -220,9 +225,14 @@ export class MockTestAttemptsService {
       .exec();
 
     // Step 7: Format response with simplified image data (only URLs)
+    // Extract populated data
+    const examDoc = test.exam as any;
+    const subjectDoc = test.subject as any;
+    const topicDoc = test.topic as any;
+
     const response: StartAttemptResponseDto = {
       attemptId: attempt.id,
-      test: {
+      mockTestData: {
         title: test.title,
         durationInMinutes: test.durationInMinutes,
         totalQuestions: test.totalQuestions,
@@ -230,6 +240,22 @@ export class MockTestAttemptsService {
         marksPerQuestion: test.marksPerQuestion,
         negativeMarking: test.negativeMarking,
         passingScore: test.passingScore,
+        exam: {
+          id: examDoc?._id?.toString() || '',
+          name: examDoc?.name || '',
+          description: examDoc?.description,
+        },
+        subject: {
+          id: subjectDoc?._id?.toString() || '',
+          name: subjectDoc?.name || '',
+          description: subjectDoc?.description,
+        },
+        topic: topicDoc
+          ? {
+              id: topicDoc?._id?.toString() || '',
+              name: topicDoc?.name || '',
+            }
+          : undefined,
       },
       questions: questions.map(q => ({
         _id: q._id.toString(),
