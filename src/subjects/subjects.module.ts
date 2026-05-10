@@ -5,10 +5,19 @@ import { SubjectsController } from './subjects.controller';
 import { Subject, SubjectSchema } from './schemas/subject.schema';
 import { TopicsModule } from '../topics/topics.module';
 
+/**
+ * SubjectsModule
+ *
+ * NestJS module for managing subjects functionality in the application.
+ * This module encapsulates all subject-related features including data persistence,
+ * business logic, and HTTP endpoints.
+ *
+ * @module SubjectsModule
+ */
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Subject.name, schema: SubjectSchema }]),
-    TopicsModule, // Import to access Topic model
+    TopicsModule,
   ],
   controllers: [SubjectsController],
   providers: [SubjectsService],
