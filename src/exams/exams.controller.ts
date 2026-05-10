@@ -49,13 +49,13 @@ export class ExamsController {
     Perfect for landing pages and exam browsing.
     
     Features:
-    - All categories at root level (key = category shortName)
+    - Returns array of categories with their exams
     - Includes all active exams per category
     - Includes mock test counts per exam
     - Returns all data (no pagination or filtering needed)
     - No authentication required
     
-    Response structure: { "SSC": {...}, "RRB": {...}, ... }
+    Response structure: { message: "...", data: [{category1}, {category2}, ...] }
     `,
   })
   @ApiResponse({
@@ -63,27 +63,39 @@ export class ExamsController {
     description: 'All exams grouped by category',
     schema: {
       type: 'object',
-      additionalProperties: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', example: '64f123...' },
-          name: { type: 'string', example: 'Staff Selection Commission' },
-          shortName: { type: 'string', example: 'SSC' },
-          imageUrl: { type: 'string', example: 'https://...' },
-          description: { type: 'string', example: 'Government recruitment...' },
-          exams: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                title: { type: 'string' },
-                fullName: { type: 'string' },
-                duration: { type: 'string' },
-                totalQuestions: { type: 'number' },
-                totalMarks: { type: 'number' },
-                testsCount: { type: 'number' },
-                subjectsCount: { type: 'number' },
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Exams by category retrieved successfully',
+        },
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: '64f123...' },
+              name: { type: 'string', example: 'Staff Selection Commission' },
+              shortName: { type: 'string', example: 'SSC' },
+              imageUrl: { type: 'string', example: 'https://...' },
+              description: {
+                type: 'string',
+                example: 'Government recruitment...',
+              },
+              exams: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    title: { type: 'string' },
+                    fullName: { type: 'string' },
+                    duration: { type: 'string' },
+                    totalQuestions: { type: 'number' },
+                    totalMarks: { type: 'number' },
+                    testsCount: { type: 'number' },
+                    subjectsCount: { type: 'number' },
+                  },
+                },
               },
             },
           },
@@ -91,8 +103,15 @@ export class ExamsController {
       },
     },
   })
-  async getExamsByCategory(): Promise<ExamsByCategoryResponseDto> {
-    return await this.examsService.getExamsByCategory();
+  async getExamsByCategory(): Promise<{
+    message: string;
+    data: ExamsByCategoryResponseDto;
+  }> {
+    const data = await this.examsService.getExamsByCategory();
+    return {
+      message: 'Exams by category retrieved successfully',
+      data,
+    };
   }
 
   @Post()

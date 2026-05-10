@@ -177,8 +177,8 @@ export class ExamsService {
       mockTestCounts.map(item => [item._id.toString(), item.testsCount]),
     );
 
-    // Group exams by category using shortName as key
-    const result: ExamsByCategoryResponseDto = {};
+    // Group exams by category and return as array
+    const result: ExamsByCategoryResponseDto = [];
 
     for (const category of categories) {
       const categoryExams = exams.filter(
@@ -187,8 +187,7 @@ export class ExamsService {
       );
 
       // Include category even if it has no exams
-      const shortName = category.shortName || category.name;
-      result[shortName] = {
+      result.push({
         id: category._id.toString(),
         name: category.name,
         shortName: category.shortName,
@@ -206,7 +205,7 @@ export class ExamsService {
           testsCount: testCountMap.get(exam._id.toString()) || 0,
           subjectsCount: exam.subjects?.length || 0,
         })),
-      };
+      });
     }
 
     return result;

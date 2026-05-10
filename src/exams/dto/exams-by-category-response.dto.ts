@@ -88,5 +88,5 @@ export class CategoryGroupDto {
   exams: ExamsByCategoryItemDto[];
 }
 
-// Response type: Record with category shortName as keys
-export type ExamsByCategoryResponseDto = Record<string, CategoryGroupDto>;
+// Response type: Array of category groups
+export type ExamsByCategoryResponseDto = CategoryGroupDto[];
