@@ -362,6 +362,8 @@ export class MockTestsService {
    */
   private toListItemDto(mockTest: MockTestDocument): MockTestListItemDto {
     // Access _id and other fields before calling toObject() since toObject transforms delete _id
+    const mockTestId = mockTest._id?.toString();
+
     const examId = mockTest.exam?._id?.toString();
     const examDoc = mockTest.exam as any;
 
@@ -374,7 +376,7 @@ export class MockTestsService {
     const obj = mockTest.toObject();
 
     return new MockTestListItemDto({
-      id: obj._id?.toString(),
+      id: mockTestId,
       title: obj.title,
       description: obj.description,
       totalQuestions: obj.totalQuestions,
