@@ -1,28 +1,5 @@
-import { Exclude, Expose, Type } from 'class-transformer';
+import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-export class DifficultyDistributionDto {
-  @ApiProperty({
-    description: 'Number of easy questions',
-    example: 10,
-  })
-  @Expose()
-  easy: number;
-
-  @ApiProperty({
-    description: 'Number of medium questions',
-    example: 15,
-  })
-  @Expose()
-  medium: number;
-
-  @ApiProperty({
-    description: 'Number of hard questions',
-    example: 5,
-  })
-  @Expose()
-  hard: number;
-}
 
 export class MockTestResponseDto {
   @ApiProperty({
@@ -33,48 +10,11 @@ export class MockTestResponseDto {
   id: string;
 
   @ApiProperty({
-    description: 'Total number of questions in the mock test',
-    enum: [10, 15, 20, 25, 30],
-    example: 30,
-  })
-  @Expose()
-  totalQuestions: number;
-
-  @ApiProperty({
-    description: 'Duration of the test in minutes',
-    enum: [10, 15, 20, 25, 30],
-    example: 30,
-  })
-  @Expose()
-  durationInMinutes: number;
-
-  @ApiProperty({
-    description: 'Exam reference ID',
-    example: '64f123456789abcdef123456',
-  })
-  @Expose()
-  exam: string;
-
-  @ApiProperty({
-    description: 'Subject reference ID',
-    example: '64f123456789abcdef123456',
-  })
-  @Expose()
-  subject: string;
-
-  @ApiPropertyOptional({
-    description: 'Topic reference ID (optional)',
-    example: '64f123456789abcdef123456',
-  })
-  @Expose()
-  topic?: string;
-
-  @ApiPropertyOptional({
     description: 'Title of the mock test',
     example: 'NEET 2025 Full Length Mock Test 1',
   })
   @Expose()
-  title?: string;
+  title: string;
 
   @ApiPropertyOptional({
     description: 'Description of the mock test',
@@ -82,6 +22,27 @@ export class MockTestResponseDto {
   })
   @Expose()
   description?: string;
+
+  @ApiProperty({
+    description: 'Total number of questions in the mock test',
+    example: 180,
+  })
+  @Expose()
+  totalQuestions: number;
+
+  @ApiProperty({
+    description: 'Duration of the test in minutes',
+    example: 180,
+  })
+  @Expose()
+  durationInMinutes: number;
+
+  @ApiProperty({
+    description: 'Array of subject IDs',
+    example: ['64f123456789abcdef123456', '64f123456789abcdef123457'],
+  })
+  @Expose()
+  subjects: string[];
 
   @ApiProperty({
     description: 'Test generation mode',
@@ -154,13 +115,13 @@ export class MockTestResponseDto {
   @Expose()
   createdBy?: string;
 
-  @ApiProperty({
-    description: 'Difficulty distribution of questions',
-    type: DifficultyDistributionDto,
+  @ApiPropertyOptional({
+    description: 'Difficulty level of the mock test',
+    enum: ['easy', 'medium', 'hard'],
+    example: 'medium',
   })
   @Expose()
-  @Type(() => DifficultyDistributionDto)
-  difficultyDistribution: DifficultyDistributionDto;
+  difficultyLevel?: string;
 
   @ApiProperty({
     description: 'Date when the mock test was created',

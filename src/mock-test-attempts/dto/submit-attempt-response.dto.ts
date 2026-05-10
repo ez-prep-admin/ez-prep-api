@@ -1,27 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-// Simplified - only expose URL to frontend
-export class ExplanationDto {
-  @ApiPropertyOptional({
-    description: 'Explanation in English',
-    example: 'The correct answer is mitochondria because...',
-  })
-  en?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Explanation in Malayalam',
-    example: null,
-  })
-  ml?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Explanation image URL (pre-signed S3 URL)',
-    example:
-      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/explanations/def456.jpg?X-Amz-...',
-  })
-  imageUrl?: string | null;
-}
-
 export class QuestionResultDto {
   @ApiProperty({
     description: 'Question ID',
@@ -54,10 +32,10 @@ export class QuestionResultDto {
   marksAwarded: number;
 
   @ApiPropertyOptional({
-    description: 'Explanation (localized with image support)',
-    type: ExplanationDto,
+    description: 'Explanation (localized)',
+    example: { en: 'The correct answer is...', ml: null },
   })
-  explanation?: ExplanationDto;
+  explanation?: Record<string, string>;
 }
 
 export class SubmitAttemptResponseDto {

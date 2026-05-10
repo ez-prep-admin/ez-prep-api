@@ -1,35 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-// Simplified - only expose URL to frontend, not S3 internal details
-export class QuestionTextLanguageDto {
-  @ApiPropertyOptional({
-    description: 'Question text',
-    example: 'What is the powerhouse of the cell?',
-  })
-  text?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'Question image URL (pre-signed S3 URL)',
-    example:
-      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/questions/abc123.jpg?X-Amz-...',
-  })
-  imageUrl?: string | null;
-}
-
-export class QuestionTextDto {
-  @ApiProperty({
-    description: 'English question text',
-    type: QuestionTextLanguageDto,
-  })
-  en: QuestionTextLanguageDto;
-
-  @ApiProperty({
-    description: 'Malayalam question text',
-    type: QuestionTextLanguageDto,
-  })
-  ml: QuestionTextLanguageDto;
-}
-
 export class QuestionOptionDto {
   @ApiProperty({
     description: 'Option unique ID (UUID)',
@@ -48,20 +18,25 @@ export class QuestionOptionDto {
     description: 'Option text in English',
     example: 'Mitochondria',
   })
-  en?: string | null;
+  en: string | null;
 
   @ApiPropertyOptional({
     description: 'Option text in Malayalam',
     example: null,
   })
-  ml?: string | null;
+  ml: string | null;
 
   @ApiPropertyOptional({
-    description: 'Option image URL (pre-signed S3 URL)',
-    example:
-      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/options/xyz789.jpg?X-Amz-...',
+    description: 'Option image URL',
+    example: null,
   })
-  imageUrl?: string | null;
+  url?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'MongoDB ObjectId',
+    example: '67c5f71b2548058025b23458',
+  })
+  _id?: string;
 }
 
 export class SafeQuestionDto {
@@ -72,17 +47,19 @@ export class SafeQuestionDto {
   _id: string;
 
   @ApiProperty({
-    description: 'Question text with language support',
-    type: QuestionTextDto,
+    description: 'Question text (localized with text and image per language)',
+    example: {
+      en: { text: 'What is the powerhouse of the cell?', image: null },
+      ml: { text: null, image: null },
+    },
   })
-  questionText: QuestionTextDto;
+  questionText: Record<string, { text: string | null; image: string | null }>;
 
   @ApiPropertyOptional({
-    description: 'Option type for this question',
-    enum: ['text', 'image'],
-    example: 'text',
+    description: 'Question image URL',
+    example: null,
   })
-  optionType?: string;
+  image?: string | null;
 
   @ApiProperty({
     description: 'Array of options',
@@ -97,71 +74,11 @@ export class SafeQuestionDto {
   subject?: string;
 
   @ApiPropertyOptional({
-    description: 'Topic reference',
-    example: '64f123456789abcdef123456',
-  })
-  topic?: string;
-
-  @ApiPropertyOptional({
     description: 'Difficulty level',
     enum: ['easy', 'medium', 'hard'],
     example: 'medium',
   })
-  difficultyLevel?: string;
-}
-
-export class ExamSummaryDto {
-  @ApiProperty({
-    description: 'Exam ID',
-    example: '64f123456789abcdef123456',
-  })
-  id: string;
-
-  @ApiProperty({
-    description: 'Exam name',
-    example: 'SSC CGL',
-  })
-  name: string;
-
-  @ApiPropertyOptional({
-    description: 'Exam description',
-    example: 'Staff Selection Commission Combined Graduate Level',
-  })
-  description?: string;
-}
-
-export class SubjectSummaryDto {
-  @ApiProperty({
-    description: 'Subject ID',
-    example: '64f123456789abcdef123456',
-  })
-  id: string;
-
-  @ApiProperty({
-    description: 'Subject name',
-    example: 'Quantitative Aptitude',
-  })
-  name: string;
-
-  @ApiPropertyOptional({
-    description: 'Subject description',
-    example: 'Mathematics and problem solving',
-  })
-  description?: string;
-}
-
-export class TopicSummaryDto {
-  @ApiProperty({
-    description: 'Topic ID',
-    example: '64f123456789abcdef123456',
-  })
-  id: string;
-
-  @ApiProperty({
-    description: 'Topic name',
-    example: 'Ratio & Proportion',
-  })
-  name: string;
+  difficulty?: string;
 }
 
 export class AttemptTestMetadataDto {
@@ -206,24 +123,6 @@ export class AttemptTestMetadataDto {
     example: 50,
   })
   passingScore?: number;
-
-  @ApiProperty({
-    description: 'Exam details',
-    type: ExamSummaryDto,
-  })
-  exam: ExamSummaryDto;
-
-  @ApiProperty({
-    description: 'Subject details',
-    type: SubjectSummaryDto,
-  })
-  subject: SubjectSummaryDto;
-
-  @ApiPropertyOptional({
-    description: 'Topic details (optional)',
-    type: TopicSummaryDto,
-  })
-  topic?: TopicSummaryDto;
 }
 
 export class StartAttemptResponseDto {
@@ -234,10 +133,10 @@ export class StartAttemptResponseDto {
   attemptId: string;
 
   @ApiProperty({
-    description: 'Mock test metadata',
+    description: 'Test metadata',
     type: AttemptTestMetadataDto,
   })
-  mockTestData: AttemptTestMetadataDto;
+  test: AttemptTestMetadataDto;
 
   @ApiProperty({
     description: 'Array of questions without answers',

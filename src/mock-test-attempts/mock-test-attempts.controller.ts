@@ -27,7 +27,6 @@ import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
-import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -209,66 +208,6 @@ export class MockTestAttemptsController {
       user.id,
       updateAnswerDto,
     );
-  }
-
-  @Post(':attemptId/pause')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Pause an in-progress mock test attempt',
-    description: `
-    Pauses an active test attempt, allowing the user to resume later.
-    
-    Features:
-    - Saves current progress (all selected answers are preserved)
-    - Calculates and saves time consumed with 10-second grace period
-    - Tracks pause/resume history for auditing
-    - No limit on number of pauses
-    - Time remaining is preserved for resumption
-    
-    Validations:
-    - Attempt must exist and belong to the authenticated user
-    - Attempt status must be IN_PROGRESS
-    - Test must not have expired
-    
-    Use Cases:
-    - User needs to take a break
-    - Network interruption handling
-    - Multitasking scenarios
-    - Emergency situations
-    
-    After pausing, use GET /:attemptId/resume to continue the test.
-    `,
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Attempt paused successfully',
-    type: PauseAttemptResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'Invalid attempt ID, attempt not IN_PROGRESS, or time expired',
-  })
-  @ApiNotFoundResponse({
-    description: 'Attempt not found or access denied',
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required',
-  })
-  async pauseAttempt(
-    @Param('attemptId') attemptId: string,
-    @GetUser() user: UserResponseDto,
-  ): Promise<{
-    message: string;
-    data: PauseAttemptResponseDto;
-  }> {
-    const result = await this.mockTestAttemptsService.pauseAttempt(
-      attemptId,
-      user.id,
-    );
-
-    return {
-      message: 'Mock test attempt paused successfully',
-      data: result,
-    };
   }
 
   @Post(':attemptId/submit')

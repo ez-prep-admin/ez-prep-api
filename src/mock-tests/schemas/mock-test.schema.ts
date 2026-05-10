@@ -3,62 +3,29 @@ import { Document, Types } from 'mongoose';
 
 export type MockTestDocument = MockTest & Document;
 
-@Schema({ _id: false })
-export class DifficultyDistribution {
-  @Prop({ type: Number, default: 0 })
-  easy: number;
-
-  @Prop({ type: Number, default: 0 })
-  medium: number;
-
-  @Prop({ type: Number, default: 0 })
-  hard: number;
-}
-
-export const DifficultyDistributionSchema = SchemaFactory.createForClass(
-  DifficultyDistribution,
-);
-
 @Schema({
   timestamps: true,
   versionKey: false,
   collection: 'mocktests', // Use existing collection name
 })
 export class MockTest {
-  @Prop({ required: true, enum: [10, 15, 20, 25, 30] })
-  totalQuestions: number;
-
-  @Prop({ required: true, enum: [10, 15, 20, 25, 30] })
-  durationInMinutes: number;
-
-  @Prop({
-    type: Types.ObjectId,
-    ref: 'Exam',
-    required: true,
-    index: true,
-  })
-  exam: Types.ObjectId;
-
-  @Prop({
-    type: Types.ObjectId,
-    ref: 'Subject',
-    required: true,
-    index: true,
-  })
-  subject: Types.ObjectId;
-
-  @Prop({
-    type: Types.ObjectId,
-    ref: 'Topic',
-    index: true,
-  })
-  topic?: Types.ObjectId;
-
-  @Prop({ trim: true })
+  @Prop({ required: true, trim: true })
   title: string;
 
   @Prop({ trim: true })
   description: string;
+
+  @Prop({ required: true })
+  totalQuestions: number;
+
+  @Prop({ required: true })
+  durationInMinutes: number;
+
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Subject' }],
+    required: true,
+  })
+  subjects: Types.ObjectId[];
 
   @Prop({
     type: String,
@@ -99,8 +66,11 @@ export class MockTest {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
 
-  @Prop({ type: DifficultyDistributionSchema, default: () => ({}) })
-  difficultyDistribution: DifficultyDistribution;
+  @Prop({
+    type: String,
+    enum: ['easy', 'medium', 'hard'],
+  })
+  difficultyLevel?: string;
 
   // Timestamps are automatically added by mongoose when timestamps: true
   createdAt?: Date;
@@ -113,8 +83,6 @@ export const MockTestSchema = SchemaFactory.createForClass(MockTest);
 MockTestSchema.index({ title: 'text' }); // Text index for search
 MockTestSchema.index({ isActive: 1, isDeleted: 1 });
 MockTestSchema.index({ createdAt: -1 }); // For sorting by newest
-MockTestSchema.index({ exam: 1, subject: 1 }); // For filtering by exam and subject
-MockTestSchema.index({ exam: 1, subject: 1, topic: 1 }); // For filtering with topic
 
 // Virtual for id field (removes _id and adds id)
 MockTestSchema.virtual('id').get(function () {

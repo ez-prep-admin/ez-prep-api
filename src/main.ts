@@ -1,41 +1,15 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger, BadRequestException } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { useContainer } from 'class-validator';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { securityConfig } from './common/config/security.config';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (error: Error) => {
-    logger.error('❌ Uncaught Exception:', error.stack);
-    // Give time for logs to flush
-    setTimeout(() => {
-      process.exit(1);
-    }, 1000);
-  });
-
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason: any, _promise: Promise<any>) => {
-    logger.error('❌ Unhandled Promise Rejection:', reason?.stack || reason);
-    // Don't exit immediately - log and continue
-  });
-
-  // Handle SIGTERM gracefully
-  process.on('SIGTERM', () => {
-    logger.log('⚠️ SIGTERM signal received: closing HTTP server');
-    process.exit(0);
-  });
-
-  // Handle SIGINT gracefully (Ctrl+C)
-  process.on('SIGINT', () => {
-    logger.log('⚠️ SIGINT signal received: closing HTTP server');
-    process.exit(0);
-  });
 
   try {
     const app = await NestFactory.create(AppModule);
@@ -47,7 +21,10 @@ async function bootstrap() {
     // Security headers with Helmet
     app.use(helmet(securityConfig.helmet));
 
-    // Global validation pipe with transformation and improved error messages
+    // Global exception filter for standardized error responses
+    app.useGlobalFilters(new HttpExceptionFilter());
+
+    // Global validation pipe with transformation
     app.useGlobalPipes(
       new ValidationPipe({
         transform: true,
@@ -55,22 +32,6 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
         transformOptions: {
           enableImplicitConversion: true,
-        },
-        exceptionFactory: errors => {
-          const formattedErrors = errors.map(error => ({
-            field: error.property,
-            value: error.value,
-            constraints: error.constraints
-              ? Object.values(error.constraints)
-              : [],
-          }));
-
-          return new BadRequestException({
-            statusCode: 400,
-            error: 'ValidationError',
-            message: 'Validation failed for the provided input',
-            details: formattedErrors,
-          });
         },
       }),
     );

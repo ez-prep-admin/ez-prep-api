@@ -23,7 +23,6 @@ import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
-import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -39,34 +38,6 @@ export class MockTestAttemptsService {
   ) {}
 
   /**
-   * Helper: Extract URL from ImageMetadata (only expose URL, not S3 internals)
-   */
-  private extractImageUrl(
-    imageMetadata: any | undefined | null,
-  ): string | null {
-    return imageMetadata?.url || null;
-  }
-
-  /**
-   * Helper: Calculate total time elapsed for an attempt
-   * Accounts for accumulated timeConsumed from previous pause/resume cycles
-   * @param attempt - The attempt document
-   * @returns Total time elapsed in seconds
-   */
-  private calculateTimeElapsed(attempt: MockTestAttemptDocument): number {
-    // If paused, return the saved timeConsumed
-    if (attempt.status === 'PAUSED') {
-      return attempt.timeConsumed || 0;
-    }
-
-    // For IN_PROGRESS: accumulated time + current session time
-    const currentSessionTime = Math.floor(
-      (Date.now() - attempt.startedAt.getTime()) / 1000,
-    );
-    return (attempt.timeConsumed || 0) + currentSessionTime;
-  }
-
-  /**
    * Helper: Auto-expire and evaluate an attempt if time limit exceeded
    * @param attempt - The attempt document
    * @returns true if attempt was auto-expired, false otherwise
@@ -75,10 +46,10 @@ export class MockTestAttemptsService {
     attempt: MockTestAttemptDocument,
   ): Promise<boolean> {
     if (attempt.status !== 'IN_PROGRESS') {
-      return false; // Already completed or paused
+      return false; // Already completed
     }
 
-    const timeElapsed = this.calculateTimeElapsed(attempt);
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000;
     const allowedTime = attempt.durationInMinutes * 60;
 
     if (timeElapsed <= allowedTime) {
@@ -150,13 +121,8 @@ export class MockTestAttemptsService {
       throw new BadRequestException('Invalid mock test ID format');
     }
 
-    // Step 2: Fetch the mock test with populated exam, subject, and topic
-    const test = await this.mockTestModel
-      .findById(mockTestId)
-      .populate('exam', '_id name description')
-      .populate('subject', '_id name description')
-      .populate('topic', '_id name')
-      .exec();
+    // Step 2: Fetch the mock test
+    const test = await this.mockTestModel.findById(mockTestId).exec();
 
     if (!test) {
       throw new NotFoundException(
@@ -216,15 +182,11 @@ export class MockTestAttemptsService {
       testTitle: test.title,
       totalQuestions: test.totalQuestions,
       durationInMinutes: test.durationInMinutes,
-      exam: test.exam,
-      subject: test.subject,
-      topic: test.topic,
       marksPerQuestion: test.marksPerQuestion,
       negativeMarking: test.negativeMarking,
       passingScore: test.passingScore,
       shuffleOptions: test.shuffleOptions,
       showResultsImmediately: test.showResultsImmediately,
-      difficultyDistribution: test.difficultyDistribution,
       questions: test.questionIds.map(q => ({
         question: q,
         selectedOption: null,
@@ -244,15 +206,10 @@ export class MockTestAttemptsService {
       .lean()
       .exec();
 
-    // Step 7: Format response with simplified image data (only URLs)
-    // Extract populated data
-    const examDoc = test.exam as any;
-    const subjectDoc = test.subject as any;
-    const topicDoc = test.topic as any;
-
+    // Step 7: Format response
     const response: StartAttemptResponseDto = {
       attemptId: attempt.id,
-      mockTestData: {
+      test: {
         title: test.title,
         durationInMinutes: test.durationInMinutes,
         totalQuestions: test.totalQuestions,
@@ -260,144 +217,22 @@ export class MockTestAttemptsService {
         marksPerQuestion: test.marksPerQuestion,
         negativeMarking: test.negativeMarking,
         passingScore: test.passingScore,
-        exam: {
-          id: examDoc?._id?.toString() || '',
-          name: examDoc?.name || '',
-          description: examDoc?.description,
-        },
-        subject: {
-          id: subjectDoc?._id?.toString() || '',
-          name: subjectDoc?.name || '',
-          description: subjectDoc?.description,
-        },
-        topic: topicDoc
-          ? {
-              id: topicDoc?._id?.toString() || '',
-              name: topicDoc?.name || '',
-            }
-          : undefined,
       },
       questions: questions.map(q => ({
         _id: q._id.toString(),
-        questionText: {
-          en: {
-            text: q.questionText?.en?.text || null,
-            imageUrl: this.extractImageUrl(q.questionText?.en?.image),
-          },
-          ml: {
-            text: q.questionText?.ml?.text || null,
-            imageUrl: this.extractImageUrl(q.questionText?.ml?.image),
-          },
-        },
-        optionType: q.optionType,
+        questionText: q.questionText,
+        image: q.image,
         options:
           q.options?.map(opt => ({
             id: opt.id,
             type: opt.type,
             en: opt.en,
             ml: opt.ml,
-            imageUrl: this.extractImageUrl(opt.image),
+            url: opt.url,
+            _id: opt._id?.toString(),
           })) || [],
         subject: q.subject?.toString(),
-        topic: q.topic?.toString(),
-        difficultyLevel: q.difficultyLevel,
-      })),
-    };
-
-    return response;
-  }
-
-  /**
-   * Pause an in-progress mock test attempt
-   * @param attemptId - Attempt ID
-   * @param userId - User ID
-   * @returns Pause response with time consumed and remaining
-   */
-  async pauseAttempt(
-    attemptId: string,
-    userId: string,
-  ): Promise<PauseAttemptResponseDto> {
-    const GRACE_PERIOD_SECONDS = 10; // Allow 10 seconds grace period
-
-    // Step 1: Validate attempt ID
-    if (!Types.ObjectId.isValid(attemptId)) {
-      throw new BadRequestException('Invalid attempt ID format');
-    }
-
-    // Step 2: Fetch attempt
-    const attempt = await this.attemptModel
-      .findOne({
-        _id: attemptId,
-        user: new Types.ObjectId(userId),
-      })
-      .exec();
-
-    if (!attempt) {
-      throw new NotFoundException(
-        `Attempt with ID "${attemptId}" not found or you don't have access to it`,
-      );
-    }
-
-    // Step 3: Validate attempt is IN_PROGRESS
-    if (attempt.status !== 'IN_PROGRESS') {
-      throw new BadRequestException(
-        `Cannot pause attempt with status "${attempt.status}". Only IN_PROGRESS attempts can be paused.`,
-      );
-    }
-
-    // Step 4: Calculate time consumed with grace period
-    const currentSessionTime = Math.floor(
-      (Date.now() - attempt.startedAt.getTime()) / 1000,
-    );
-    const totalTimeConsumed =
-      (attempt.timeConsumed || 0) + currentSessionTime + GRACE_PERIOD_SECONDS;
-
-    const allowedTime = attempt.durationInMinutes * 60;
-    const timeRemaining = Math.max(0, allowedTime - totalTimeConsumed);
-
-    // Step 5: Check if time has already expired
-    if (timeRemaining === 0) {
-      throw new BadRequestException(
-        'Cannot pause: Test time has already expired. Please submit the test.',
-      );
-    }
-
-    // Step 6: Update attempt with paused state
-    attempt.status = 'PAUSED';
-    attempt.timeConsumed = totalTimeConsumed;
-    attempt.pausedAt = new Date();
-
-    // Add pause event to history
-    attempt.pauseResumeHistory.push({
-      action: 'PAUSE',
-      timestamp: new Date(),
-      timeConsumedAtPause: totalTimeConsumed,
-    });
-
-    await attempt.save();
-
-    this.logger.log(
-      `Attempt ${attemptId} paused by user ${userId}. Time consumed: ${totalTimeConsumed}s, Remaining: ${timeRemaining}s`,
-    );
-
-    // Step 7: Calculate pause count
-    const pauseCount = attempt.pauseResumeHistory.filter(
-      event => event.action === 'PAUSE',
-    ).length;
-
-    // Step 8: Build response
-    const response: PauseAttemptResponseDto = {
-      attemptId: attempt.id,
-      testTitle: attempt.testTitle,
-      status: 'PAUSED',
-      timeConsumed: totalTimeConsumed,
-      timeRemaining,
-      pausedAt: attempt.pausedAt,
-      pauseCount,
-      recentHistory: attempt.pauseResumeHistory.slice(-5).map(event => ({
-        action: event.action,
-        timestamp: event.timestamp,
-        timeConsumedAtPause: event.timeConsumedAtPause,
+        difficulty: q.difficulty,
       })),
     };
 
@@ -452,14 +287,15 @@ export class MockTestAttemptsService {
     // Create question map for quick lookup
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
-    // Step 5: Calculate time metrics (using helper for accurate calculation)
-    const timeElapsed = this.calculateTimeElapsed(attempt);
+    // Step 5: Calculate time metrics
+    const timeElapsed = Math.floor(
+      (Date.now() - attempt.startedAt.getTime()) / 1000,
+    ); // seconds
     const allowedTime = attempt.durationInMinutes * 60; // seconds
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 6: Build response based on attempt status
     const isInProgress = attempt.status === 'IN_PROGRESS';
-    const isPaused = attempt.status === 'PAUSED';
     const isSubmitted =
       attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED';
     const showResults = isSubmitted && attempt.showResultsImmediately;
@@ -517,8 +353,8 @@ export class MockTestAttemptsService {
       questions: mappedQuestions,
     };
 
-    // Step 9: Add time metrics for in-progress and paused attempts
-    if (isInProgress || isPaused) {
+    // Step 9: Add time metrics for in-progress attempts
+    if (isInProgress) {
       response.timeElapsed = timeElapsed;
       response.timeRemaining = timeRemaining;
     }
@@ -570,15 +406,12 @@ export class MockTestAttemptsService {
       throw new BadRequestException('Invalid attempt ID format');
     }
 
-    // Step 2: Fetch attempt with populated exam, subject, and topic
+    // Step 2: Fetch attempt
     const attempt = await this.attemptModel
       .findOne({
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
-      .populate('exam', '_id name description')
-      .populate('subject', '_id name description')
-      .populate('topic', '_id name')
       .exec();
 
     if (!attempt) {
@@ -596,30 +429,10 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 4: Only allow resuming IN_PROGRESS or PAUSED attempts
-    if (attempt.status !== 'IN_PROGRESS' && attempt.status !== 'PAUSED') {
+    // Step 4: Only allow resuming IN_PROGRESS attempts
+    if (attempt.status !== 'IN_PROGRESS') {
       throw new BadRequestException(
         `Cannot resume attempt with status "${attempt.status}". Use GET /:id endpoint to view results.`,
-      );
-    }
-
-    // Step 4.5: If resuming from PAUSED, update status and startedAt
-    let wasPaused = false;
-    if (attempt.status === 'PAUSED') {
-      wasPaused = true;
-      attempt.status = 'IN_PROGRESS';
-      attempt.startedAt = new Date(); // Reset startedAt for new session
-
-      // Add resume event to history
-      attempt.pauseResumeHistory.push({
-        action: 'RESUME',
-        timestamp: new Date(),
-      });
-
-      await attempt.save();
-
-      this.logger.log(
-        `Attempt ${attemptId} resumed by user ${userId}. Time consumed: ${attempt.timeConsumed}s`,
       );
     }
 
@@ -635,19 +448,9 @@ export class MockTestAttemptsService {
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
     // Step 6: Calculate time metrics
-    let timeElapsed: number;
-    if (wasPaused) {
-      // For paused attempts, use timeConsumed as base and add current session time
-      const currentSessionTime = Math.floor(
-        (Date.now() - attempt.startedAt.getTime()) / 1000,
-      );
-      timeElapsed = (attempt.timeConsumed || 0) + currentSessionTime;
-    } else {
-      // For in-progress attempts, calculate from startedAt
-      timeElapsed = Math.floor(
-        (Date.now() - attempt.startedAt.getTime()) / 1000,
-      );
-    }
+    const timeElapsed = Math.floor(
+      (Date.now() - attempt.startedAt.getTime()) / 1000,
+    ); // seconds
     const allowedTime = attempt.durationInMinutes * 60; // seconds
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
@@ -663,27 +466,16 @@ export class MockTestAttemptsService {
 
         const questionDto: any = {
           _id: questionId,
-          questionText: {
-            en: {
-              text: question.questionText?.en?.text || null,
-              imageUrl: this.extractImageUrl(question.questionText?.en?.image),
-            },
-            ml: {
-              text: question.questionText?.ml?.text || null,
-              imageUrl: this.extractImageUrl(question.questionText?.ml?.image),
-            },
-          },
-          optionType: question.optionType,
+          questionText: question.questionText,
           options: question.options.map(opt => ({
             id: opt.id,
             type: opt.type,
             en: opt.en,
             ml: opt.ml,
-            imageUrl: this.extractImageUrl(opt.image),
+            url: opt.url,
+            _id: opt._id?.toString(),
           })),
-          subject: question.subject?.toString(),
-          topic: question.topic?.toString(),
-          difficultyLevel: question.difficultyLevel,
+          subject: question.subject.toString(),
         };
 
         // Include selected option if user has answered
@@ -695,19 +487,10 @@ export class MockTestAttemptsService {
       })
       .filter(Boolean);
 
-    // Step 8: Build response with exam, subject, topic details
-    const pauseCount = attempt.pauseResumeHistory.filter(
-      event => event.action === 'PAUSE',
-    ).length;
-
-    // Extract populated data
-    const examDoc = attempt.exam as any;
-    const subjectDoc = attempt.subject as any;
-    const topicDoc = attempt.topic as any;
-
+    // Step 8: Build response
     const response: ResumeAttemptResponseDto = {
       attemptId: attempt.id,
-      mockTestData: {
+      test: {
         title: attempt.testTitle,
         durationInMinutes: attempt.durationInMinutes,
         totalQuestions: attempt.totalQuestions,
@@ -715,28 +498,10 @@ export class MockTestAttemptsService {
         marksPerQuestion: attempt.marksPerQuestion,
         negativeMarking: attempt.negativeMarking,
         passingScore: attempt.passingScore,
-        exam: {
-          id: examDoc?._id?.toString() || '',
-          name: examDoc?.name || '',
-          description: examDoc?.description,
-        },
-        subject: {
-          id: subjectDoc?._id?.toString() || '',
-          name: subjectDoc?.name || '',
-          description: subjectDoc?.description,
-        },
-        topic: topicDoc
-          ? {
-              id: topicDoc?._id?.toString() || '',
-              name: topicDoc?.name || '',
-            }
-          : undefined,
       },
       questions: mappedQuestions,
       timeElapsed,
       timeRemaining,
-      pauseCount: pauseCount > 0 ? pauseCount : undefined,
-      timeConsumed: attempt.timeConsumed > 0 ? attempt.timeConsumed : undefined,
     };
 
     return response;
@@ -834,8 +599,8 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 5: Check if attempt has expired (using helper for accurate time calculation)
-    const timeElapsed = this.calculateTimeElapsed(attempt);
+    // Step 5: Check if attempt has expired
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000; // in seconds
     const allowedTime = attempt.durationInMinutes * 60; // in seconds
 
     if (timeElapsed > allowedTime) {
@@ -915,8 +680,8 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 4: Server-side timer check (using helper for accurate time calculation)
-    const timeElapsed = this.calculateTimeElapsed(attempt);
+    // Step 4: Server-side timer check
+    const timeElapsed = (Date.now() - attempt.startedAt.getTime()) / 1000; // in seconds
     const allowedTime = attempt.durationInMinutes * 60; // in seconds
     const GRACE_PERIOD_SECONDS = 10; // Allow 10 seconds for network delays
     const isExpired = timeElapsed > allowedTime;
@@ -1059,13 +824,7 @@ export class MockTestAttemptsService {
           correctAnswer: question?.correctAnswer || '',
           isCorrect: aq.isCorrect || false,
           marksAwarded: aq.marksAwarded,
-          explanation: question?.explanation
-            ? {
-                en: question.explanation.en || null,
-                ml: question.explanation.ml || null,
-                imageUrl: this.extractImageUrl(question.explanation.image),
-              }
-            : undefined,
+          explanation: question?.explanation,
         };
       });
     }
