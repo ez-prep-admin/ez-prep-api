@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { MockTestsService } from './mock-tests.service';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
+import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -226,6 +227,8 @@ export class MockTestsController {
     description: `
     Retrieves mock tests filtered by exam ID with pagination.
     Useful for showing all tests for a specific exam.
+    
+    Returns populated exam, subject, and topic details (excludes questionIds and difficultyDistribution).
     `,
   })
   @ApiParam({
@@ -250,6 +253,8 @@ export class MockTestsController {
   @ApiResponse({
     status: 200,
     description: 'Mock tests retrieved successfully',
+    type: MockTestListItemDto,
+    isArray: true,
   })
   @ApiUnauthorizedResponse({
     description: 'Authentication required',
@@ -260,7 +265,7 @@ export class MockTestsController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ): Promise<{
     message: string;
-    data: MockTestResponseDto[];
+    data: MockTestListItemDto[];
     pagination: any;
   }> {
     const result = await this.mockTestsService.findByExam(examId, page, limit);

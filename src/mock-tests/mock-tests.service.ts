@@ -3,9 +3,22 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
+import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
 
 export interface PaginatedMockTestsResponse {
   data: MockTestResponseDto[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPrevPage: boolean;
+  };
+}
+
+export interface PaginatedMockTestListResponse {
+  data: MockTestListItemDto[];
   pagination: {
     total: number;
     page: number;
@@ -149,13 +162,13 @@ export class MockTestsService {
    * @param examId - Exam ID
    * @param page - Page number
    * @param limit - Items per page
-   * @returns Paginated mock tests
+   * @returns Paginated mock tests with populated references
    */
   async findByExam(
     examId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+  ): Promise<PaginatedMockTestListResponse> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -165,6 +178,9 @@ export class MockTestsService {
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
         .find(query)
+        .populate('exam', '_id name description')
+        .populate('subject', '_id name description')
+        .populate('topic', '_id name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -175,7 +191,7 @@ export class MockTestsService {
     const totalPages = Math.ceil(total / validLimit);
 
     return {
-      data: mockTests.map(test => this.toResponseDto(test)),
+      data: mockTests.map(test => this.toListItemDto(test)),
       pagination: {
         total,
         page: validPage,
@@ -337,6 +353,62 @@ export class MockTestsService {
         medium: 0,
         hard: 0,
       },
+    });
+  }
+
+  /**
+   * Helper method to convert MockTest document to list item DTO
+   * Includes populated exam, subject, and topic details
+   */
+  private toListItemDto(mockTest: MockTestDocument): MockTestListItemDto {
+    // Access _id and other fields before calling toObject() since toObject transforms delete _id
+    const examId = mockTest.exam?._id?.toString();
+    const examDoc = mockTest.exam as any;
+
+    const subjectId = mockTest.subject?._id?.toString();
+    const subjectDoc = mockTest.subject as any;
+
+    const topicId = mockTest.topic?._id?.toString();
+    const topicDoc = mockTest.topic as any;
+
+    const obj = mockTest.toObject();
+
+    return new MockTestListItemDto({
+      id: obj._id?.toString(),
+      title: obj.title,
+      description: obj.description,
+      totalQuestions: obj.totalQuestions,
+      durationInMinutes: obj.durationInMinutes,
+      exam: mockTest.exam
+        ? {
+            id: examId || '',
+            name: examDoc?.name || '',
+            description: examDoc?.description,
+          }
+        : null,
+      subject: mockTest.subject
+        ? {
+            id: subjectId || '',
+            name: subjectDoc?.name || '',
+            description: subjectDoc?.description,
+          }
+        : null,
+      topic: mockTest.topic
+        ? {
+            id: topicId || '',
+            name: topicDoc?.name || '',
+          }
+        : undefined,
+      generationMode: obj.generationMode,
+      marksPerQuestion: obj.marksPerQuestion,
+      negativeMarking: obj.negativeMarking,
+      passingScore: obj.passingScore,
+      allowRetake: obj.allowRetake,
+      shuffleOptions: obj.shuffleOptions,
+      showResultsImmediately: obj.showResultsImmediately,
+      isActive: obj.isActive,
+      createdAt: obj.createdAt,
+      updatedAt: obj.updatedAt,
     });
   }
 }
