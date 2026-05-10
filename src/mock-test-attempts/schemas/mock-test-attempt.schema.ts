@@ -21,6 +21,37 @@ export class AttemptQuestion {
 export const AttemptQuestionSchema =
   SchemaFactory.createForClass(AttemptQuestion);
 
+@Schema({ _id: false })
+export class AttemptDifficultyDistribution {
+  @Prop({ type: Number, default: 0 })
+  easy: number;
+
+  @Prop({ type: Number, default: 0 })
+  medium: number;
+
+  @Prop({ type: Number, default: 0 })
+  hard: number;
+}
+
+export const AttemptDifficultyDistributionSchema = SchemaFactory.createForClass(
+  AttemptDifficultyDistribution,
+);
+
+@Schema({ _id: false })
+export class PauseResumeEvent {
+  @Prop({ type: String, enum: ['PAUSE', 'RESUME'], required: true })
+  action: string;
+
+  @Prop({ type: Date, required: true })
+  timestamp: Date;
+
+  @Prop({ type: Number })
+  timeConsumedAtPause?: number; // Time consumed when paused (in seconds)
+}
+
+export const PauseResumeEventSchema =
+  SchemaFactory.createForClass(PauseResumeEvent);
+
 @Schema({
   timestamps: true,
   versionKey: false,
@@ -52,6 +83,15 @@ export class MockTestAttempt {
   @Prop()
   durationInMinutes: number;
 
+  @Prop({ type: Types.ObjectId, ref: 'Exam' })
+  exam: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Subject' })
+  subject: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Topic' })
+  topic?: Types.ObjectId;
+
   @Prop()
   marksPerQuestion: number;
 
@@ -67,6 +107,9 @@ export class MockTestAttempt {
   @Prop()
   showResultsImmediately: boolean;
 
+  @Prop({ type: AttemptDifficultyDistributionSchema })
+  difficultyDistribution?: AttemptDifficultyDistribution;
+
   // Locked question set
   @Prop({ type: [AttemptQuestionSchema], default: [] })
   questions: AttemptQuestion[];
@@ -76,7 +119,7 @@ export class MockTestAttempt {
 
   @Prop({
     type: String,
-    enum: ['IN_PROGRESS', 'SUBMITTED', 'EXPIRED'],
+    enum: ['IN_PROGRESS', 'PAUSED', 'SUBMITTED', 'EXPIRED'],
     default: 'IN_PROGRESS',
     index: true,
   })
@@ -88,6 +131,16 @@ export class MockTestAttempt {
   @Prop()
   submittedAt?: Date;
 
+  // Pause/Resume tracking
+  @Prop({ type: Number, default: 0 })
+  timeConsumed: number; // Total time consumed in seconds (accumulated across pause/resume cycles)
+
+  @Prop()
+  pausedAt?: Date; // When the attempt was last paused
+
+  @Prop({ type: [PauseResumeEventSchema], default: [] })
+  pauseResumeHistory: PauseResumeEvent[]; // Track all pause/resume events
+
   // Timestamps are automatically added by mongoose when timestamps: true
   createdAt?: Date;
   updatedAt?: Date;
@@ -98,7 +151,6 @@ export const MockTestAttemptSchema =
 
 // Compound indexes for better query performance
 MockTestAttemptSchema.index({ user: 1, test: 1 });
-MockTestAttemptSchema.index({ status: 1 });
 
 // Virtual for id field (removes _id and adds id)
 MockTestAttemptSchema.virtual('id').get(function () {
