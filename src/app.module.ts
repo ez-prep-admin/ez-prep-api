@@ -3,16 +3,23 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { WinstonModule } from 'nest-winston';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ExamsModule } from './exams/exams.module';
+import { TopicsModule } from './topics/topics.module';
+import { SubjectsModule } from './subjects/subjects.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
 
 @Module({
   imports: [
@@ -70,10 +77,29 @@ import { winstonConfig } from './common/config/winston.config';
     AuthModule,
     MockTestsModule,
     MockTestAttemptsModule,
+    CategoriesModule,
+    ExamsModule,
+    TopicsModule,
+    SubjectsModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    // Global exception filter
+    {
+      provide: APP_FILTER,
+      useClass: HttpExceptionFilter,
+    },
+    // Global logging interceptor
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+    // Global timeout interceptor (30 seconds)
+    {
+      provide: APP_INTERCEPTOR,
+      useValue: new TimeoutInterceptor(30000),
+    },
     // Global rate limiting guard
     {
       provide: APP_GUARD,

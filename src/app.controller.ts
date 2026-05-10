@@ -8,8 +8,33 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @ApiOperation({
+    summary: 'Welcome message',
+    description: 'Returns a welcome message for the API',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Welcome message retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Success' },
+        data: {
+          type: 'object',
+          properties: {
+            greeting: { type: 'string', example: 'Welcome to EZ Prep API!' },
+          },
+        },
+      },
+    },
+  })
+  getHello(): { message: string; data: { greeting: string } } {
+    return {
+      message: 'Success',
+      data: {
+        greeting: this.appService.getHello(),
+      },
+    };
   }
 
   @Get('health')
