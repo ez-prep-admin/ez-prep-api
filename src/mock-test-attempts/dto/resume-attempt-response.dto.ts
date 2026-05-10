@@ -1,4 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  AttemptTestMetadataDto,
+  QuestionTextLanguageDto,
+} from './start-attempt-response.dto';
 
 class QuestionOptionDto {
   @ApiProperty({ description: 'Option ID (UUID)' })
@@ -48,35 +52,15 @@ class ResumeQuestionDto {
   selectedOption?: string | null;
 }
 
-class TestMetadataDto {
-  @ApiProperty({ description: 'Mock test title' })
-  title: string;
-
-  @ApiProperty({ description: 'Test duration in minutes' })
-  durationInMinutes: number;
-
-  @ApiProperty({ description: 'Total number of questions' })
-  totalQuestions: number;
-
-  @ApiProperty({ description: 'When the attempt started' })
-  startedAt: Date;
-
-  @ApiProperty({ description: 'Marks per correct answer' })
-  marksPerQuestion: number;
-
-  @ApiProperty({ description: 'Negative marking per wrong answer' })
-  negativeMarking: number;
-
-  @ApiProperty({ description: 'Minimum score to pass', nullable: true })
-  passingScore: number | null;
-}
-
 export class ResumeAttemptResponseDto {
   @ApiProperty({ description: 'Attempt ID' })
   attemptId: string;
 
-  @ApiProperty({ description: 'Test metadata (frozen configuration)' })
-  test: TestMetadataDto;
+  @ApiProperty({
+    description: 'Mock test metadata with exam, subject, and topic details',
+    type: AttemptTestMetadataDto,
+  })
+  mockTestData: AttemptTestMetadataDto;
 
   @ApiProperty({
     description:

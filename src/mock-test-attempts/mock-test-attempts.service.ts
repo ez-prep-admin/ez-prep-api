@@ -570,12 +570,15 @@ export class MockTestAttemptsService {
       throw new BadRequestException('Invalid attempt ID format');
     }
 
-    // Step 2: Fetch attempt
+    // Step 2: Fetch attempt with populated exam, subject, and topic
     const attempt = await this.attemptModel
       .findOne({
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
+      .populate('exam', '_id name description')
+      .populate('subject', '_id name description')
+      .populate('topic', '_id name')
       .exec();
 
     if (!attempt) {
@@ -692,14 +695,19 @@ export class MockTestAttemptsService {
       })
       .filter(Boolean);
 
-    // Step 8: Build response
+    // Step 8: Build response with exam, subject, topic details
     const pauseCount = attempt.pauseResumeHistory.filter(
       event => event.action === 'PAUSE',
     ).length;
 
+    // Extract populated data
+    const examDoc = attempt.exam as any;
+    const subjectDoc = attempt.subject as any;
+    const topicDoc = attempt.topic as any;
+
     const response: ResumeAttemptResponseDto = {
       attemptId: attempt.id,
-      test: {
+      mockTestData: {
         title: attempt.testTitle,
         durationInMinutes: attempt.durationInMinutes,
         totalQuestions: attempt.totalQuestions,
@@ -707,6 +715,22 @@ export class MockTestAttemptsService {
         marksPerQuestion: attempt.marksPerQuestion,
         negativeMarking: attempt.negativeMarking,
         passingScore: attempt.passingScore,
+        exam: {
+          id: examDoc?._id?.toString() || '',
+          name: examDoc?.name || '',
+          description: examDoc?.description,
+        },
+        subject: {
+          id: subjectDoc?._id?.toString() || '',
+          name: subjectDoc?.name || '',
+          description: subjectDoc?.description,
+        },
+        topic: topicDoc
+          ? {
+              id: topicDoc?._id?.toString() || '',
+              name: topicDoc?.name || '',
+            }
+          : undefined,
       },
       questions: mappedQuestions,
       timeElapsed,
