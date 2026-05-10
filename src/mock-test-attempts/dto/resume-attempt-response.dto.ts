@@ -90,4 +90,13 @@ export class ResumeAttemptResponseDto {
 
   @ApiProperty({ description: 'Time remaining in seconds' })
   timeRemaining: number;
+
+  @ApiProperty({ description: 'Number of times paused', required: false })
+  pauseCount?: number;
+
+  @ApiProperty({
+    description: 'Total time consumed (for paused attempts)',
+    required: false,
+  })
+  timeConsumed?: number;
 }

@@ -37,6 +37,21 @@ export const AttemptDifficultyDistributionSchema = SchemaFactory.createForClass(
   AttemptDifficultyDistribution,
 );
 
+@Schema({ _id: false })
+export class PauseResumeEvent {
+  @Prop({ type: String, enum: ['PAUSE', 'RESUME'], required: true })
+  action: string;
+
+  @Prop({ type: Date, required: true })
+  timestamp: Date;
+
+  @Prop({ type: Number })
+  timeConsumedAtPause?: number; // Time consumed when paused (in seconds)
+}
+
+export const PauseResumeEventSchema =
+  SchemaFactory.createForClass(PauseResumeEvent);
+
 @Schema({
   timestamps: true,
   versionKey: false,
@@ -104,7 +119,7 @@ export class MockTestAttempt {
 
   @Prop({
     type: String,
-    enum: ['IN_PROGRESS', 'SUBMITTED', 'EXPIRED'],
+    enum: ['IN_PROGRESS', 'PAUSED', 'SUBMITTED', 'EXPIRED'],
     default: 'IN_PROGRESS',
     index: true,
   })
@@ -115,6 +130,16 @@ export class MockTestAttempt {
 
   @Prop()
   submittedAt?: Date;
+
+  // Pause/Resume tracking
+  @Prop({ type: Number, default: 0 })
+  timeConsumed: number; // Total time consumed in seconds (accumulated across pause/resume cycles)
+
+  @Prop()
+  pausedAt?: Date; // When the attempt was last paused
+
+  @Prop({ type: [PauseResumeEventSchema], default: [] })
+  pauseResumeHistory: PauseResumeEvent[]; // Track all pause/resume events
 
   // Timestamps are automatically added by mongoose when timestamps: true
   createdAt?: Date;
