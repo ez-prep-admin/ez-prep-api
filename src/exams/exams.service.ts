@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Exam, ExamDocument } from './schemas/exam.schema';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
@@ -91,7 +91,7 @@ export class ExamsService {
     }
 
     if (categoryId) {
-      query.category = categoryId;
+      query.category = new Types.ObjectId(categoryId);
     }
 
     if (search && search.trim()) {
