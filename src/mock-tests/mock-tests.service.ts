@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
 
@@ -160,7 +160,7 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { exam: examId };
+    const query = { exam: new Types.ObjectId(examId) };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
@@ -203,7 +203,7 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { subject: subjectId };
+    const query = { subject: new Types.ObjectId(subjectId) };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
@@ -248,7 +248,10 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { exam: examId, subject: subjectId };
+    const query = {
+      exam: new Types.ObjectId(examId),
+      subject: new Types.ObjectId(subjectId),
+    };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
