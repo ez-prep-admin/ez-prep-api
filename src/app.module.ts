@@ -10,6 +10,8 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ExamsModule } from './exams/exams.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -70,6 +72,8 @@ import { winstonConfig } from './common/config/winston.config';
     AuthModule,
     MockTestsModule,
     MockTestAttemptsModule,
+    CategoriesModule,
+    ExamsModule,
   ],
   controllers: [AppController],
   providers: [
