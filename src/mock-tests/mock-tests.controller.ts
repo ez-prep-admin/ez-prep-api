@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import { MockTestsService } from './mock-tests.service';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
+import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -123,7 +124,7 @@ export class MockTestsController {
     Retrieves comprehensive statistics about mock tests including:
     - Total and active tests
     - Distribution by generation mode (STATIC/DYNAMIC)
-    - Distribution by difficulty level
+    - Total questions by difficulty level across all tests
     
     Requires admin privileges.
     `,
@@ -148,13 +149,12 @@ export class MockTestsController {
                 dynamic: { type: 'number', example: 10 },
               },
             },
-            byDifficulty: {
+            totalQuestionsByDifficulty: {
               type: 'object',
               properties: {
-                easy: { type: 'number', example: 10 },
-                medium: { type: 'number', example: 20 },
-                hard: { type: 'number', example: 10 },
-                unspecified: { type: 'number', example: 5 },
+                easy: { type: 'number', example: 150 },
+                medium: { type: 'number', example: 300 },
+                hard: { type: 'number', example: 100 },
               },
             },
           },
@@ -221,19 +221,73 @@ export class MockTestsController {
     };
   }
 
-  @Get('difficulty/:level')
+  @Get('exam/:examId')
   @ApiOperation({
-    summary: 'Get mock tests by difficulty level',
+    summary: 'Get mock tests by exam',
     description: `
-    Retrieves mock tests filtered by difficulty level with pagination.
-    Valid difficulty levels: easy, medium, hard
+    Retrieves mock tests filtered by exam ID with pagination.
+    Useful for showing all tests for a specific exam.
+    
+    Returns populated exam, subject, and topic details (excludes questionIds and difficultyDistribution).
     `,
   })
   @ApiParam({
-    name: 'level',
-    enum: ['easy', 'medium', 'hard'],
-    description: 'Difficulty level',
-    example: 'medium',
+    name: 'examId',
+    description: 'Exam ID',
+    example: '64f123456789abcdef123456',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (minimum: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (minimum: 1, maximum: 100)',
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mock tests retrieved successfully',
+    type: MockTestListItemDto,
+    isArray: true,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async findByExam(
+    @Param('examId') examId: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<{
+    message: string;
+    data: MockTestListItemDto[];
+    pagination: any;
+  }> {
+    const result = await this.mockTestsService.findByExam(examId, page, limit);
+    return {
+      message: 'Mock tests for exam retrieved successfully',
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }
+
+  @Get('subject/:subjectId')
+  @ApiOperation({
+    summary: 'Get mock tests by subject',
+    description: `
+    Retrieves mock tests filtered by subject ID with pagination.
+    Useful for showing all tests for a specific subject.
+    `,
+  })
+  @ApiParam({
+    name: 'subjectId',
+    description: 'Subject ID',
+    example: '64f123456789abcdef123456',
   })
   @ApiQuery({
     name: 'page',
@@ -256,8 +310,8 @@ export class MockTestsController {
   @ApiUnauthorizedResponse({
     description: 'Authentication required',
   })
-  async findByDifficulty(
-    @Param('level') level: 'easy' | 'medium' | 'hard',
+  async findBySubject(
+    @Param('subjectId') subjectId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
   ): Promise<{
@@ -265,13 +319,75 @@ export class MockTestsController {
     data: MockTestResponseDto[];
     pagination: any;
   }> {
-    const result = await this.mockTestsService.findByDifficulty(
-      level,
+    const result = await this.mockTestsService.findBySubject(
+      subjectId,
       page,
       limit,
     );
     return {
-      message: `${level.charAt(0).toUpperCase() + level.slice(1)} difficulty mock tests retrieved successfully`,
+      message: 'Mock tests for subject retrieved successfully',
+      data: result.data,
+      pagination: result.pagination,
+    };
+  }
+
+  @Get('exam/:examId/subject/:subjectId')
+  @ApiOperation({
+    summary: 'Get mock tests by exam and subject',
+    description: `
+    Retrieves mock tests filtered by both exam and subject ID with pagination.
+    Useful for showing subject-specific tests within an exam.
+    `,
+  })
+  @ApiParam({
+    name: 'examId',
+    description: 'Exam ID',
+    example: '64f123456789abcdef123456',
+  })
+  @ApiParam({
+    name: 'subjectId',
+    description: 'Subject ID',
+    example: '64f123456789abcdef123456',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (minimum: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (minimum: 1, maximum: 100)',
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Mock tests retrieved successfully',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required',
+  })
+  async findByExamAndSubject(
+    @Param('examId') examId: string,
+    @Param('subjectId') subjectId: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<{
+    message: string;
+    data: MockTestResponseDto[];
+    pagination: any;
+  }> {
+    const result = await this.mockTestsService.findByExamAndSubject(
+      examId,
+      subjectId,
+      page,
+      limit,
+    );
+    return {
+      message: 'Mock tests for exam and subject retrieved successfully',
       data: result.data,
       pagination: result.pagination,
     };
