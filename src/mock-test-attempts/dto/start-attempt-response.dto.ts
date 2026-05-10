@@ -1,5 +1,34 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+// Simplified - only expose URL to frontend, not S3 internal details
+export class QuestionTextLanguageDto {
+  @ApiPropertyOptional({
+    description: 'Question text',
+    example: 'What is the powerhouse of the cell?',
+  })
+  text?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Question image URL (pre-signed S3 URL)',
+    example: 'https://ez-prep-images.s3.ap-south-1.amazonaws.com/questions/abc123.jpg?X-Amz-...',
+  })
+  imageUrl?: string | null;
+}
+
+export class QuestionTextDto {
+  @ApiProperty({
+    description: 'English question text',
+    type: QuestionTextLanguageDto,
+  })
+  en: QuestionTextLanguageDto;
+
+  @ApiProperty({
+    description: 'Malayalam question text',
+    type: QuestionTextLanguageDto,
+  })
+  ml: QuestionTextLanguageDto;
+}
+
 export class QuestionOptionDto {
   @ApiProperty({
     description: 'Option unique ID (UUID)',
@@ -18,25 +47,19 @@ export class QuestionOptionDto {
     description: 'Option text in English',
     example: 'Mitochondria',
   })
-  en: string | null;
+  en?: string | null;
 
   @ApiPropertyOptional({
     description: 'Option text in Malayalam',
     example: null,
   })
-  ml: string | null;
+  ml?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Option image URL',
-    example: null,
+    description: 'Option image URL (pre-signed S3 URL)',
+    example: 'https://ez-prep-images.s3.ap-south-1.amazonaws.com/options/xyz789.jpg?X-Amz-...',
   })
-  url?: string | null;
-
-  @ApiPropertyOptional({
-    description: 'MongoDB ObjectId',
-    example: '67c5f71b2548058025b23458',
-  })
-  _id?: string;
+  imageUrl?: string | null;
 }
 
 export class SafeQuestionDto {
@@ -47,19 +70,17 @@ export class SafeQuestionDto {
   _id: string;
 
   @ApiProperty({
-    description: 'Question text (localized with text and image per language)',
-    example: {
-      en: { text: 'What is the powerhouse of the cell?', image: null },
-      ml: { text: null, image: null },
-    },
+    description: 'Question text with language support',
+    type: QuestionTextDto,
   })
-  questionText: Record<string, { text: string | null; image: string | null }>;
+  questionText: QuestionTextDto;
 
   @ApiPropertyOptional({
-    description: 'Question image URL',
-    example: null,
+    description: 'Option type for this question',
+    enum: ['text', 'image'],
+    example: 'text',
   })
-  image?: string | null;
+  optionType?: string;
 
   @ApiProperty({
     description: 'Array of options',
@@ -74,11 +95,17 @@ export class SafeQuestionDto {
   subject?: string;
 
   @ApiPropertyOptional({
+    description: 'Topic reference',
+    example: '64f123456789abcdef123456',
+  })
+  topic?: string;
+
+  @ApiPropertyOptional({
     description: 'Difficulty level',
     enum: ['easy', 'medium', 'hard'],
     example: 'medium',
   })
-  difficulty?: string;
+  difficultyLevel?: string;
 }
 
 export class AttemptTestMetadataDto {

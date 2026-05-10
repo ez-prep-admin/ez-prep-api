@@ -38,6 +38,15 @@ export class MockTestAttemptsService {
   ) {}
 
   /**
+   * Helper: Extract URL from ImageMetadata (only expose URL, not S3 internals)
+   */
+  private extractImageUrl(
+    imageMetadata: any | undefined | null,
+  ): string | null {
+    return imageMetadata?.url || null;
+  }
+
+  /**
    * Helper: Auto-expire and evaluate an attempt if time limit exceeded
    * @param attempt - The attempt document
    * @returns true if attempt was auto-expired, false otherwise
@@ -182,11 +191,15 @@ export class MockTestAttemptsService {
       testTitle: test.title,
       totalQuestions: test.totalQuestions,
       durationInMinutes: test.durationInMinutes,
+      exam: test.exam,
+      subject: test.subject,
+      topic: test.topic,
       marksPerQuestion: test.marksPerQuestion,
       negativeMarking: test.negativeMarking,
       passingScore: test.passingScore,
       shuffleOptions: test.shuffleOptions,
       showResultsImmediately: test.showResultsImmediately,
+      difficultyDistribution: test.difficultyDistribution,
       questions: test.questionIds.map(q => ({
         question: q,
         selectedOption: null,
@@ -206,7 +219,7 @@ export class MockTestAttemptsService {
       .lean()
       .exec();
 
-    // Step 7: Format response
+    // Step 7: Format response with simplified image data (only URLs)
     const response: StartAttemptResponseDto = {
       attemptId: attempt.id,
       test: {
@@ -220,19 +233,28 @@ export class MockTestAttemptsService {
       },
       questions: questions.map(q => ({
         _id: q._id.toString(),
-        questionText: q.questionText,
-        image: q.image,
+        questionText: {
+          en: {
+            text: q.questionText?.en?.text || null,
+            imageUrl: this.extractImageUrl(q.questionText?.en?.image),
+          },
+          ml: {
+            text: q.questionText?.ml?.text || null,
+            imageUrl: this.extractImageUrl(q.questionText?.ml?.image),
+          },
+        },
+        optionType: q.optionType,
         options:
           q.options?.map(opt => ({
             id: opt.id,
             type: opt.type,
             en: opt.en,
             ml: opt.ml,
-            url: opt.url,
-            _id: opt._id?.toString(),
+            imageUrl: this.extractImageUrl(opt.image),
           })) || [],
         subject: q.subject?.toString(),
-        difficulty: q.difficulty,
+        topic: q.topic?.toString(),
+        difficultyLevel: q.difficultyLevel,
       })),
     };
 
@@ -466,16 +488,27 @@ export class MockTestAttemptsService {
 
         const questionDto: any = {
           _id: questionId,
-          questionText: question.questionText,
+          questionText: {
+            en: {
+              text: question.questionText?.en?.text || null,
+              imageUrl: this.extractImageUrl(question.questionText?.en?.image),
+            },
+            ml: {
+              text: question.questionText?.ml?.text || null,
+              imageUrl: this.extractImageUrl(question.questionText?.ml?.image),
+            },
+          },
+          optionType: question.optionType,
           options: question.options.map(opt => ({
             id: opt.id,
             type: opt.type,
             en: opt.en,
             ml: opt.ml,
-            url: opt.url,
-            _id: opt._id?.toString(),
+            imageUrl: this.extractImageUrl(opt.image),
           })),
-          subject: question.subject.toString(),
+          subject: question.subject?.toString(),
+          topic: question.topic?.toString(),
+          difficultyLevel: question.difficultyLevel,
         };
 
         // Include selected option if user has answered
@@ -824,7 +857,13 @@ export class MockTestAttemptsService {
           correctAnswer: question?.correctAnswer || '',
           isCorrect: aq.isCorrect || false,
           marksAwarded: aq.marksAwarded,
-          explanation: question?.explanation,
+          explanation: question?.explanation
+            ? {
+                en: question.explanation.en || null,
+                ml: question.explanation.ml || null,
+                imageUrl: this.extractImageUrl(question.explanation.image),
+              }
+            : undefined,
         };
       });
     }

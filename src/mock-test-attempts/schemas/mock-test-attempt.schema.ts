@@ -21,6 +21,22 @@ export class AttemptQuestion {
 export const AttemptQuestionSchema =
   SchemaFactory.createForClass(AttemptQuestion);
 
+@Schema({ _id: false })
+export class AttemptDifficultyDistribution {
+  @Prop({ type: Number, default: 0 })
+  easy: number;
+
+  @Prop({ type: Number, default: 0 })
+  medium: number;
+
+  @Prop({ type: Number, default: 0 })
+  hard: number;
+}
+
+export const AttemptDifficultyDistributionSchema = SchemaFactory.createForClass(
+  AttemptDifficultyDistribution,
+);
+
 @Schema({
   timestamps: true,
   versionKey: false,
@@ -52,6 +68,15 @@ export class MockTestAttempt {
   @Prop()
   durationInMinutes: number;
 
+  @Prop({ type: Types.ObjectId, ref: 'Exam' })
+  exam: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Subject' })
+  subject: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Topic' })
+  topic?: Types.ObjectId;
+
   @Prop()
   marksPerQuestion: number;
 
@@ -66,6 +91,9 @@ export class MockTestAttempt {
 
   @Prop()
   showResultsImmediately: boolean;
+
+  @Prop({ type: AttemptDifficultyDistributionSchema })
+  difficultyDistribution?: AttemptDifficultyDistribution;
 
   // Locked question set
   @Prop({ type: [AttemptQuestionSchema], default: [] })

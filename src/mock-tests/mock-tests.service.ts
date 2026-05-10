@@ -100,23 +100,33 @@ export class MockTestsService {
    * @returns Statistics about mock tests
    */
   async getStats() {
-    const [
-      totalTests,
-      activeTests,
-      staticTests,
-      dynamicTests,
-      easyTests,
-      mediumTests,
-      hardTests,
-    ] = await Promise.all([
-      this.mockTestModel.countDocuments({}),
-      this.mockTestModel.countDocuments({ isActive: true }),
-      this.mockTestModel.countDocuments({ generationMode: 'STATIC' }),
-      this.mockTestModel.countDocuments({ generationMode: 'DYNAMIC' }),
-      this.mockTestModel.countDocuments({ difficultyLevel: 'easy' }),
-      this.mockTestModel.countDocuments({ difficultyLevel: 'medium' }),
-      this.mockTestModel.countDocuments({ difficultyLevel: 'hard' }),
-    ]);
+    const [totalTests, activeTests, staticTests, dynamicTests] =
+      await Promise.all([
+        this.mockTestModel.countDocuments({}),
+        this.mockTestModel.countDocuments({ isActive: true }),
+        this.mockTestModel.countDocuments({ generationMode: 'STATIC' }),
+        this.mockTestModel.countDocuments({ generationMode: 'DYNAMIC' }),
+      ]);
+
+    // Aggregate difficulty distribution across all tests
+    const difficultyAggregation = await this.mockTestModel
+      .aggregate([
+        {
+          $group: {
+            _id: null,
+            totalEasy: { $sum: '$difficultyDistribution.easy' },
+            totalMedium: { $sum: '$difficultyDistribution.medium' },
+            totalHard: { $sum: '$difficultyDistribution.hard' },
+          },
+        },
+      ])
+      .exec();
+
+    const difficultyStats = difficultyAggregation[0] || {
+      totalEasy: 0,
+      totalMedium: 0,
+      totalHard: 0,
+    };
 
     return {
       totalTests,
@@ -126,24 +136,23 @@ export class MockTestsService {
         static: staticTests,
         dynamic: dynamicTests,
       },
-      byDifficulty: {
-        easy: easyTests,
-        medium: mediumTests,
-        hard: hardTests,
-        unspecified: totalTests - (easyTests + mediumTests + hardTests),
+      totalQuestionsByDifficulty: {
+        easy: difficultyStats.totalEasy,
+        medium: difficultyStats.totalMedium,
+        hard: difficultyStats.totalHard,
       },
     };
   }
 
   /**
-   * Find mock tests by difficulty level
-   * @param difficulty - Difficulty level
+   * Find mock tests by exam
+   * @param examId - Exam ID
    * @param page - Page number
    * @param limit - Items per page
    * @returns Paginated mock tests
    */
-  async findByDifficulty(
-    difficulty: 'easy' | 'medium' | 'hard',
+  async findByExam(
+    examId: string,
     page: number = 1,
     limit: number = 10,
   ): Promise<PaginatedMockTestsResponse> {
@@ -151,7 +160,95 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { difficultyLevel: difficulty };
+    const query = { exam: examId };
+
+    const [mockTests, total] = await Promise.all([
+      this.mockTestModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(validLimit)
+        .exec(),
+      this.mockTestModel.countDocuments(query).exec(),
+    ]);
+
+    const totalPages = Math.ceil(total / validLimit);
+
+    return {
+      data: mockTests.map(test => this.toResponseDto(test)),
+      pagination: {
+        total,
+        page: validPage,
+        limit: validLimit,
+        totalPages,
+        hasNextPage: validPage < totalPages,
+        hasPrevPage: validPage > 1,
+      },
+    };
+  }
+
+  /**
+   * Find mock tests by subject
+   * @param subjectId - Subject ID
+   * @param page - Page number
+   * @param limit - Items per page
+   * @returns Paginated mock tests
+   */
+  async findBySubject(
+    subjectId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<PaginatedMockTestsResponse> {
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(Math.max(1, limit), 100);
+    const skip = (validPage - 1) * validLimit;
+
+    const query = { subject: subjectId };
+
+    const [mockTests, total] = await Promise.all([
+      this.mockTestModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(validLimit)
+        .exec(),
+      this.mockTestModel.countDocuments(query).exec(),
+    ]);
+
+    const totalPages = Math.ceil(total / validLimit);
+
+    return {
+      data: mockTests.map(test => this.toResponseDto(test)),
+      pagination: {
+        total,
+        page: validPage,
+        limit: validLimit,
+        totalPages,
+        hasNextPage: validPage < totalPages,
+        hasPrevPage: validPage > 1,
+      },
+    };
+  }
+
+  /**
+   * Find mock tests by exam and subject
+   * @param examId - Exam ID
+   * @param subjectId - Subject ID
+   * @param page - Page number
+   * @param limit - Items per page
+   * @returns Paginated mock tests
+   */
+  async findByExamAndSubject(
+    examId: string,
+    subjectId: string,
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<PaginatedMockTestsResponse> {
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(Math.max(1, limit), 100);
+    const skip = (validPage - 1) * validLimit;
+
+    const query = { exam: examId, subject: subjectId };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
@@ -227,9 +324,16 @@ export class MockTestsService {
     const obj = mockTest.toObject();
     return new MockTestResponseDto({
       ...obj,
-      subjects: obj.subjects?.map(id => id.toString()) || [],
+      exam: obj.exam?.toString(),
+      subject: obj.subject?.toString(),
+      topic: obj.topic?.toString(),
       questionIds: obj.questionIds?.map(id => id.toString()) || [],
       createdBy: obj.createdBy?.toString(),
+      difficultyDistribution: obj.difficultyDistribution || {
+        easy: 0,
+        medium: 0,
+        hard: 0,
+      },
     });
   }
 }
