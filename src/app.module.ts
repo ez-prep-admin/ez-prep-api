@@ -17,6 +17,7 @@ import { TopicsModule } from './topics/topics.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { TagsModule } from './tags/tags.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { SearchModule } from './search/search.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -87,6 +88,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     SubjectsModule,
     TagsModule,
     AnalyticsModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [
