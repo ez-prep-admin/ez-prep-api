@@ -30,6 +30,7 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
+import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -117,7 +118,7 @@ export class CategoriesController {
   ): Promise<{
     message: string;
     data: CategoryResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.categoriesService.findAll(
       page,

@@ -24,6 +24,8 @@ import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
+import { UserAttemptSummaryDto } from './dto/user-attempt-summary.dto';
+import { PopulatedDocument } from '../common/types/populated-document.interface';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -246,9 +248,9 @@ export class MockTestAttemptsService {
 
     // Step 7: Format response with simplified image data (only URLs)
     // Extract populated data
-    const examDoc = test.exam as any;
-    const subjectDoc = test.subject as any;
-    const topicDoc = test.topic as any;
+    const examDoc = test.exam as unknown as PopulatedDocument;
+    const subjectDoc = test.subject as unknown as PopulatedDocument;
+    const topicDoc = test.topic as unknown as PopulatedDocument;
 
     const response: StartAttemptResponseDto = {
       attemptId: attempt.id,
@@ -474,7 +476,7 @@ export class MockTestAttemptsService {
           return null; // Skip if question not found
         }
 
-        const questionDto: any = {
+        const questionDto: Record<string, unknown> = {
           _id: questionId,
           questionText: question.questionText,
           options: question.options,
@@ -514,7 +516,7 @@ export class MockTestAttemptsService {
         passingScore: attempt.passingScore,
         showResultsImmediately: attempt.showResultsImmediately,
       },
-      questions: mappedQuestions,
+      questions: mappedQuestions as never[],
     };
 
     // Step 9: Add time metrics for in-progress and paused attempts
@@ -747,10 +749,13 @@ export class MockTestAttemptsService {
    * @param userId - User ID
    * @returns User's attempts
    */
-  async findUserAttempts(userId: string) {
+  async findUserAttempts(userId: string): Promise<UserAttemptSummaryDto[]> {
     const attempts = await this.attemptModel
       .find({ user: new Types.ObjectId(userId) })
-      .populate('test', 'title totalQuestions durationInMinutes')
+      .populate(
+        'test',
+        'title totalQuestions durationInMinutes marksPerQuestion',
+      )
       .sort({ createdAt: -1 })
       .exec();
 
@@ -759,7 +764,27 @@ export class MockTestAttemptsService {
       await this.autoExpireIfNeeded(attempt);
     }
 
-    return attempts;
+    return attempts.map(attempt => {
+      const testDoc = attempt.test as unknown as PopulatedDocument & {
+        title?: string;
+        totalQuestions?: number;
+        marksPerQuestion?: number;
+      };
+
+      return {
+        attemptId: attempt.id || attempt._id?.toString() || '',
+        mockTestId:
+          attempt.test?._id?.toString() ||
+          (typeof attempt.test === 'string' ? attempt.test : ''),
+        mockTestTitle: testDoc.title || 'Unknown Test',
+        status: attempt.status,
+        score: attempt.score,
+        totalMarks:
+          (testDoc.totalQuestions || 0) * (testDoc.marksPerQuestion || 0),
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+      };
+    });
   }
 
   /**

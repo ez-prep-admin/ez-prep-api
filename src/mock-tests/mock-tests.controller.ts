@@ -20,6 +20,7 @@ import {
 import { MockTestsService } from './mock-tests.service';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
 import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
+import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -211,7 +212,7 @@ export class MockTestsController {
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findActive(page, limit);
     return {
@@ -266,7 +267,7 @@ export class MockTestsController {
   ): Promise<{
     message: string;
     data: MockTestListItemDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findByExam(examId, page, limit);
     return {
@@ -317,7 +318,7 @@ export class MockTestsController {
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findBySubject(
       subjectId,
@@ -378,7 +379,7 @@ export class MockTestsController {
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findByExamAndSubject(
       examId,

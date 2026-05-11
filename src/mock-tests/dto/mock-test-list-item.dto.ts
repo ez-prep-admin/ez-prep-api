@@ -201,7 +201,11 @@ export class MockTestListItemDto {
   questionIds: string[];
 
   @Exclude()
-  difficultyDistribution: any;
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
 
   @Exclude()
   isDeleted: boolean;

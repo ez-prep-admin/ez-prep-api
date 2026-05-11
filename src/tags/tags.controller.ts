@@ -27,6 +27,7 @@ import { TagsService } from './tags.service';
 import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { TagResponseDto } from './dto/tag-response.dto';
+import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -150,7 +151,7 @@ export class TagsController {
   ): Promise<{
     message: string;
     data: TagResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.tagsService.findAll(
       page,

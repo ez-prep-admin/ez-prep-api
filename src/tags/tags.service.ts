@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, FilterQuery } from 'mongoose';
 import { Tag, TagDocument } from './schemas/tag.schema';
 import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
@@ -86,7 +86,7 @@ export class TagsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query: any = {};
+    const query: FilterQuery<Tag> = {};
 
     if (subjectId) {
       query.subject = new Types.ObjectId(subjectId);
@@ -198,7 +198,7 @@ export class TagsService {
       }
     }
 
-    const updateData: any = { ...updateTagDto };
+    const updateData: Record<string, unknown> = {};
     if (updateTagDto.subject) {
       updateData.subject = new Types.ObjectId(updateTagDto.subject);
     }

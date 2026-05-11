@@ -3,13 +3,17 @@ import {
   Injectable,
   ArgumentMetadata,
   BadRequestException,
+  Type,
 } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToClass } from 'class-transformer';
 
 @Injectable()
-export class EnhancedValidationPipe implements PipeTransform<any> {
-  async transform(value: any, { metatype }: ArgumentMetadata) {
+export class EnhancedValidationPipe implements PipeTransform<unknown> {
+  async transform(
+    value: unknown,
+    { metatype }: ArgumentMetadata,
+  ): Promise<unknown> {
     if (!metatype || !this.toValidate(metatype)) {
       return value;
     }
@@ -38,8 +42,8 @@ export class EnhancedValidationPipe implements PipeTransform<any> {
     return object;
   }
 
-  private toValidate(metatype: new (...args: any[]) => any): boolean {
-    const types: (new (...args: any[]) => any)[] = [
+  private toValidate(metatype: Type<unknown>): boolean {
+    const types: Array<Type<unknown>> = [
       String,
       Boolean,
       Number,

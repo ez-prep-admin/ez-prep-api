@@ -8,6 +8,7 @@ import {
   PaginatedMockTestsResponseDto,
   PaginatedMockTestListResponseDto,
 } from './dto/paginated-mock-tests-response.dto';
+import { PopulatedDocument } from '../common/types/populated-document.interface';
 
 @Injectable()
 export class MockTestsService {
@@ -345,13 +346,13 @@ export class MockTestsService {
     const mockTestId = mockTest._id?.toString();
 
     const examId = mockTest.exam?._id?.toString();
-    const examDoc = mockTest.exam as any;
+    const examDoc = mockTest.exam as unknown as PopulatedDocument;
 
     const subjectId = mockTest.subject?._id?.toString();
-    const subjectDoc = mockTest.subject as any;
+    const subjectDoc = mockTest.subject as unknown as PopulatedDocument;
 
     const topicId = mockTest.topic?._id?.toString();
-    const topicDoc = mockTest.topic as any;
+    const topicDoc = mockTest.topic as unknown as PopulatedDocument;
 
     const obj = mockTest.toObject();
 

@@ -11,6 +11,7 @@ import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
+import { PopulatedDocument } from '../common/types/populated-document.interface';
 
 @Injectable()
 export class SubjectsService {
@@ -155,10 +156,15 @@ export class SubjectsService {
       ...obj,
       id: obj._id?.toString() || obj.id,
       topics:
-        obj.topics?.map((topic: any) => ({
-          id: topic._id?.toString() || topic.toString(),
-          name: topic.name || '',
-        })) || [],
+        obj.topics?.map((topic: unknown) => {
+          const topicDoc = topic as PopulatedDocument;
+          return {
+            id:
+              topicDoc._id?.toString() ||
+              (typeof topic === 'string' ? topic : ''),
+            name: topicDoc.name || '',
+          };
+        }) || [],
     });
   }
 }

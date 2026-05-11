@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Query } from 'mongoose';
 import { UserRole } from '../../common/enums/user-role.enum';
 
 export type UserDocument = User & Document;
@@ -76,7 +76,7 @@ UserSchema.set('toObject', {
 });
 
 // Pre-find middleware to handle soft delete queries
-UserSchema.pre(/^find/, function (this: any) {
+UserSchema.pre(/^find/, function (this: Query<unknown, UserDocument>) {
   // Only return non-deleted users by default
   this.where({ isDeleted: { $ne: true } });
 });
