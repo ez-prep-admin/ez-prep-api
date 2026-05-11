@@ -47,6 +47,14 @@ export class Exam {
   })
   category: Types.ObjectId;
 
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'ExamGroup',
+    required: true,
+    index: true,
+  })
+  examGroup: Types.ObjectId;
+
   @Prop({ min: 0 })
   duration?: number;
 
@@ -61,6 +69,9 @@ export class Exam {
 
   @Prop({ default: false })
   isSessionWise: boolean;
+
+  @Prop({ required: true, default: false })
+  hasMultiLingualSupport: boolean;
 
   @Prop({ default: true, index: true })
   isActive: boolean;
