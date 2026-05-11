@@ -25,6 +25,7 @@ import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
+import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -85,6 +86,34 @@ export class SubjectsController {
       message: 'Subjects retrieved successfully',
       data: subjects,
       count: subjects.length,
+    };
+  }
+
+  @Get('exam/:examId')
+  @ApiOperation({
+    summary: 'Get subjects by exam',
+    description:
+      'Retrieves all subjects associated with a specific exam. Useful for populating subject filter dropdowns.',
+  })
+  @ApiParam({
+    name: 'examId',
+    description: 'Exam ID',
+    example: '64f123456789abcdef123456',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Subjects for exam retrieved successfully',
+    type: [SubjectForExamResponseDto],
+  })
+  @ApiNotFoundResponse({ description: 'Exam not found' })
+  async findByExam(@Param('examId') examId: string): Promise<{
+    message: string;
+    data: SubjectForExamResponseDto[];
+  }> {
+    const subjects = await this.subjectsService.findByExam(examId);
+    return {
+      message: 'Subjects for exam retrieved successfully',
+      data: subjects,
     };
   }
 

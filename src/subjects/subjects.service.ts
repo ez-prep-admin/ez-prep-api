@@ -5,12 +5,14 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Subject, SubjectDocument } from './schemas/subject.schema';
 import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
+import { Exam, ExamDocument } from '../exams/schemas/exam.schema';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
+import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 
 @Injectable()
@@ -20,6 +22,8 @@ export class SubjectsService {
     private subjectModel: Model<SubjectDocument>,
     @InjectModel(Topic.name)
     private topicModel: Model<TopicDocument>,
+    @InjectModel(Exam.name)
+    private examModel: Model<ExamDocument>,
   ) {}
 
   /**
@@ -145,6 +149,69 @@ export class SubjectsService {
     }
 
     return this.toResponseDto(subject);
+  }
+
+  /**
+   * Find all subjects belonging to a specific exam
+   * Uses aggregation to join exam.subjects[] with the subjects collection in one DB round-trip
+   * @param examId - Exam ID
+   * @returns Array of subjects (id, name, description)
+   */
+  async findByExam(examId: string): Promise<SubjectForExamResponseDto[]> {
+    const results = await this.examModel
+      .aggregate<{ _id: Types.ObjectId; name: string; description?: string }>([
+        {
+          $match: {
+            _id: new Types.ObjectId(examId),
+            isDeleted: { $ne: true },
+          },
+        },
+        { $unwind: '$subjects' },
+        {
+          $lookup: {
+            from: 'subjects',
+            localField: 'subjects.subject',
+            foreignField: '_id',
+            as: 'subjectDoc',
+          },
+        },
+        { $unwind: '$subjectDoc' },
+        {
+          $match: {
+            'subjectDoc.isDeleted': { $ne: true },
+            'subjectDoc.isActive': true,
+          },
+        },
+        {
+          $group: {
+            _id: '$subjectDoc._id',
+            name: { $first: '$subjectDoc.name' },
+            description: { $first: '$subjectDoc.description' },
+          },
+        },
+        { $sort: { name: 1 } },
+      ])
+      .exec();
+
+    if (!results.length) {
+      // Verify the exam exists so we can return a meaningful error
+      const examExists = await this.examModel
+        .exists({ _id: new Types.ObjectId(examId), isDeleted: { $ne: true } })
+        .exec();
+
+      if (!examExists) {
+        throw new NotFoundException(`Exam with ID "${examId}" not found`);
+      }
+    }
+
+    return results.map(
+      doc =>
+        new SubjectForExamResponseDto({
+          id: doc._id.toString(),
+          name: doc.name,
+          description: doc.description,
+        }),
+    );
   }
 
   /**
