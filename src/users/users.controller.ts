@@ -1,4 +1,4 @@
-import {
+﻿import {
   Controller,
   Get,
   Post,
@@ -20,11 +20,13 @@ import {
   ApiQuery,
   ApiBearerAuth,
   ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -39,51 +41,56 @@ import { GetUser } from '../auth/decorators/get-user.decorator';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // -- Admin: user management -------------------------------------------------
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Create a new user',
+    summary: 'Create a user (Admin only)',
     description:
-      'Creates a new user account with validation and uniqueness checks for email and phone number',
+      'Manually creates a user account. In production, users are created automatically via OTP authentication.',
   })
   @ApiResponse({
     status: 201,
     description: 'User created successfully',
     type: UserResponseDto,
   })
-  @ApiBadRequestResponse({
-    description: 'Validation failed or invalid input data',
-  })
-  @ApiConflictResponse({
-    description: 'Email or phone number already exists',
-  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiConflictResponse({ description: 'Email or phone number already exists' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async create(@Body() createUserDto: CreateUserDto): Promise<{
     message: string;
     data: UserResponseDto;
   }> {
     const user = await this.usersService.create(createUserDto);
-    return {
-      message: 'User created successfully',
-      data: user,
-    };
+    return { message: 'User created successfully', data: user };
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get all users',
+    summary: 'Get all users (Admin only)',
     description: 'Retrieves all active users. Can be filtered by role.',
   })
   @ApiQuery({
     name: 'role',
     required: false,
     enum: UserRole,
-    description: 'Filter users by role',
+    description: 'Filter by role',
   })
   @ApiResponse({
     status: 200,
     description: 'Users retrieved successfully',
     type: [UserResponseDto],
   })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async findAll(@Query('role') role?: UserRole): Promise<{
     message: string;
     data: UserResponseDto[];
@@ -92,7 +99,6 @@ export class UsersController {
     const users = role
       ? await this.usersService.findByRole(role)
       : await this.usersService.findAll();
-
     return {
       message: 'Users retrieved successfully',
       data: users,
@@ -104,46 +110,30 @@ export class UsersController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get user statistics (Admin only)',
-    description:
-      'Retrieves comprehensive user statistics. Requires admin privileges.',
-  })
+  @ApiOperation({ summary: 'Get user statistics (Admin only)' })
   @ApiResponse({
     status: 200,
-    description: 'User statistics retrieved successfully',
+    description: 'Statistics retrieved successfully',
   })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required or insufficient privileges',
-  })
-  async getUserStats(): Promise<{
-    message: string;
-    data: any;
-  }> {
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
+  async getUserStats(): Promise<{ message: string; data: unknown }> {
     const stats = await this.usersService.getUserStats();
-    return {
-      message: 'User statistics retrieved successfully',
-      data: stats,
-    };
+    return { message: 'User statistics retrieved successfully', data: stats };
   }
 
   @Get('with-deleted')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Get all users including deleted ones (Admin only)',
-    description:
-      'Retrieves all users including soft-deleted ones. Requires admin privileges.',
-  })
+  @ApiOperation({ summary: 'Get all users including deleted (Admin only)' })
   @ApiResponse({
     status: 200,
     description: 'All users retrieved successfully',
     type: [UserResponseDto],
   })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required or insufficient privileges',
-  })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async findAllWithDeleted(): Promise<{
     message: string;
     data: UserResponseDto[];
@@ -157,81 +147,42 @@ export class UsersController {
     };
   }
 
+  // -- Authenticated user: self-service ---------------------------------------
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Get current user profile',
-    description: 'Retrieves the profile of the currently authenticated user',
+    summary: 'Get own profile',
+    description:
+      'Returns the full profile of the authenticated user, including extended fields ' +
+      '(bio, location, subscription, preferences, interactions, membership tier, etc.).',
   })
   @ApiResponse({
     status: 200,
-    description: 'User profile retrieved successfully',
+    description: 'Profile retrieved successfully',
     type: UserResponseDto,
   })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required',
-  })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
   async getMyProfile(@GetUser() currentUser: UserResponseDto): Promise<{
     message: string;
     data: UserResponseDto;
   }> {
-    return {
-      message: 'Profile retrieved successfully',
-      data: currentUser,
-    };
+    // Re-fetch so the response always reflects the latest data,
+    // including any async field updates (e.g. membershipTier from analytics).
+    const user = await this.usersService.findOne(currentUser.id);
+    return { message: 'Profile retrieved successfully', data: user };
   }
 
   @Patch('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Update current user profile',
+    summary: 'Update own profile',
     description:
-      'Updates the profile of the currently authenticated user. Users can only update their own profile.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Profile updated successfully',
-    type: UserResponseDto,
-  })
-  @ApiBadRequestResponse({
-    description: 'Validation failed or invalid input data',
-  })
-  @ApiConflictResponse({
-    description: 'Email or phone number already exists',
-  })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required',
-  })
-  async updateMyProfile(
-    @GetUser() currentUser: UserResponseDto,
-    @Body() updateUserDto: UpdateUserDto,
-  ): Promise<{
-    message: string;
-    data: UserResponseDto;
-  }> {
-    // Prevent users from updating certain fields like isDeleted
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { isDeleted, ...safeUpdateData } = updateUserDto;
-
-    const updatedUser = await this.usersService.update(
-      currentUser.id,
-      safeUpdateData,
-    );
-    return {
-      message: 'Profile updated successfully',
-      data: updatedUser,
-    };
-  }
-
-  @Patch('me/profile')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update own extended profile',
-    description:
-      'Updates bio, avatar, date of birth, gender, location, and target exam for the authenticated user.',
+      'Single endpoint to update any combination of core identity fields (name, email, phone) ' +
+      'and extended profile fields (bio, avatar, date of birth, gender, location, target exam). ' +
+      'Only the fields provided in the request body are updated.',
   })
   @ApiResponse({
     status: 200,
@@ -239,12 +190,15 @@ export class UsersController {
     type: UserResponseDto,
   })
   @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiConflictResponse({
+    description: 'Email or phone number already in use by another account',
+  })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
-  async updateMyExtendedProfile(
+  async updateMe(
     @GetUser() currentUser: UserResponseDto,
-    @Body() dto: UpdateProfileDto,
+    @Body() dto: UpdateMeDto,
   ): Promise<{ message: string; data: UserResponseDto }> {
-    const user = await this.usersService.updateProfile(currentUser.id, dto);
+    const user = await this.usersService.updateMe(currentUser.id, dto);
     return { message: 'Profile updated successfully', data: user };
   }
 
@@ -254,7 +208,8 @@ export class UsersController {
   @ApiOperation({
     summary: 'Update own preferences and interactions',
     description:
-      'Updates study time preference, weekly goal, notification settings, and interaction signals (liked/disliked topics, interested subjects/exams).',
+      'Updates study time preference, weekly goal, notification settings, and ' +
+      'interaction signals (liked/disliked topics, interested subjects/exams).',
   })
   @ApiResponse({
     status: 200,
@@ -271,19 +226,54 @@ export class UsersController {
     return { message: 'Preferences updated successfully', data: user };
   }
 
-  @Patch(':id')
-  async update(
-    @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ): Promise<{
+  // -- Admin: individual user operations -------------------------------------
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user by ID (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User retrieved successfully',
+    type: UserResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
+  async findOne(@Param('id') id: string): Promise<{
     message: string;
     data: UserResponseDto;
   }> {
+    const user = await this.usersService.findOne(id);
+    return { message: 'User retrieved successfully', data: user };
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update user by ID (Admin only)',
+    description:
+      'Allows admins to update any user core fields including role and active status.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User updated successfully',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiConflictResponse({ description: 'Email or phone number already in use' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
+  async update(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
     const user = await this.usersService.update(id, updateUserDto);
-    return {
-      message: 'User updated successfully',
-      data: user,
-    };
+    return { message: 'User updated successfully', data: user };
   }
 
   @Patch(':id/subscription')
@@ -293,7 +283,7 @@ export class UsersController {
   @ApiOperation({
     summary: 'Update user subscription (Admin only)',
     description:
-      'Updates the subscription plan, status, and billing dates for a user. Requires admin privileges.',
+      'Updates the subscription plan, status, and billing dates for a user.',
   })
   @ApiResponse({
     status: 200,
@@ -301,9 +291,9 @@ export class UsersController {
     type: UserResponseDto,
   })
   @ApiBadRequestResponse({ description: 'Validation failed' })
-  @ApiUnauthorizedResponse({
-    description: 'Authentication required or insufficient privileges',
-  })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async updateSubscription(
     @Param('id') id: string,
     @Body() dto: UpdateSubscriptionDto,
@@ -312,19 +302,19 @@ export class UsersController {
     return { message: 'Subscription updated successfully', data: user };
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string): Promise<{
-    message: string;
-    data: UserResponseDto;
-  }> {
-    const user = await this.usersService.findOne(id);
-    return {
-      message: 'User retrieved successfully',
-      data: user,
-    };
-  }
-
   @Patch(':id/toggle-status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Toggle user active status (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User status toggled successfully',
+    type: UserResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async toggleStatus(@Param('id') id: string): Promise<{
     message: string;
     data: UserResponseDto;
@@ -338,31 +328,57 @@ export class UsersController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Soft-delete a user (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User soft-deleted successfully',
+    type: UserResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async softDelete(@Param('id') id: string): Promise<{
     message: string;
     data: UserResponseDto;
   }> {
     const user = await this.usersService.softDelete(id);
-    return {
-      message: 'User deleted successfully (soft delete)',
-      data: user,
-    };
+    return { message: 'User deleted successfully', data: user };
   }
 
   @Post(':id/restore')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Restore a soft-deleted user (Admin only)' })
+  @ApiResponse({
+    status: 201,
+    description: 'User restored successfully',
+    type: UserResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'Deleted user not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async restore(@Param('id') id: string): Promise<{
     message: string;
     data: UserResponseDto;
   }> {
     const user = await this.usersService.restore(id);
-    return {
-      message: 'User restored successfully',
-      data: user,
-    };
+    return { message: 'User restored successfully', data: user };
   }
 
   @Delete(':id/hard')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Permanently delete a user (Admin only)' })
+  @ApiResponse({ status: 204, description: 'User permanently deleted' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiForbiddenResponse({ description: 'Admin access required' })
   async hardDelete(@Param('id') id: string): Promise<void> {
     await this.usersService.hardDelete(id);
   }

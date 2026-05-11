@@ -11,6 +11,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
@@ -188,6 +189,58 @@ export class UsersService {
   }
 
   // ── Extended profile ──────────────────────────────────────────────────────
+
+  /**
+   * Single-call update for the authenticated user's own profile.
+   * Handles both core identity fields (name, email, phone) and extended
+   * profile fields (bio, avatar, location, target exam, etc.) in one DB write.
+   */
+  async updateMe(id: string, dto: UpdateMeDto): Promise<UserResponseDto> {
+    // Uniqueness check for email / phone (exclude the caller's own document)
+    if (dto.email || dto.phoneNumber) {
+      const conflict = await this.userModel.findOne({
+        _id: { $ne: id },
+        $or: [
+          ...(dto.email ? [{ email: dto.email }] : []),
+          ...(dto.phoneNumber ? [{ phoneNumber: dto.phoneNumber }] : []),
+        ],
+      });
+      if (conflict) {
+        throw new ConflictException(
+          'Another account already uses this email or phone number',
+        );
+      }
+    }
+
+    const $set: Record<string, unknown> = {};
+
+    // Core identity
+    if (dto.name !== undefined) $set.name = dto.name;
+    if (dto.email !== undefined) $set.email = dto.email;
+    if (dto.phoneNumber !== undefined) $set.phoneNumber = dto.phoneNumber;
+
+    // Extended profile
+    if (dto.bio !== undefined) $set.bio = dto.bio;
+    if (dto.avatarUrl !== undefined) $set.avatarUrl = dto.avatarUrl;
+    if (dto.dateOfBirth !== undefined)
+      $set.dateOfBirth = new Date(dto.dateOfBirth);
+    if (dto.gender !== undefined) $set.gender = dto.gender;
+    if (dto.location !== undefined) $set.location = dto.location;
+    if (dto.targetExam !== undefined)
+      $set.targetExam = new Types.ObjectId(dto.targetExam);
+    if (dto.targetExamDate !== undefined)
+      $set.targetExamDate = new Date(dto.targetExamDate);
+
+    const user = await this.userModel
+      .findByIdAndUpdate(new Types.ObjectId(id), { $set }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${id}" not found`);
+    }
+
+    return this.toResponseDto(user);
+  }
 
   async updateProfile(
     id: string,
