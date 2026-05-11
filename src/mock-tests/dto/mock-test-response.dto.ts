@@ -93,13 +93,6 @@ export class MockTestResponseDto {
   generationMode: string;
 
   @ApiProperty({
-    description: 'Array of question IDs for static tests',
-    example: ['64f123456789abcdef123456', '64f123456789abcdef123457'],
-  })
-  @Expose()
-  questionIds: string[];
-
-  @ApiProperty({
     description: 'Marks awarded per correct answer',
     example: 4,
   })
@@ -186,6 +179,9 @@ export class MockTestResponseDto {
   userAttemptAction: UserAttemptAction;
 
   // Exclude sensitive fields from response
+  @Exclude()
+  questionIds: string[];
+
   @Exclude()
   isDeleted: boolean;
 

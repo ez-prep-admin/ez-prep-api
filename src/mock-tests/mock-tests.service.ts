@@ -475,17 +475,30 @@ export class MockTestsService {
   ): MockTestResponseDto {
     const obj = mockTest.toObject();
     return new MockTestResponseDto({
-      ...obj,
+      id: obj.id,
+      totalQuestions: obj.totalQuestions,
+      durationInMinutes: obj.durationInMinutes,
       exam: obj.exam?.toString(),
       subject: obj.subject?.toString(),
       topic: obj.topic?.toString(),
-      questionIds: obj.questionIds?.map(id => id.toString()) || [],
+      title: obj.title,
+      description: obj.description,
+      generationMode: obj.generationMode,
+      marksPerQuestion: obj.marksPerQuestion,
+      negativeMarking: obj.negativeMarking,
+      passingScore: obj.passingScore,
+      allowRetake: obj.allowRetake,
+      shuffleOptions: obj.shuffleOptions,
+      showResultsImmediately: obj.showResultsImmediately,
+      isActive: obj.isActive,
       createdBy: obj.createdBy?.toString(),
       difficultyDistribution: obj.difficultyDistribution || {
         easy: 0,
         medium: 0,
         hard: 0,
       },
+      createdAt: obj.createdAt,
+      updatedAt: obj.updatedAt,
       userAttemptAction: userAttemptAction || UserAttemptAction.START,
     });
   }
