@@ -19,6 +19,10 @@ import {
 import { AnalyticsService } from './analytics.service';
 import { UserDashboardDto } from './dto/user-dashboard.dto';
 import { LeaderboardEntryDto, UserRankDto } from './dto/leaderboard-entry.dto';
+import { RecentActivityItemDto } from './dto/recent-activity.dto';
+import { SubjectTopicBreakdownDto } from './dto/topic-performance.dto';
+import { UserBadgesDto } from './dto/badges.dto';
+import { AiInsightsDto } from './dto/ai-insights.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
@@ -110,5 +114,93 @@ export class AnalyticsController {
       subjectId,
     );
     return { message: 'Leaderboard retrieved successfully', ...result };
+  }
+
+  @Get('recent-activity')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get recent test activity',
+    description:
+      'Returns the most recent completed test attempts for the authenticated user with scores, time, and subject/exam details.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Number of recent activities to return (default: 10, max: 20)',
+    example: 10,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recent activity retrieved successfully',
+    type: RecentActivityItemDto,
+    isArray: true,
+  })
+  async getRecentActivity(
+    @GetUser() user: UserResponseDto,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<{ message: string; data: RecentActivityItemDto[] }> {
+    const data = await this.analyticsService.getRecentActivity(user.id, limit);
+    return { message: 'Recent activity retrieved successfully', data };
+  }
+
+  @Get('subject-topic-breakdown')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get subject and topic performance breakdown',
+    description:
+      'Returns detailed performance breakdown by subject with nested topic-level metrics, accuracy, and trend indicators (improving/declining/stable).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Subject-topic breakdown retrieved successfully',
+    type: SubjectTopicBreakdownDto,
+  })
+  async getSubjectTopicBreakdown(
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string; data: SubjectTopicBreakdownDto }> {
+    const data = await this.analyticsService.getSubjectTopicBreakdown(user.id);
+    return {
+      message: 'Subject-topic breakdown retrieved successfully',
+      data,
+    };
+  }
+
+  @Get('badges')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get user badges and achievements',
+    description:
+      'Returns all available badges with earned/not-earned status for the authenticated user. Badges are computed from test performance data.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Badges retrieved successfully',
+    type: UserBadgesDto,
+  })
+  async getBadges(
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string; data: UserBadgesDto }> {
+    const data = await this.analyticsService.getUserBadges(user.id);
+    return { message: 'Badges retrieved successfully', data };
+  }
+
+  @Get('ai-insights')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get AI-powered performance insights',
+    description:
+      "Returns an intelligent analysis of the user's performance including a summary, detailed subject-topic breakdown, and prioritized recommendations for improvement.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'AI insights retrieved successfully',
+    type: AiInsightsDto,
+  })
+  async getAiInsights(
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string; data: AiInsightsDto }> {
+    const data = await this.analyticsService.getAiInsights(user.id);
+    return { message: 'AI insights retrieved successfully', data };
   }
 }
