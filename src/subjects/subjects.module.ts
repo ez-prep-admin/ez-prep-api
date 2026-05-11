@@ -4,6 +4,7 @@ import { SubjectsService } from './subjects.service';
 import { SubjectsController } from './subjects.controller';
 import { Subject, SubjectSchema } from './schemas/subject.schema';
 import { TopicsModule } from '../topics/topics.module';
+import { ExamsModule } from '../exams/exams.module';
 
 /**
  * SubjectsModule
@@ -18,6 +19,7 @@ import { TopicsModule } from '../topics/topics.module';
   imports: [
     MongooseModule.forFeature([{ name: Subject.name, schema: SubjectSchema }]),
     TopicsModule,
+    ExamsModule,
   ],
   controllers: [SubjectsController],
   providers: [SubjectsService],

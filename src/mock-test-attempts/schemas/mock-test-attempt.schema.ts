@@ -152,6 +152,9 @@ export const MockTestAttemptSchema =
 // Compound indexes for better query performance
 MockTestAttemptSchema.index({ user: 1, test: 1 });
 
+// Analytics-optimized index: covers all per-user dashboard aggregation $match stages
+MockTestAttemptSchema.index({ user: 1, status: 1, submittedAt: -1 });
+
 // Virtual for id field (removes _id and adds id)
 MockTestAttemptSchema.virtual('id').get(function () {
   return this._id.toHexString();

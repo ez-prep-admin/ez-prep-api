@@ -243,6 +243,8 @@ export class MockTestsController {
     Useful for showing all tests for a specific exam.
     
     Returns populated exam, subject, and topic details (excludes questionIds and difficultyDistribution).
+    
+    Supports optional topic name search and subject filter, which can be used independently or together.
     `,
   })
   @ApiParam({
@@ -264,6 +266,20 @@ export class MockTestsController {
     description: 'Items per page (minimum: 1, maximum: 100)',
     example: 10,
   })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Search term to filter by topic name (case-insensitive)',
+    example: 'antonym',
+  })
+  @ApiQuery({
+    name: 'subjectId',
+    required: false,
+    type: String,
+    description: 'Subject ID to filter mock tests by subject',
+    example: '64f123456789abcdef123456',
+  })
   @ApiResponse({
     status: 200,
     description: 'Mock tests retrieved successfully',
@@ -277,6 +293,8 @@ export class MockTestsController {
     @Param('examId') examId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @Query('search') search?: string,
+    @Query('subjectId') subjectId?: string,
     @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
@@ -288,6 +306,8 @@ export class MockTestsController {
       page,
       limit,
       user?.id,
+      search,
+      subjectId,
     );
     return {
       message: 'Mock tests for exam retrieved successfully',
