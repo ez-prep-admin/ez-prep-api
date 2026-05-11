@@ -12,6 +12,7 @@ import {
   QuestionSchema,
 } from '../mock-test-attempts/schemas/question.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { User, UserSchema } from '../users/schemas/user.schema';
     ]),
     // Module-scoped cache — TTLs are set per-operation in the service
     CacheModule.register(),
+    UsersModule,
   ],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],

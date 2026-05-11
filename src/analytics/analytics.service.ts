@@ -3,6 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PipelineStage } from 'mongoose';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { UsersService } from '../users/users.service';
+import { MembershipTier } from '../common/enums/membership-tier.enum';
 import {
   MockTestAttempt,
   MockTestAttemptDocument,
@@ -145,6 +147,7 @@ export class AnalyticsService {
     private readonly userModel: Model<UserDocument>,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
+    private readonly usersService: UsersService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -986,7 +989,26 @@ export class AnalyticsService {
     };
 
     await this.cacheManager.set(cacheKey, result, BADGES_CACHE_TTL_MS);
+
+    // Async (fire-and-forget): update membership tier on User document.
+    // Runs only on cache-miss (fresh computation) — never blocks the response.
+    const tier = this.deriveMembershipTier(earnedCount);
+    Promise.resolve()
+      .then(() =>
+        this.usersService.updateMembershipTier(userId, tier, earnedCount),
+      )
+      .catch(() => void 0);
+
     return result;
+  }
+
+  /** Maps badge earned count to a membership tier. */
+  private deriveMembershipTier(earnedCount: number): MembershipTier {
+    if (earnedCount >= 10) return MembershipTier.PLATINUM;
+    if (earnedCount >= 7) return MembershipTier.GOLD;
+    if (earnedCount >= 4) return MembershipTier.SILVER;
+    if (earnedCount >= 1) return MembershipTier.BRONZE;
+    return MembershipTier.NONE;
   }
 
   // ---------------------------------------------------------------------------

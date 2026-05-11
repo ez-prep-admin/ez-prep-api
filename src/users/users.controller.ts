@@ -24,6 +24,9 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -222,16 +225,50 @@ export class UsersController {
     };
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string): Promise<{
-    message: string;
-    data: UserResponseDto;
-  }> {
-    const user = await this.usersService.findOne(id);
-    return {
-      message: 'User retrieved successfully',
-      data: user,
-    };
+  @Patch('me/profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update own extended profile',
+    description:
+      'Updates bio, avatar, date of birth, gender, location, and target exam for the authenticated user.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile updated successfully',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async updateMyExtendedProfile(
+    @GetUser() currentUser: UserResponseDto,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.updateProfile(currentUser.id, dto);
+    return { message: 'Profile updated successfully', data: user };
+  }
+
+  @Patch('me/preferences')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update own preferences and interactions',
+    description:
+      'Updates study time preference, weekly goal, notification settings, and interaction signals (liked/disliked topics, interested subjects/exams).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Preferences updated successfully',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async updateMyPreferences(
+    @GetUser() currentUser: UserResponseDto,
+    @Body() dto: UpdatePreferencesDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.updatePreferences(currentUser.id, dto);
+    return { message: 'Preferences updated successfully', data: user };
   }
 
   @Patch(':id')
@@ -245,6 +282,44 @@ export class UsersController {
     const user = await this.usersService.update(id, updateUserDto);
     return {
       message: 'User updated successfully',
+      data: user,
+    };
+  }
+
+  @Patch(':id/subscription')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Update user subscription (Admin only)',
+    description:
+      'Updates the subscription plan, status, and billing dates for a user. Requires admin privileges.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Subscription updated successfully',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiUnauthorizedResponse({
+    description: 'Authentication required or insufficient privileges',
+  })
+  async updateSubscription(
+    @Param('id') id: string,
+    @Body() dto: UpdateSubscriptionDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.updateSubscription(id, dto);
+    return { message: 'Subscription updated successfully', data: user };
+  }
+
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<{
+    message: string;
+    data: UserResponseDto;
+  }> {
+    const user = await this.usersService.findOne(id);
+    return {
+      message: 'User retrieved successfully',
       data: user,
     };
   }
