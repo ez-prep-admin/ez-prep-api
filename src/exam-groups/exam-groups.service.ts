@@ -6,10 +6,15 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery, Types } from 'mongoose';
 import { ExamGroup, ExamGroupDocument } from './schemas/exam-group.schema';
+import { CategoryDocument } from '../categories/schemas/category.schema';
 import { CreateExamGroupDto } from './dto/create-exam-group.dto';
 import { UpdateExamGroupDto } from './dto/update-exam-group.dto';
 import { ExamGroupResponseDto } from './dto/exam-group-response.dto';
 import { PaginatedExamGroupsResponseDto } from './dto/paginated-exam-groups-response.dto';
+import {
+  CategoryWithExamGroupsDto,
+  ExamGroupInCategoryDto,
+} from './dto/category-with-exam-groups.dto';
 
 @Injectable()
 export class ExamGroupsService {
@@ -188,6 +193,53 @@ export class ExamGroupsService {
       .exec();
 
     return examGroups.map(group => this.toResponseDto(group));
+  }
+
+  /**
+   * Get all active exam groups grouped by their category
+   */
+  async findGroupedByCategory(): Promise<CategoryWithExamGroupsDto[]> {
+    const examGroups = await this.examGroupModel
+      .find({ isActive: true })
+      .populate('category')
+      .sort({ name: 1 })
+      .exec();
+
+    const categoryMap = new Map<string, CategoryWithExamGroupsDto>();
+
+    for (const group of examGroups) {
+      const categoryDoc = group.category as unknown as CategoryDocument;
+      if (!categoryDoc || !categoryDoc._id) continue;
+
+      const categoryId = categoryDoc._id.toString();
+
+      if (!categoryMap.has(categoryId)) {
+        const catObj = categoryDoc.toObject();
+        categoryMap.set(categoryId, {
+          id: categoryId,
+          name: catObj.name,
+          shortName: catObj.shortName,
+          imageUrl: catObj.imageUrl,
+          description: catObj.description,
+          examGroups: [],
+        });
+      }
+
+      const groupObj = group.toObject();
+      categoryMap.get(categoryId)!.examGroups.push(
+        new ExamGroupInCategoryDto({
+          id: groupObj.id,
+          name: groupObj.name,
+          shortName: groupObj.shortName,
+          description: groupObj.description,
+          isActive: groupObj.isActive,
+          createdAt: groupObj.createdAt,
+          updatedAt: groupObj.updatedAt,
+        }),
+      );
+    }
+
+    return Array.from(categoryMap.values());
   }
 
   /**

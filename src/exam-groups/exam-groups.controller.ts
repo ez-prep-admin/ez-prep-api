@@ -30,6 +30,7 @@ import { ExamGroupsService } from './exam-groups.service';
 import { CreateExamGroupDto } from './dto/create-exam-group.dto';
 import { UpdateExamGroupDto } from './dto/update-exam-group.dto';
 import { ExamGroupResponseDto } from './dto/exam-group-response.dto';
+import { CategoryWithExamGroupsDto } from './dto/category-with-exam-groups.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -164,6 +165,32 @@ export class ExamGroupsController {
       message: 'Active exam groups retrieved successfully',
       data: examGroups,
       count: examGroups.length,
+    };
+  }
+
+  @Get('by-category')
+  @ApiOperation({
+    summary: 'Get all exam groups grouped by category',
+    description:
+      'Retrieves all active exam groups organized under their respective categories. ' +
+      'Returns an array of categories, each containing an array of its exam groups. ' +
+      'For example, SSC will contain CGL, CHSL etc. Public endpoint.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Exam groups grouped by category retrieved successfully',
+    type: [CategoryWithExamGroupsDto],
+  })
+  async findGroupedByCategory(): Promise<{
+    message: string;
+    data: CategoryWithExamGroupsDto[];
+    count: number;
+  }> {
+    const grouped = await this.examGroupsService.findGroupedByCategory();
+    return {
+      message: 'Exam groups grouped by category retrieved successfully',
+      data: grouped,
+      count: grouped.length,
     };
   }
 
