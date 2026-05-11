@@ -9,18 +9,7 @@ import { Category, CategoryDocument } from './schemas/category.schema';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
-
-export interface PaginatedCategoriesResponse {
-  data: CategoryResponseDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
+import { PaginatedCategoriesResponseDto } from './dto/paginated-categories-response.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -63,7 +52,7 @@ export class CategoriesService {
     limit: number = 10,
     search?: string,
     activeOnly: boolean = false,
-  ): Promise<PaginatedCategoriesResponse> {
+  ): Promise<PaginatedCategoriesResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;

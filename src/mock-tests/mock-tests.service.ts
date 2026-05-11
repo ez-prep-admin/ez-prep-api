@@ -4,30 +4,10 @@ import { Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
 import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
-
-export interface PaginatedMockTestsResponse {
-  data: MockTestResponseDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
-
-export interface PaginatedMockTestListResponse {
-  data: MockTestListItemDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
+import {
+  PaginatedMockTestsResponseDto,
+  PaginatedMockTestListResponseDto,
+} from './dto/paginated-mock-tests-response.dto';
 
 @Injectable()
 export class MockTestsService {
@@ -46,7 +26,7 @@ export class MockTestsService {
     page: number = 1,
     limit: number = 10,
     search?: string,
-  ): Promise<PaginatedMockTestsResponse> {
+  ): Promise<PaginatedMockTestsResponseDto> {
     // Validate and normalize pagination parameters
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100); // Max 100 items per page
@@ -168,7 +148,7 @@ export class MockTestsService {
     examId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestListResponse> {
+  ): Promise<PaginatedMockTestListResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -214,7 +194,7 @@ export class MockTestsService {
     subjectId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -259,7 +239,7 @@ export class MockTestsService {
     subjectId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -303,7 +283,7 @@ export class MockTestsService {
   async findActive(
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;

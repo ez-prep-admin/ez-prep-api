@@ -11,22 +11,11 @@ import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
+import { PaginatedExamsResponseDto } from './dto/paginated-exams-response.dto';
 import {
   Category,
   CategoryDocument,
 } from '../categories/schemas/category.schema';
-
-export interface PaginatedExamsResponse {
-  data: ExamResponseDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
 
 @Injectable()
 export class ExamsService {
@@ -79,7 +68,7 @@ export class ExamsService {
     search?: string,
     categoryId?: string,
     activeOnly: boolean = false,
-  ): Promise<PaginatedExamsResponse> {
+  ): Promise<PaginatedExamsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -231,7 +220,7 @@ export class ExamsService {
     categoryId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedExamsResponse> {
+  ): Promise<PaginatedExamsResponseDto> {
     return this.findAll(page, limit, undefined, categoryId, false);
   }
 
