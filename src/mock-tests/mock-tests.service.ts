@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
+import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
 import {
   MockTestAttempt,
   MockTestAttemptDocument,
@@ -21,6 +22,7 @@ export class MockTestsService {
     @InjectModel(MockTest.name) private mockTestModel: Model<MockTestDocument>,
     @InjectModel(MockTestAttempt.name)
     private attemptModel: Model<MockTestAttemptDocument>,
+    @InjectModel(Topic.name) private topicModel: Model<TopicDocument>,
   ) {}
 
   /**
@@ -159,11 +161,13 @@ export class MockTestsService {
   }
 
   /**
-   * Find mock tests by exam
+   * Find mock tests by exam with optional topic search and subject filter
    * @param examId - Exam ID
    * @param page - Page number
    * @param limit - Items per page
    * @param userId - User ID to calculate attempt actions (optional)
+   * @param search - Search term for topic name (optional)
+   * @param subjectId - Subject ID to filter by (optional)
    * @returns Paginated mock tests with populated references
    */
   async findByExam(
@@ -171,12 +175,45 @@ export class MockTestsService {
     page: number = 1,
     limit: number = 10,
     userId?: string,
+    search?: string,
+    subjectId?: string,
   ): Promise<PaginatedMockTestListResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { exam: new Types.ObjectId(examId) };
+    const query: FilterQuery<MockTestDocument> = {
+      exam: new Types.ObjectId(examId),
+    };
+
+    // Filter by subject if provided
+    if (subjectId) {
+      query.subject = new Types.ObjectId(subjectId);
+    }
+
+    // Search by topic name if provided
+    if (search && search.trim()) {
+      const matchingTopics = await this.topicModel
+        .find({ name: { $regex: search.trim(), $options: 'i' } })
+        .select('_id')
+        .lean()
+        .exec();
+      // If no topics match, return empty result immediately
+      if (matchingTopics.length === 0) {
+        return {
+          data: [],
+          pagination: {
+            total: 0,
+            page: validPage,
+            limit: validLimit,
+            totalPages: 0,
+            hasNextPage: false,
+            hasPrevPage: false,
+          },
+        };
+      }
+      query.topic = { $in: matchingTopics.map(t => t._id) };
+    }
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
