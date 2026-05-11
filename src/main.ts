@@ -20,10 +20,15 @@ async function bootstrap() {
   });
 
   // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason: any, _promise: Promise<any>) => {
-    logger.error('❌ Unhandled Promise Rejection:', reason?.stack || reason);
-    // Don't exit immediately - log and continue
-  });
+  process.on(
+    'unhandledRejection',
+    (reason: unknown, _promise: Promise<unknown>) => {
+      const errorMessage =
+        reason instanceof Error ? reason.stack : String(reason);
+      logger.error('❌ Unhandled Promise Rejection:', errorMessage);
+      // Don't exit immediately - log and continue
+    },
+  );
 
   // Handle SIGTERM gracefully
   process.on('SIGTERM', () => {

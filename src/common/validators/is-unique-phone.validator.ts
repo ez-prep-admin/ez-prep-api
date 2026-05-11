@@ -9,6 +9,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas/user.schema';
+import { FilterQuery, Types } from 'mongoose';
 
 @ValidatorConstraint({ name: 'isUniquePhone', async: true })
 @Injectable()
@@ -21,14 +22,17 @@ export class IsUniquePhoneConstraint implements ValidatorConstraintInterface {
   ): Promise<boolean> {
     if (!phoneNumber) return true; // Let other validators handle empty values
 
-    const object = args.object as any;
+    const object = args.object as {
+      id?: string | Types.ObjectId;
+      _id?: string | Types.ObjectId;
+    };
     const userId = object.id || object._id;
 
     // Normalize phone number (remove all non-digits)
     const normalizedPhone = phoneNumber.replace(/\D/g, '');
 
     // Build query to exclude current user (for updates)
-    const query: any = { phoneNumber: normalizedPhone };
+    const query: FilterQuery<UserDocument> = { phoneNumber: normalizedPhone };
     if (userId) {
       query._id = { $ne: userId };
     }

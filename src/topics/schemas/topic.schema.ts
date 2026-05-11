@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Query } from 'mongoose';
 
 export type TopicDocument = Topic & Document;
 
@@ -52,6 +52,6 @@ TopicSchema.set('toObject', {
 });
 
 // Pre-find middleware to handle soft delete queries
-TopicSchema.pre(/^find/, function (this: any) {
+TopicSchema.pre(/^find/, function (this: Query<unknown, TopicDocument>) {
   this.where({ isDeleted: { $ne: true } });
 });

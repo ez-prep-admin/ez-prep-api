@@ -5,28 +5,17 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, FilterQuery } from 'mongoose';
 import { Exam, ExamDocument } from './schemas/exam.schema';
 import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
+import { PaginatedExamsResponseDto } from './dto/paginated-exams-response.dto';
 import {
   Category,
   CategoryDocument,
 } from '../categories/schemas/category.schema';
-
-export interface PaginatedExamsResponse {
-  data: ExamResponseDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
 
 @Injectable()
 export class ExamsService {
@@ -79,12 +68,12 @@ export class ExamsService {
     search?: string,
     categoryId?: string,
     activeOnly: boolean = false,
-  ): Promise<PaginatedExamsResponse> {
+  ): Promise<PaginatedExamsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query: any = {};
+    const query: FilterQuery<Exam> = {};
 
     if (activeOnly) {
       query.isActive = true;
@@ -129,8 +118,8 @@ export class ExamsService {
    * Returns all active categories and their exams
    */
   async getExamsByCategory(): Promise<ExamsByCategoryResponseDto> {
-    const categoryQuery: any = { isActive: true };
-    const examQuery: any = { isActive: true };
+    const categoryQuery: FilterQuery<Category> = { isActive: true };
+    const examQuery: FilterQuery<Exam> = { isActive: true };
 
     // Get all active categories
     const categories = await this.categoryModel
@@ -231,7 +220,7 @@ export class ExamsService {
     categoryId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedExamsResponse> {
+  ): Promise<PaginatedExamsResponseDto> {
     return this.findAll(page, limit, undefined, categoryId, false);
   }
 

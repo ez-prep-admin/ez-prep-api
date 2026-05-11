@@ -20,10 +20,13 @@ import {
 import { MockTestsService } from './mock-tests.service';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
 import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
+import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('mock-tests')
 @Controller('mock-tests')
@@ -100,12 +103,18 @@ export class MockTestsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
+    @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
     pagination: any;
   }> {
-    const result = await this.mockTestsService.findAll(page, limit, search);
+    const result = await this.mockTestsService.findAll(
+      page,
+      limit,
+      search,
+      user?.id,
+    );
     return {
       message: search
         ? `Mock tests matching "${search}" retrieved successfully`
@@ -208,12 +217,17 @@ export class MockTestsController {
   async findActive(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
-    const result = await this.mockTestsService.findActive(page, limit);
+    const result = await this.mockTestsService.findActive(
+      page,
+      limit,
+      user?.id,
+    );
     return {
       message: 'Active mock tests retrieved successfully',
       data: result.data,
@@ -263,12 +277,18 @@ export class MockTestsController {
     @Param('examId') examId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
     data: MockTestListItemDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
-    const result = await this.mockTestsService.findByExam(examId, page, limit);
+    const result = await this.mockTestsService.findByExam(
+      examId,
+      page,
+      limit,
+      user?.id,
+    );
     return {
       message: 'Mock tests for exam retrieved successfully',
       data: result.data,
@@ -314,15 +334,17 @@ export class MockTestsController {
     @Param('subjectId') subjectId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findBySubject(
       subjectId,
       page,
       limit,
+      user?.id,
     );
     return {
       message: 'Mock tests for subject retrieved successfully',
@@ -375,16 +397,18 @@ export class MockTestsController {
     @Param('subjectId') subjectId: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+    @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
     data: MockTestResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.mockTestsService.findByExamAndSubject(
       examId,
       subjectId,
       page,
       limit,
+      user?.id,
     );
     return {
       message: 'Mock tests for exam and subject retrieved successfully',

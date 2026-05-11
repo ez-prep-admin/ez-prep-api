@@ -2,37 +2,25 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
+import {
+  MockTestAttempt,
+  MockTestAttemptDocument,
+} from '../mock-test-attempts/schemas/mock-test-attempt.schema';
 import { MockTestResponseDto } from './dto/mock-test-response.dto';
 import { MockTestListItemDto } from './dto/mock-test-list-item.dto';
-
-export interface PaginatedMockTestsResponse {
-  data: MockTestResponseDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
-
-export interface PaginatedMockTestListResponse {
-  data: MockTestListItemDto[];
-  pagination: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPrevPage: boolean;
-  };
-}
+import {
+  PaginatedMockTestsResponseDto,
+  PaginatedMockTestListResponseDto,
+} from './dto/paginated-mock-tests-response.dto';
+import { PopulatedDocument } from '../common/types/populated-document.interface';
+import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
 
 @Injectable()
 export class MockTestsService {
   constructor(
     @InjectModel(MockTest.name) private mockTestModel: Model<MockTestDocument>,
+    @InjectModel(MockTestAttempt.name)
+    private attemptModel: Model<MockTestAttemptDocument>,
   ) {}
 
   /**
@@ -40,13 +28,15 @@ export class MockTestsService {
    * @param page - Page number (default: 1)
    * @param limit - Items per page (default: 10)
    * @param search - Search term for title (optional)
+   * @param userId - User ID to calculate attempt actions (optional)
    * @returns Paginated mock tests with metadata
    */
   async findAll(
     page: number = 1,
     limit: number = 10,
     search?: string,
-  ): Promise<PaginatedMockTestsResponse> {
+    userId?: string,
+  ): Promise<PaginatedMockTestsResponseDto> {
     // Validate and normalize pagination parameters
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100); // Max 100 items per page
@@ -74,13 +64,24 @@ export class MockTestsService {
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
+    // Calculate user attempt actions if userId provided
+    let userActions = new Map<string, UserAttemptAction>();
+    if (userId) {
+      const testIds = mockTests.map(test => test._id.toString());
+      userActions = await this.calculateUserAttemptActions(testIds, userId);
+    }
+
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / validLimit);
     const hasNextPage = validPage < totalPages;
     const hasPrevPage = validPage > 1;
 
     return {
-      data: mockTests.map(test => this.toResponseDto(test)),
+      data: mockTests.map(test => {
+        const testId = test._id.toString();
+        const action = userActions.get(testId) || UserAttemptAction.START;
+        return this.toResponseDto(test, action);
+      }),
       pagination: {
         total,
         page: validPage,
@@ -162,13 +163,15 @@ export class MockTestsService {
    * @param examId - Exam ID
    * @param page - Page number
    * @param limit - Items per page
+   * @param userId - User ID to calculate attempt actions (optional)
    * @returns Paginated mock tests with populated references
    */
   async findByExam(
     examId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestListResponse> {
+    userId?: string,
+  ): Promise<PaginatedMockTestListResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -188,10 +191,21 @@ export class MockTestsService {
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
+    // Calculate user attempt actions if userId provided
+    let userActions = new Map<string, UserAttemptAction>();
+    if (userId) {
+      const testIds = mockTests.map(test => test._id.toString());
+      userActions = await this.calculateUserAttemptActions(testIds, userId);
+    }
+
     const totalPages = Math.ceil(total / validLimit);
 
     return {
-      data: mockTests.map(test => this.toListItemDto(test)),
+      data: mockTests.map(test => {
+        const testId = test._id.toString();
+        const action = userActions.get(testId) || UserAttemptAction.START;
+        return this.toListItemDto(test, action);
+      }),
       pagination: {
         total,
         page: validPage,
@@ -208,13 +222,15 @@ export class MockTestsService {
    * @param subjectId - Subject ID
    * @param page - Page number
    * @param limit - Items per page
+   * @param userId - User ID to calculate attempt actions (optional)
    * @returns Paginated mock tests
    */
   async findBySubject(
     subjectId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+    userId?: string,
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -231,10 +247,21 @@ export class MockTestsService {
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
+    // Calculate user attempt actions if userId provided
+    let userActions = new Map<string, UserAttemptAction>();
+    if (userId) {
+      const testIds = mockTests.map(test => test._id.toString());
+      userActions = await this.calculateUserAttemptActions(testIds, userId);
+    }
+
     const totalPages = Math.ceil(total / validLimit);
 
     return {
-      data: mockTests.map(test => this.toResponseDto(test)),
+      data: mockTests.map(test => {
+        const testId = test._id.toString();
+        const action = userActions.get(testId) || UserAttemptAction.START;
+        return this.toResponseDto(test, action);
+      }),
       pagination: {
         total,
         page: validPage,
@@ -252,6 +279,7 @@ export class MockTestsService {
    * @param subjectId - Subject ID
    * @param page - Page number
    * @param limit - Items per page
+   * @param userId - User ID to calculate attempt actions (optional)
    * @returns Paginated mock tests
    */
   async findByExamAndSubject(
@@ -259,7 +287,8 @@ export class MockTestsService {
     subjectId: string,
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+    userId?: string,
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -279,10 +308,21 @@ export class MockTestsService {
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
+    // Calculate user attempt actions if userId provided
+    let userActions = new Map<string, UserAttemptAction>();
+    if (userId) {
+      const testIds = mockTests.map(test => test._id.toString());
+      userActions = await this.calculateUserAttemptActions(testIds, userId);
+    }
+
     const totalPages = Math.ceil(total / validLimit);
 
     return {
-      data: mockTests.map(test => this.toResponseDto(test)),
+      data: mockTests.map(test => {
+        const testId = test._id.toString();
+        const action = userActions.get(testId) || UserAttemptAction.START;
+        return this.toResponseDto(test, action);
+      }),
       pagination: {
         total,
         page: validPage,
@@ -298,12 +338,14 @@ export class MockTestsService {
    * Find active mock tests only
    * @param page - Page number
    * @param limit - Items per page
+   * @param userId - User ID to calculate attempt actions (optional)
    * @returns Paginated active mock tests
    */
   async findActive(
     page: number = 1,
     limit: number = 10,
-  ): Promise<PaginatedMockTestsResponse> {
+    userId?: string,
+  ): Promise<PaginatedMockTestsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
@@ -320,10 +362,21 @@ export class MockTestsService {
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
+    // Calculate user attempt actions if userId provided
+    let userActions = new Map<string, UserAttemptAction>();
+    if (userId) {
+      const testIds = mockTests.map(test => test._id.toString());
+      userActions = await this.calculateUserAttemptActions(testIds, userId);
+    }
+
     const totalPages = Math.ceil(total / validLimit);
 
     return {
-      data: mockTests.map(test => this.toResponseDto(test)),
+      data: mockTests.map(test => {
+        const testId = test._id.toString();
+        const action = userActions.get(testId) || UserAttemptAction.START;
+        return this.toResponseDto(test, action);
+      }),
       pagination: {
         total,
         page: validPage,
@@ -336,23 +389,117 @@ export class MockTestsService {
   }
 
   /**
+   * Calculate user attempt action for multiple mock tests efficiently
+   * Determines whether user should START, RESUME, or RETAKE each test
+   * @param mockTestIds - Array of mock test IDs to check
+   * @param userId - User ID to check attempts for
+   * @returns Map of mock test ID to UserAttemptAction
+   */
+  private async calculateUserAttemptActions(
+    mockTestIds: string[],
+    userId: string,
+  ): Promise<Map<string, UserAttemptAction>> {
+    const actionMap = new Map<string, UserAttemptAction>();
+
+    if (!mockTestIds.length || !userId) {
+      return actionMap;
+    }
+
+    // Query all relevant attempts for the user and these tests in one go
+    const attempts = await this.attemptModel
+      .find({
+        user: new Types.ObjectId(userId),
+        test: { $in: mockTestIds.map(id => new Types.ObjectId(id)) },
+      })
+      .select('test status')
+      .lean()
+      .exec();
+
+    // Group attempts by test ID
+    const attemptsByTest = new Map<string, typeof attempts>();
+    for (const attempt of attempts) {
+      const testId = attempt.test.toString();
+      if (!attemptsByTest.has(testId)) {
+        attemptsByTest.set(testId, []);
+      }
+      attemptsByTest.get(testId)!.push(attempt);
+    }
+
+    // Determine action for each test
+    for (const testId of mockTestIds) {
+      const testAttempts = attemptsByTest.get(testId) || [];
+
+      if (testAttempts.length === 0) {
+        // No attempts - user should START
+        actionMap.set(testId, UserAttemptAction.START);
+        continue;
+      }
+
+      // Check for paused or in-progress attempts
+      const hasActiveAttempt = testAttempts.some(
+        attempt =>
+          attempt.status === 'PAUSED' || attempt.status === 'IN_PROGRESS',
+      );
+
+      if (hasActiveAttempt) {
+        // Has paused or in-progress attempt - user should RESUME
+        actionMap.set(testId, UserAttemptAction.RESUME);
+        continue;
+      }
+
+      // Check for completed attempts
+      const hasCompletedAttempt = testAttempts.some(
+        attempt =>
+          attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED',
+      );
+
+      if (hasCompletedAttempt) {
+        // Has completed attempt - user should RETAKE
+        actionMap.set(testId, UserAttemptAction.RETAKE);
+      } else {
+        // No relevant attempts - user should START
+        actionMap.set(testId, UserAttemptAction.START);
+      }
+    }
+
+    return actionMap;
+  }
+
+  /**
    * Helper method to convert MockTest document to DTO
    * Transforms ObjectIds to strings for proper serialization
    */
-  private toResponseDto(mockTest: MockTestDocument): MockTestResponseDto {
+  private toResponseDto(
+    mockTest: MockTestDocument,
+    userAttemptAction?: UserAttemptAction,
+  ): MockTestResponseDto {
     const obj = mockTest.toObject();
     return new MockTestResponseDto({
-      ...obj,
+      id: obj.id,
+      totalQuestions: obj.totalQuestions,
+      durationInMinutes: obj.durationInMinutes,
       exam: obj.exam?.toString(),
       subject: obj.subject?.toString(),
       topic: obj.topic?.toString(),
-      questionIds: obj.questionIds?.map(id => id.toString()) || [],
+      title: obj.title,
+      description: obj.description,
+      generationMode: obj.generationMode,
+      marksPerQuestion: obj.marksPerQuestion,
+      negativeMarking: obj.negativeMarking,
+      passingScore: obj.passingScore,
+      allowRetake: obj.allowRetake,
+      shuffleOptions: obj.shuffleOptions,
+      showResultsImmediately: obj.showResultsImmediately,
+      isActive: obj.isActive,
       createdBy: obj.createdBy?.toString(),
       difficultyDistribution: obj.difficultyDistribution || {
         easy: 0,
         medium: 0,
         hard: 0,
       },
+      createdAt: obj.createdAt,
+      updatedAt: obj.updatedAt,
+      userAttemptAction: userAttemptAction || UserAttemptAction.START,
     });
   }
 
@@ -360,18 +507,21 @@ export class MockTestsService {
    * Helper method to convert MockTest document to list item DTO
    * Includes populated exam, subject, and topic details
    */
-  private toListItemDto(mockTest: MockTestDocument): MockTestListItemDto {
+  private toListItemDto(
+    mockTest: MockTestDocument,
+    userAttemptAction?: UserAttemptAction,
+  ): MockTestListItemDto {
     // Access _id and other fields before calling toObject() since toObject transforms delete _id
     const mockTestId = mockTest._id?.toString();
 
     const examId = mockTest.exam?._id?.toString();
-    const examDoc = mockTest.exam as any;
+    const examDoc = mockTest.exam as unknown as PopulatedDocument;
 
     const subjectId = mockTest.subject?._id?.toString();
-    const subjectDoc = mockTest.subject as any;
+    const subjectDoc = mockTest.subject as unknown as PopulatedDocument;
 
     const topicId = mockTest.topic?._id?.toString();
-    const topicDoc = mockTest.topic as any;
+    const topicDoc = mockTest.topic as unknown as PopulatedDocument;
 
     const obj = mockTest.toObject();
 
@@ -411,6 +561,7 @@ export class MockTestsService {
       isActive: obj.isActive,
       createdAt: obj.createdAt,
       updatedAt: obj.updatedAt,
+      userAttemptAction: userAttemptAction || UserAttemptAction.START,
     });
   }
 }

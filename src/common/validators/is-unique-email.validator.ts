@@ -9,6 +9,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas/user.schema';
+import { FilterQuery, Types } from 'mongoose';
 
 @ValidatorConstraint({ name: 'isUniqueEmail', async: true })
 @Injectable()
@@ -18,11 +19,14 @@ export class IsUniqueEmailConstraint implements ValidatorConstraintInterface {
   async validate(email: string, args: ValidationArguments): Promise<boolean> {
     if (!email) return true; // Let other validators handle empty values
 
-    const object = args.object as any;
+    const object = args.object as {
+      id?: string | Types.ObjectId;
+      _id?: string | Types.ObjectId;
+    };
     const userId = object.id || object._id;
 
     // Build query to exclude current user (for updates)
-    const query: any = { email: email.toLowerCase() };
+    const query: FilterQuery<UserDocument> = { email: email.toLowerCase() };
     if (userId) {
       query._id = { $ne: userId };
     }

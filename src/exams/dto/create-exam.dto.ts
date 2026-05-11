@@ -97,6 +97,13 @@ export class CreateExamDto {
   @IsMongoId()
   category: string;
 
+  @ApiProperty({
+    description: 'Exam Group ID (e.g., UPSC CSE, JEE Advanced)',
+    example: '64f123456789abcdef123456',
+  })
+  @IsMongoId()
+  examGroup: string;
+
   @ApiPropertyOptional({
     description: 'Total duration in minutes',
     example: 180,
@@ -144,4 +151,12 @@ export class CreateExamDto {
   @IsOptional()
   @IsBoolean()
   isSessionWise?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Whether exam supports multiple languages',
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  hasMultiLingualSupport?: boolean;
 }

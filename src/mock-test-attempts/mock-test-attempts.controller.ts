@@ -31,6 +31,7 @@ import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
+import { UserAttemptSummaryDto } from './dto/user-attempt-summary.dto';
 
 @ApiTags('mock-test-attempts')
 @Controller('mock-test-attempts')
@@ -115,7 +116,7 @@ export class MockTestAttemptsController {
   })
   async getMyAttempts(@GetUser() user: UserResponseDto): Promise<{
     message: string;
-    data: any[];
+    data: UserAttemptSummaryDto[];
     count: number;
   }> {
     const attempts = await this.mockTestAttemptsService.findUserAttempts(

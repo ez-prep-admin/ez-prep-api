@@ -1,5 +1,6 @@
 import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
 
 export class ExamSummaryDto {
   @ApiProperty({
@@ -196,12 +197,24 @@ export class MockTestListItemDto {
   @Expose()
   updatedAt: Date;
 
+  @ApiProperty({
+    description: 'Recommended action for the user based on attempt history',
+    enum: UserAttemptAction,
+    example: UserAttemptAction.START,
+  })
+  @Expose()
+  userAttemptAction: UserAttemptAction;
+
   // Exclude sensitive fields from response
   @Exclude()
   questionIds: string[];
 
   @Exclude()
-  difficultyDistribution: any;
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
 
   @Exclude()
   isDeleted: boolean;

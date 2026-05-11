@@ -11,6 +11,12 @@ import { ThrottlerException } from '@nestjs/throttler';
 import { MongoError } from 'mongodb';
 import { Error as MongooseError } from 'mongoose';
 
+interface ValidationErrorDetail {
+  field?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
 interface ErrorResponse {
   statusCode: number;
   error: string;
@@ -18,7 +24,7 @@ interface ErrorResponse {
   timestamp: string;
   path: string;
   method: string;
-  details?: any;
+  details?: ValidationErrorDetail[];
 }
 
 @Catch()
@@ -34,7 +40,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let status: number;
     let message: string | string[];
     let error: string;
-    let details: any = undefined;
+    let details: ValidationErrorDetail[] | undefined = undefined;
 
     // Handle different types of exceptions
     if (exception instanceof HttpException) {
@@ -42,7 +48,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
       const exceptionResponse = exception.getResponse();
 
       if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        const responseObj = exceptionResponse as any;
+        const responseObj = exceptionResponse as {
+          message?: string | string[];
+          error?: string;
+          errors?: ValidationErrorDetail[];
+        };
         message = responseObj.message || exception.message;
         error = responseObj.error || exception.name;
         // Include validation errors or other details if present

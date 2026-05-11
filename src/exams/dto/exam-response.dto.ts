@@ -1,6 +1,7 @@
 import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CategoryResponseDto } from '../../categories/dto/category-response.dto';
+import { ExamGroupResponseDto } from '../../exam-groups/dto/exam-group-response.dto';
 
 export class ExamSubjectResponseDto {
   @ApiProperty({ description: 'Subject ID', example: '64f123...' })
@@ -57,6 +58,13 @@ export class ExamResponseDto {
   @Expose()
   category: string | CategoryResponseDto;
 
+  @ApiProperty({
+    description: 'Exam Group ID or populated exam group',
+    example: '64f123456789abcdef123456',
+  })
+  @Expose()
+  examGroup: string | ExamGroupResponseDto;
+
   @ApiPropertyOptional({
     description: 'Duration in minutes',
     example: 180,
@@ -85,6 +93,13 @@ export class ExamResponseDto {
   @Expose()
   @Type(() => ExamSubjectResponseDto)
   subjects?: ExamSubjectResponseDto[];
+
+  @ApiProperty({
+    description: 'Multi-lingual support flag',
+    example: false,
+  })
+  @Expose()
+  hasMultiLingualSupport: boolean;
 
   @ApiProperty({
     description: 'Session-wise exam flag',

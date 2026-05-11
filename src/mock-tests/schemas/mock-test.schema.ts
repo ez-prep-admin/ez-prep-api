@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Types, Query } from 'mongoose';
 
 export type MockTestDocument = MockTest & Document;
 
@@ -142,7 +142,7 @@ MockTestSchema.set('toObject', {
 });
 
 // Pre-find middleware to handle soft delete queries
-MockTestSchema.pre(/^find/, function (this: any) {
+MockTestSchema.pre(/^find/, function (this: Query<unknown, MockTestDocument>) {
   // Only return non-deleted mock tests by default
   this.where({ isDeleted: { $ne: true } });
 });

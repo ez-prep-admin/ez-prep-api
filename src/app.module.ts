@@ -12,8 +12,10 @@ import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ExamsModule } from './exams/exams.module';
+import { ExamGroupsModule } from './exam-groups/exam-groups.module';
 import { TopicsModule } from './topics/topics.module';
 import { SubjectsModule } from './subjects/subjects.module';
+import { TagsModule } from './tags/tags.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -79,8 +81,10 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     MockTestAttemptsModule,
     CategoriesModule,
     ExamsModule,
+    ExamGroupsModule,
     TopicsModule,
     SubjectsModule,
+    TagsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Types, Query } from 'mongoose';
 
 export type ExamDocument = Exam & Document;
 
@@ -47,6 +47,14 @@ export class Exam {
   })
   category: Types.ObjectId;
 
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'ExamGroup',
+    required: true,
+    index: true,
+  })
+  examGroup: Types.ObjectId;
+
   @Prop({ min: 0 })
   duration?: number;
 
@@ -61,6 +69,9 @@ export class Exam {
 
   @Prop({ default: false })
   isSessionWise: boolean;
+
+  @Prop({ required: true, default: false })
+  hasMultiLingualSupport: boolean;
 
   @Prop({ default: true, index: true })
   isActive: boolean;
@@ -106,6 +117,6 @@ ExamSchema.set('toObject', {
 });
 
 // Pre-find middleware to handle soft delete queries
-ExamSchema.pre(/^find/, function (this: any) {
+ExamSchema.pre(/^find/, function (this: Query<unknown, ExamDocument>) {
   this.where({ isDeleted: { $ne: true } });
 });
