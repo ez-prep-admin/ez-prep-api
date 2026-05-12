@@ -477,9 +477,9 @@ export class MockTestsService {
     const attempts = await this.attemptModel
       .find({
         user: new Types.ObjectId(userId),
-        test: { $in: mockTestIds.map(id => new Types.ObjectId(id)) },
+        mockTest: { $in: mockTestIds.map(id => new Types.ObjectId(id)) },
       })
-      .select('test status createdAt')
+      .select('mockTest status createdAt')
       .sort({ createdAt: -1 })
       .lean()
       .exec();
@@ -487,7 +487,7 @@ export class MockTestsService {
     // Group attempts by test ID (order preserved — newest first)
     const attemptsByTest = new Map<string, typeof attempts>();
     for (const attempt of attempts) {
-      const testId = attempt.test.toString();
+      const testId = attempt.mockTest.toString();
       if (!attemptsByTest.has(testId)) {
         attemptsByTest.set(testId, []);
       }

@@ -71,9 +71,9 @@ export class MockTestAttempt {
     required: true,
     index: true,
   })
-  test: Types.ObjectId;
+  mockTest: Types.ObjectId;
 
-  // Freeze configuration snapshot from the test
+  // Freeze configuration snapshot from the mock test
   @Prop()
   testTitle: string;
 
@@ -150,7 +150,7 @@ export const MockTestAttemptSchema =
   SchemaFactory.createForClass(MockTestAttempt);
 
 // Compound indexes for better query performance
-MockTestAttemptSchema.index({ user: 1, test: 1 });
+MockTestAttemptSchema.index({ user: 1, mockTest: 1 });
 
 // Analytics-optimized index: covers all per-user dashboard aggregation $match stages
 MockTestAttemptSchema.index({ user: 1, status: 1, submittedAt: -1 });

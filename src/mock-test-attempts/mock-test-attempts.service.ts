@@ -177,7 +177,7 @@ export class MockTestAttemptsService {
       const existingAttempt = await this.attemptModel
         .findOne({
           user: new Types.ObjectId(userId),
-          test: new Types.ObjectId(mockTestId),
+          mockTest: new Types.ObjectId(mockTestId),
           status: { $in: ['SUBMITTED', 'IN_PROGRESS'] },
         })
         .exec();
@@ -193,7 +193,7 @@ export class MockTestAttemptsService {
     const inProgressAttempt = await this.attemptModel
       .findOne({
         user: new Types.ObjectId(userId),
-        test: new Types.ObjectId(mockTestId),
+        mockTest: new Types.ObjectId(mockTestId),
         status: 'IN_PROGRESS',
       })
       .exec();
@@ -214,7 +214,7 @@ export class MockTestAttemptsService {
     // Step 5: Create the attempt with frozen configuration
     const attempt = await this.attemptModel.create({
       user: new Types.ObjectId(userId),
-      test: test._id,
+      mockTest: test._id,
       testTitle: test.title,
       totalQuestions: test.totalQuestions,
       durationInMinutes: test.durationInMinutes,
@@ -407,16 +407,10 @@ export class MockTestAttemptsService {
   }
 
   /**
-   * Get attempt by ID (for authenticated user)
-   * @param attemptId - Attempt ID
-   * @param userId - User ID
-   * @returns Attempt details
-   */
-  /**
    * Get detailed attempt information (serves as resume/fallback endpoint)
    * @param attemptId - Attempt ID
    * @param userId - User ID
-   * @returns Comprehensive attempt details with questions and progress
+   * @returns Comprehensive attempt details with questions and progress, including exam, subject, and topic
    */
   async findOne(
     attemptId: string,
@@ -427,12 +421,15 @@ export class MockTestAttemptsService {
       throw new BadRequestException('Invalid attempt ID format');
     }
 
-    // Step 2: Fetch attempt
+    // Step 2: Fetch attempt with populated exam, subject, and topic
     const attempt = await this.attemptModel
       .findOne({
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
+      .populate('exam', 'name description')
+      .populate('subject', 'name description')
+      .populate('topic', 'name description')
       .exec();
 
     if (!attempt) {
@@ -502,7 +499,25 @@ export class MockTestAttemptsService {
       })
       .filter(Boolean); // Remove nulls
 
-    // Step 8: Build base response
+    // Step 8: Extract populated exam, subject, and topic data
+    const examDoc = attempt.exam as unknown as PopulatedDocument & {
+      name?: string;
+      description?: string;
+    };
+
+    const subjectDoc = attempt.subject as unknown as PopulatedDocument & {
+      name?: string;
+      description?: string;
+    };
+
+    const topicDoc = attempt.topic as unknown as
+      | (PopulatedDocument & {
+          name?: string;
+          description?: string;
+        })
+      | undefined;
+
+    // Step 9: Build base response
     const response: AttemptDetailResponseDto = {
       attemptId: attempt.id,
       status: attempt.status,
@@ -515,17 +530,34 @@ export class MockTestAttemptsService {
         negativeMarking: attempt.negativeMarking,
         passingScore: attempt.passingScore,
         showResultsImmediately: attempt.showResultsImmediately,
+        exam: {
+          id: (examDoc?._id as Types.ObjectId)?.toString() || '',
+          name: examDoc?.name || '',
+          description: examDoc?.description,
+        },
+        subject: {
+          id: (subjectDoc?._id as Types.ObjectId)?.toString() || '',
+          name: subjectDoc?.name || '',
+          description: subjectDoc?.description,
+        },
+        topic: topicDoc
+          ? {
+              id: (topicDoc._id as Types.ObjectId)?.toString() || '',
+              name: topicDoc.name || '',
+              description: topicDoc.description,
+            }
+          : undefined,
       },
       questions: mappedQuestions as never[],
     };
 
-    // Step 9: Add time metrics for in-progress and paused attempts
+    // Step 10: Add time metrics for in-progress and paused attempts
     if (isInProgress || isPaused) {
       response.timeElapsed = timeElapsed;
       response.timeRemaining = timeRemaining;
     }
 
-    // Step 10: Add results for submitted attempts
+    // Step 11: Add results for submitted attempts
     if (isSubmitted) {
       response.score = attempt.score;
       response.submittedAt = attempt.submittedAt;
@@ -747,15 +779,18 @@ export class MockTestAttemptsService {
   /**
    * Get all attempts for a user
    * @param userId - User ID
-   * @returns User's attempts
+   * @returns User's attempts with populated exam, subject, and topic
    */
   async findUserAttempts(userId: string): Promise<UserAttemptSummaryDto[]> {
     const attempts = await this.attemptModel
       .find({ user: new Types.ObjectId(userId) })
       .populate(
-        'test',
+        'mockTest',
         'title totalQuestions durationInMinutes marksPerQuestion',
       )
+      .populate('exam', 'name description')
+      .populate('subject', 'name description')
+      .populate('topic', 'name description')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -765,18 +800,52 @@ export class MockTestAttemptsService {
     }
 
     return attempts.map(attempt => {
-      const testDoc = attempt.test as unknown as PopulatedDocument & {
+      const testDoc = attempt.mockTest as unknown as PopulatedDocument & {
         title?: string;
         totalQuestions?: number;
         marksPerQuestion?: number;
       };
 
+      const examDoc = attempt.exam as unknown as PopulatedDocument & {
+        name?: string;
+        description?: string;
+      };
+
+      const subjectDoc = attempt.subject as unknown as PopulatedDocument & {
+        name?: string;
+        description?: string;
+      };
+
+      const topicDoc = attempt.topic as unknown as
+        | (PopulatedDocument & {
+            name?: string;
+            description?: string;
+          })
+        | undefined;
+
       return {
         attemptId: attempt.id || attempt._id?.toString() || '',
         mockTestId:
-          attempt.test?._id?.toString() ||
-          (typeof attempt.test === 'string' ? attempt.test : ''),
+          attempt.mockTest?._id?.toString() ||
+          (typeof attempt.mockTest === 'string' ? attempt.mockTest : ''),
         mockTestTitle: testDoc.title || 'Unknown Test',
+        exam: {
+          id: (examDoc?._id as Types.ObjectId)?.toString() || '',
+          name: examDoc?.name || '',
+          description: examDoc?.description,
+        },
+        subject: {
+          id: (subjectDoc?._id as Types.ObjectId)?.toString() || '',
+          name: subjectDoc?.name || '',
+          description: subjectDoc?.description,
+        },
+        topic: topicDoc
+          ? {
+              id: (topicDoc._id as Types.ObjectId)?.toString() || '',
+              name: topicDoc.name || '',
+              description: topicDoc.description,
+            }
+          : undefined,
         status: attempt.status,
         score: attempt.score,
         totalMarks:
@@ -791,9 +860,12 @@ export class MockTestAttemptsService {
    * Get user's attempts for a specific test
    * @param userId - User ID
    * @param mockTestId - Mock test ID
-   * @returns User's attempts for the test
+   * @returns User's attempts for the test with populated exam, subject, and topic
    */
-  async findUserTestAttempts(userId: string, mockTestId: string) {
+  async findUserTestAttempts(
+    userId: string,
+    mockTestId: string,
+  ): Promise<UserAttemptSummaryDto[]> {
     if (!Types.ObjectId.isValid(mockTestId)) {
       throw new BadRequestException('Invalid mock test ID format');
     }
@@ -801,8 +873,15 @@ export class MockTestAttemptsService {
     const attempts = await this.attemptModel
       .find({
         user: new Types.ObjectId(userId),
-        test: new Types.ObjectId(mockTestId),
+        mockTest: new Types.ObjectId(mockTestId),
       })
+      .populate(
+        'mockTest',
+        'title totalQuestions durationInMinutes marksPerQuestion',
+      )
+      .populate('exam', 'name description')
+      .populate('subject', 'name description')
+      .populate('topic', 'name description')
       .sort({ createdAt: -1 })
       .exec();
 
@@ -811,7 +890,61 @@ export class MockTestAttemptsService {
       await this.autoExpireIfNeeded(attempt);
     }
 
-    return attempts;
+    return attempts.map(attempt => {
+      const testDoc = attempt.mockTest as unknown as PopulatedDocument & {
+        title?: string;
+        totalQuestions?: number;
+        marksPerQuestion?: number;
+      };
+
+      const examDoc = attempt.exam as unknown as PopulatedDocument & {
+        name?: string;
+        description?: string;
+      };
+
+      const subjectDoc = attempt.subject as unknown as PopulatedDocument & {
+        name?: string;
+        description?: string;
+      };
+
+      const topicDoc = attempt.topic as unknown as
+        | (PopulatedDocument & {
+            name?: string;
+            description?: string;
+          })
+        | undefined;
+
+      return {
+        attemptId: attempt.id || attempt._id?.toString() || '',
+        mockTestId:
+          attempt.mockTest?._id?.toString() ||
+          (typeof attempt.mockTest === 'string' ? attempt.mockTest : ''),
+        mockTestTitle: testDoc.title || 'Unknown Test',
+        exam: {
+          id: (examDoc?._id as Types.ObjectId)?.toString() || '',
+          name: examDoc?.name || '',
+          description: examDoc?.description,
+        },
+        subject: {
+          id: (subjectDoc?._id as Types.ObjectId)?.toString() || '',
+          name: subjectDoc?.name || '',
+          description: subjectDoc?.description,
+        },
+        topic: topicDoc
+          ? {
+              id: (topicDoc._id as Types.ObjectId)?.toString() || '',
+              name: topicDoc.name || '',
+              description: topicDoc.description,
+            }
+          : undefined,
+        status: attempt.status,
+        score: attempt.score,
+        totalMarks:
+          (testDoc.totalQuestions || 0) * (testDoc.marksPerQuestion || 0),
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+      };
+    });
   }
 
   /**
