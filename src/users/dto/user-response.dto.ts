@@ -43,6 +43,11 @@ export class PreferencesResponseDto {
   notifications: NotificationPreferencesResponseDto;
 }
 
+export class TargetExamResponseDto {
+  @Expose() id: string;
+  @Expose() name: string;
+}
+
 export class InteractionsResponseDto {
   @Expose() interestedSubjects: string[];
   @Expose() likedTopics: string[];
@@ -114,9 +119,13 @@ export class UserResponseDto {
   location?: LocationResponseDto;
 
   // ── Group 2: Target exam ───────────────────────────────────────────────────
-  @ApiPropertyOptional({ description: 'Target exam ID' })
+  @ApiPropertyOptional({
+    description: 'Target exam (id and name)',
+    type: TargetExamResponseDto,
+  })
   @Expose()
-  targetExam?: string;
+  @Type(() => TargetExamResponseDto)
+  targetExam?: TargetExamResponseDto;
 
   @ApiPropertyOptional({ description: 'Target exam date' })
   @Expose()
