@@ -112,13 +112,23 @@ interface RecentActivityAggResult {
   score: number;
   totalQuestions: number;
   marksPerQuestion: number;
+  negativeMarking: number;
   timeConsumed: number;
   submittedAt: Date;
   status: string;
+  questions: Array<{
+    isCorrect: boolean | null;
+    selectedOption: string | null;
+  }>;
   subjectId: Types.ObjectId | null;
   subjectName: string | null;
+  subjectDescription: string | null;
   examId: Types.ObjectId | null;
   examName: string | null;
+  examDescription: string | null;
+  topicId: Types.ObjectId | null;
+  topicName: string | null;
+  topicDescription: string | null;
 }
 
 interface TopicAccuracyAggResult {
@@ -660,18 +670,33 @@ export class AnalyticsService {
         },
       },
       {
+        $lookup: {
+          from: 'topics',
+          localField: 'topic',
+          foreignField: '_id',
+          as: 'topicDoc',
+        },
+      },
+      {
         $project: {
           testTitle: 1,
           score: 1,
           totalQuestions: 1,
           marksPerQuestion: 1,
+          negativeMarking: 1,
           timeConsumed: 1,
           submittedAt: 1,
           status: 1,
+          questions: 1,
           subjectId: '$subject',
           subjectName: { $arrayElemAt: ['$subjectDoc.name', 0] },
+          subjectDescription: { $arrayElemAt: ['$subjectDoc.description', 0] },
           examId: '$exam',
           examName: { $arrayElemAt: ['$examDoc.name', 0] },
+          examDescription: { $arrayElemAt: ['$examDoc.description', 0] },
+          topicId: '$topic',
+          topicName: { $arrayElemAt: ['$topicDoc.name', 0] },
+          topicDescription: { $arrayElemAt: ['$topicDoc.description', 0] },
         },
       },
     ];
@@ -683,6 +708,22 @@ export class AnalyticsService {
 
     const result: RecentActivityItemDto[] = raw.map(item => {
       const totalPossible = item.totalQuestions * item.marksPerQuestion;
+
+      // Calculate answer statistics
+      let correctCount = 0;
+      let incorrectCount = 0;
+      let unansweredCount = 0;
+
+      item.questions.forEach(q => {
+        if (!q.selectedOption) {
+          unansweredCount++;
+        } else if (q.isCorrect) {
+          correctCount++;
+        } else {
+          incorrectCount++;
+        }
+      });
+
       return {
         attemptId: item._id.toHexString(),
         testTitle: item.testTitle,
@@ -690,6 +731,11 @@ export class AnalyticsService {
           totalPossible > 0
             ? Math.round((item.score / totalPossible) * 10000) / 100
             : 0,
+        score: item.score,
+        totalMarks: totalPossible,
+        correctAnswers: correctCount,
+        incorrectAnswers: incorrectCount,
+        unansweredQuestions: unansweredCount,
         totalQuestions: item.totalQuestions,
         timeConsumedMinutes: Math.round((item.timeConsumed / 60) * 10) / 10,
         submittedAt: item.submittedAt.toISOString(),
@@ -698,10 +744,22 @@ export class AnalyticsService {
           ? {
               id: item.subjectId.toHexString(),
               name: item.subjectName ?? 'Unknown',
+              description: item.subjectDescription ?? undefined,
             }
           : null,
         exam: item.examId
-          ? { id: item.examId.toHexString(), name: item.examName ?? 'Unknown' }
+          ? {
+              id: item.examId.toHexString(),
+              name: item.examName ?? 'Unknown',
+              description: item.examDescription ?? undefined,
+            }
+          : null,
+        topic: item.topicId
+          ? {
+              id: item.topicId.toHexString(),
+              name: item.topicName ?? 'Unknown',
+              description: item.topicDescription ?? undefined,
+            }
           : null,
       };
     });

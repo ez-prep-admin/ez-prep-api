@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RecentActivitySubjectDto {
   @ApiProperty({
@@ -12,6 +12,12 @@ export class RecentActivitySubjectDto {
     example: 'Mathematics',
   })
   name: string;
+
+  @ApiPropertyOptional({
+    description: 'Subject description',
+    example: 'Mathematical reasoning and problem solving',
+  })
+  description?: string;
 }
 
 export class RecentActivityExamDto {
@@ -26,6 +32,32 @@ export class RecentActivityExamDto {
     example: 'SSC CGL Tier 1',
   })
   name: string;
+
+  @ApiPropertyOptional({
+    description: 'Exam description',
+    example: 'Staff Selection Commission Combined Graduate Level Tier 1',
+  })
+  description?: string;
+}
+
+export class RecentActivityTopicDto {
+  @ApiProperty({
+    description: 'Topic ID',
+    example: '64f123456789abcdef789012',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Topic name',
+    example: 'Algebra',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    description: 'Topic description',
+    example: 'Linear and quadratic equations',
+  })
+  description?: string;
 }
 
 export class RecentActivityItemDto {
@@ -48,8 +80,38 @@ export class RecentActivityItemDto {
   scorePercent: number;
 
   @ApiProperty({
+    description: 'Actual score obtained',
+    example: 31.5,
+  })
+  score: number;
+
+  @ApiProperty({
+    description: 'Total possible marks',
+    example: 40,
+  })
+  totalMarks: number;
+
+  @ApiProperty({
+    description: 'Number of correct answers',
+    example: 8,
+  })
+  correctAnswers: number;
+
+  @ApiProperty({
+    description: 'Number of incorrect answers',
+    example: 1,
+  })
+  incorrectAnswers: number;
+
+  @ApiProperty({
+    description: 'Number of unanswered questions',
+    example: 1,
+  })
+  unansweredQuestions: number;
+
+  @ApiProperty({
     description: 'Total number of questions in the test',
-    example: 25,
+    example: 10,
   })
   totalQuestions: number;
 
@@ -73,16 +135,23 @@ export class RecentActivityItemDto {
   status: string;
 
   @ApiProperty({
-    description: 'Subject details, or null if not set',
+    description: 'Subject details',
     type: RecentActivitySubjectDto,
     nullable: true,
   })
   subject: RecentActivitySubjectDto | null;
 
   @ApiProperty({
-    description: 'Exam details, or null if not set',
+    description: 'Exam details',
     type: RecentActivityExamDto,
     nullable: true,
   })
   exam: RecentActivityExamDto | null;
+
+  @ApiPropertyOptional({
+    description: 'Topic details (optional)',
+    type: RecentActivityTopicDto,
+    nullable: true,
+  })
+  topic?: RecentActivityTopicDto | null;
 }
