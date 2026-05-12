@@ -67,7 +67,10 @@ export class MockTestsService {
     ]);
 
     // Calculate user attempt actions if userId provided
-    let userActions = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+    let userActions = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
     if (userId) {
       const testIds = mockTests.map(test => test._id.toString());
       userActions = await this.calculateUserAttemptActions(testIds, userId);
@@ -81,7 +84,9 @@ export class MockTestsService {
     return {
       data: mockTests.map(test => {
         const testId = test._id.toString();
-        const entry = userActions.get(testId) || { action: UserAttemptAction.START };
+        const entry = userActions.get(testId) || {
+          action: UserAttemptAction.START,
+        };
         return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
@@ -229,7 +234,10 @@ export class MockTestsService {
     ]);
 
     // Calculate user attempt actions if userId provided
-    let userActions = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+    let userActions = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
     if (userId) {
       const testIds = mockTests.map(test => test._id.toString());
       userActions = await this.calculateUserAttemptActions(testIds, userId);
@@ -240,7 +248,9 @@ export class MockTestsService {
     return {
       data: mockTests.map(test => {
         const testId = test._id.toString();
-        const entry = userActions.get(testId) || { action: UserAttemptAction.START };
+        const entry = userActions.get(testId) || {
+          action: UserAttemptAction.START,
+        };
         return this.toListItemDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
@@ -285,7 +295,10 @@ export class MockTestsService {
     ]);
 
     // Calculate user attempt actions if userId provided
-    let userActions = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+    let userActions = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
     if (userId) {
       const testIds = mockTests.map(test => test._id.toString());
       userActions = await this.calculateUserAttemptActions(testIds, userId);
@@ -296,7 +309,9 @@ export class MockTestsService {
     return {
       data: mockTests.map(test => {
         const testId = test._id.toString();
-        const entry = userActions.get(testId) || { action: UserAttemptAction.START };
+        const entry = userActions.get(testId) || {
+          action: UserAttemptAction.START,
+        };
         return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
@@ -346,7 +361,10 @@ export class MockTestsService {
     ]);
 
     // Calculate user attempt actions if userId provided
-    let userActions = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+    let userActions = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
     if (userId) {
       const testIds = mockTests.map(test => test._id.toString());
       userActions = await this.calculateUserAttemptActions(testIds, userId);
@@ -357,7 +375,9 @@ export class MockTestsService {
     return {
       data: mockTests.map(test => {
         const testId = test._id.toString();
-        const entry = userActions.get(testId) || { action: UserAttemptAction.START };
+        const entry = userActions.get(testId) || {
+          action: UserAttemptAction.START,
+        };
         return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
@@ -400,7 +420,10 @@ export class MockTestsService {
     ]);
 
     // Calculate user attempt actions if userId provided
-    let userActions = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+    let userActions = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
     if (userId) {
       const testIds = mockTests.map(test => test._id.toString());
       userActions = await this.calculateUserAttemptActions(testIds, userId);
@@ -411,7 +434,9 @@ export class MockTestsService {
     return {
       data: mockTests.map(test => {
         const testId = test._id.toString();
-        const entry = userActions.get(testId) || { action: UserAttemptAction.START };
+        const entry = userActions.get(testId) || {
+          action: UserAttemptAction.START,
+        };
         return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
@@ -436,8 +461,13 @@ export class MockTestsService {
   private async calculateUserAttemptActions(
     mockTestIds: string[],
     userId: string,
-  ): Promise<Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>> {
-    const actionMap = new Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>();
+  ): Promise<
+    Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>
+  > {
+    const actionMap = new Map<
+      string,
+      { action: UserAttemptAction; resumeAttemptId?: string }
+    >();
 
     if (!mockTestIds.length || !userId) {
       return actionMap;

@@ -56,7 +56,10 @@ export class UsersService {
   }
 
   async findOne(id: string): Promise<UserResponseDto> {
-    const user = await this.userModel.findById(id).exec();
+    const user = await this.userModel
+      .findById(id)
+      .populate('targetExam', 'name')
+      .exec();
     if (!user) {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
@@ -405,9 +408,19 @@ export class UsersService {
   private toResponseDto(user: UserDocument): UserResponseDto {
     const obj = user.toObject() as Record<string, unknown>;
 
-    // Stringify ObjectId reference fields so they match string-typed DTO fields
+    // Map targetExam: if populated (has name), extract id + name; otherwise omit
     if (obj.targetExam != null) {
-      obj.targetExam = String(obj.targetExam);
+      const exam = obj.targetExam as Record<string, unknown>;
+      if (typeof exam === 'object' && 'name' in exam && exam.name) {
+        // Note: Use exam.id (virtual field), not exam._id (deleted by schema transform)
+        obj.targetExam = {
+          id: String(exam.id),
+          name: exam.name,
+        };
+      } else {
+        // Not populated or orphaned reference — omit the field
+        delete obj.targetExam;
+      }
     }
 
     // Stringify ObjectId arrays in interactions

@@ -225,16 +225,44 @@ const mockTests = await this.mockTestModel.find({
 
 ### Virtual ID Field Handling
 
-When working with virtual `id` fields, extract IDs **before** calling `toObject()`:
+**IMPORTANT CODEBASE CONVENTION:** All schemas in this project use a consistent pattern where:
+1. A virtual `id` field is defined that returns `_id.toString()`
+2. Both `toJSON` and `toObject` transforms delete the `_id` field
+3. This means after transformation, only `id` exists (not `_id`)
+
+When working with documents after `toObject()` or `toJSON()`:
 
 ```typescript
-// WRONG - toObject() deletes _id, virtual getter returns object
-const obj = mockTest.toObject();
-const examId = obj.exam?.id; // Returns [object Object]
+// WRONG - _id doesn't exist after toObject() transformation
+const obj = user.toObject();
+const id = obj._id?.toString(); // undefined
 
-// CORRECT - Extract _id before transformation
-const examId = mockTest.exam?._id?.toString();
-const obj = mockTest.toObject();
+// CORRECT - Use the virtual id field
+const obj = user.toObject();
+const id = obj.id; // Works correctly
+```
+
+When working with populated documents:
+
+```typescript
+// WRONG - Populated document has id, not _id (due to schema transforms)
+const user = await this.userModel.findById(id).populate('targetExam', 'name').exec();
+const obj = user.toObject();
+const examId = obj.targetExam._id; // undefined!
+
+// CORRECT - Access the virtual id field on populated documents
+const user = await this.userModel.findById(id).populate('targetExam', 'name').exec();
+const obj = user.toObject();
+const examId = obj.targetExam.id; // Works correctly
+```
+
+When you need to extract ObjectIds **before** transformation:
+
+```typescript
+// Extract _id before calling toObject() if you need the raw ObjectId
+const examObjectId = mockTest.exam; // Still a Types.ObjectId
+const examId = examObjectId.toString();
+const obj = mockTest.toObject(); // Now _id is deleted, id is added
 ```
 
 ---
