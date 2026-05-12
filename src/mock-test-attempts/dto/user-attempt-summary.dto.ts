@@ -1,6 +1,30 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
+ * Basic info DTO for exam/subject/topic
+ */
+export class BasicInfoDto {
+  @ApiProperty({
+    description: 'ID',
+    example: '507f1f77bcf86cd799439013',
+  })
+  id: string;
+
+  @ApiProperty({
+    description: 'Name',
+    example: 'UPSC Civil Services',
+  })
+  name: string;
+
+  @ApiProperty({
+    description: 'Description',
+    example: 'Union Public Service Commission Civil Services Examination',
+    required: false,
+  })
+  description?: string;
+}
+
+/**
  * User attempt summary DTO
  */
 export class UserAttemptSummaryDto {
@@ -23,9 +47,28 @@ export class UserAttemptSummaryDto {
   mockTestTitle: string;
 
   @ApiProperty({
+    description: 'Exam information',
+    type: BasicInfoDto,
+  })
+  exam: BasicInfoDto;
+
+  @ApiProperty({
+    description: 'Subject information',
+    type: BasicInfoDto,
+  })
+  subject: BasicInfoDto;
+
+  @ApiProperty({
+    description: 'Topic information (optional)',
+    type: BasicInfoDto,
+    required: false,
+  })
+  topic?: BasicInfoDto;
+
+  @ApiProperty({
     description: 'Attempt status',
     example: 'submitted',
-    enum: ['in_progress', 'paused', 'submitted'],
+    enum: ['in_progress', 'paused', 'submitted', 'expired'],
   })
   status: string;
 

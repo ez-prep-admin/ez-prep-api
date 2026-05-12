@@ -121,7 +121,7 @@ export class AnalyticsController {
   @ApiOperation({
     summary: 'Get recent test activity',
     description:
-      'Returns the most recent completed test attempts for the authenticated user with scores, time, and subject/exam details.',
+      'Returns the most recent completed test attempts for the authenticated user with detailed scores, marks breakdown (correct/incorrect/unanswered), time consumed, and populated subject/exam/topic details (including descriptions).',
   })
   @ApiQuery({
     name: 'limit',

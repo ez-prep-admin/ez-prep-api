@@ -104,12 +104,13 @@ export class MockTestAttemptsController {
     description: `
     Retrieves all mock test attempts for the currently authenticated user.
     Results are sorted by most recent first.
-    Includes basic test information (title, questions count, duration).
+    Includes basic test information (title, questions count, duration) and populated exam, subject, and topic details.
     `,
   })
   @ApiResponse({
     status: 200,
     description: 'User attempts retrieved successfully',
+    type: [UserAttemptSummaryDto],
   })
   @ApiUnauthorizedResponse({
     description: 'Authentication required',
@@ -136,11 +137,13 @@ export class MockTestAttemptsController {
     description: `
     Retrieves all attempts for a specific mock test by the authenticated user.
     Useful to check attempt history and determine if retakes are allowed.
+    Includes populated exam, subject, and topic details.
     `,
   })
   @ApiResponse({
     status: 200,
     description: 'User test attempts retrieved successfully',
+    type: [UserAttemptSummaryDto],
   })
   @ApiBadRequestResponse({
     description: 'Invalid mock test ID format',
@@ -153,7 +156,7 @@ export class MockTestAttemptsController {
     @GetUser() user: UserResponseDto,
   ): Promise<{
     message: string;
-    data: any[];
+    data: UserAttemptSummaryDto[];
     count: number;
   }> {
     const attempts = await this.mockTestAttemptsService.findUserTestAttempts(
@@ -398,10 +401,12 @@ export class MockTestAttemptsController {
     
     For resuming IN_PROGRESS attempts, use GET /:attemptId/resume instead.
     
+    Response includes populated exam, subject, and topic details (name, id, description).
+    
     Response varies by attempt status and configuration:
     
     IN_PROGRESS attempts:
-    - Basic test information and status
+    - Basic test information and status (with exam, subject, topic details)
     - Questions with selected answers (if any)
     - NO correct answers or explanations
     - Time metrics (elapsed/remaining)

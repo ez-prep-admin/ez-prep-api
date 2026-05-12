@@ -1,5 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+/**
+ * Basic info DTO for exam/subject/topic
+ */
+class BasicInfoDto {
+  @ApiProperty({ description: 'ID' })
+  id: string;
+
+  @ApiProperty({ description: 'Name' })
+  name: string;
+
+  @ApiPropertyOptional({ description: 'Description' })
+  description?: string;
+}
+
 class QuestionOptionDto {
   @ApiProperty({ description: 'Option ID (UUID)' })
   id: string;
@@ -90,6 +104,18 @@ class TestMetadataDto {
     description: 'Whether results are shown immediately after submission',
   })
   showResultsImmediately?: boolean;
+
+  @ApiProperty({ description: 'Exam information', type: BasicInfoDto })
+  exam: BasicInfoDto;
+
+  @ApiProperty({ description: 'Subject information', type: BasicInfoDto })
+  subject: BasicInfoDto;
+
+  @ApiPropertyOptional({
+    description: 'Topic information (optional)',
+    type: BasicInfoDto,
+  })
+  topic?: BasicInfoDto;
 }
 
 export class AttemptDetailResponseDto {
