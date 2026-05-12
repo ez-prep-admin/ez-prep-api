@@ -205,6 +205,14 @@ export class MockTestListItemDto {
   @Expose()
   userAttemptAction: UserAttemptAction;
 
+  @ApiPropertyOptional({
+    description:
+      'ID of the active attempt to resume. Only present when userAttemptAction is RESUME.',
+    example: '64f123456789abcdef123456',
+  })
+  @Expose()
+  resumeAttemptId?: string;
+
   // Exclude sensitive fields from response
   @Exclude()
   questionIds: string[];
