@@ -109,7 +109,9 @@ describe('UsersService', () => {
 
       const mockDocument = mockUserDocument(mockUser);
       mockUserModel.findById.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(mockDocument),
+        populate: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue(mockDocument),
+        }),
       });
 
       const result = await service.findOne(userId);
@@ -120,7 +122,9 @@ describe('UsersService', () => {
 
     it('should throw NotFoundException when user not found', async () => {
       mockUserModel.findById.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(null),
+        populate: jest.fn().mockReturnValue({
+          exec: jest.fn().mockResolvedValue(null),
+        }),
       });
 
       await expect(service.findOne('non-existent-id')).rejects.toThrow(

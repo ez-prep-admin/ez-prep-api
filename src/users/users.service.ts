@@ -71,6 +71,50 @@ export class UsersService {
     return user ? this.toResponseDto(user) : null;
   }
 
+  async findByEmailWithPassword(
+    email: string,
+  ): Promise<UserDocument | null> {
+    return this.userModel.findOne({ email }).select('+passwordHash').exec();
+  }
+
+  async createAdmin(data: {
+    name: string;
+    email: string;
+    phoneNumber: string;
+    passwordHash: string;
+  }): Promise<UserResponseDto> {
+    try {
+      const existingUser = await this.userModel.findOne({
+        $or: [{ email: data.email }, { phoneNumber: data.phoneNumber }],
+      });
+
+      if (existingUser) {
+        throw new ConflictException(
+          'User with this email or phone number already exists',
+        );
+      }
+
+      const createdUser = new this.userModel({
+        name: data.name,
+        email: data.email,
+        phoneNumber: data.phoneNumber,
+        passwordHash: data.passwordHash,
+        role: UserRole.ADMIN,
+        isActive: true,
+      });
+      const savedUser = await createdUser.save();
+
+      return this.toResponseDto(savedUser);
+    } catch (error) {
+      if (error.code === 11000) {
+        throw new ConflictException(
+          'User with this email or phone number already exists',
+        );
+      }
+      throw error;
+    }
+  }
+
   async findByPhone(phoneNumber: string): Promise<UserResponseDto | null> {
     const user = await this.userModel.findOne({ phoneNumber }).exec();
     return user ? this.toResponseDto(user) : null;

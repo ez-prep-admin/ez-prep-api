@@ -9,12 +9,16 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Query,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
+  ApiQuery,
   ApiBearerAuth,
   ApiUnauthorizedResponse,
   ApiBadRequestResponse,
@@ -26,6 +30,7 @@ import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
 import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
+import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -67,25 +72,65 @@ export class SubjectsController {
 
   @Get()
   @ApiOperation({
-    summary: 'Get all subjects',
+    summary: 'Get all subjects with pagination',
     description:
-      'Retrieves all subjects with populated topics. Public endpoint.',
+      'Retrieves a paginated list of subjects with populated topics. Public endpoint. Defaults: page=1, limit=10',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (minimum: 1)',
+    example: 1,
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (minimum: 1, maximum: 100)',
+    example: 10,
   })
   @ApiResponse({
     status: 200,
     description: 'Subjects retrieved successfully',
-    type: [SubjectResponseDto],
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Subjects retrieved successfully',
+        },
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/SubjectResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            total: { type: 'number', example: 25 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            totalPages: { type: 'number', example: 3 },
+            hasNextPage: { type: 'boolean', example: true },
+            hasPrevPage: { type: 'boolean', example: false },
+          },
+        },
+      },
+    },
   })
-  async findAll(): Promise<{
+  async findAll(
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<{
     message: string;
     data: SubjectResponseDto[];
-    count: number;
+    pagination: PaginationMetaDto;
   }> {
-    const subjects = await this.subjectsService.findAll();
+    const result = await this.subjectsService.findAll(page, limit);
     return {
       message: 'Subjects retrieved successfully',
-      data: subjects,
-      count: subjects.length,
+      data: result.data,
+      pagination: result.pagination,
     };
   }
 

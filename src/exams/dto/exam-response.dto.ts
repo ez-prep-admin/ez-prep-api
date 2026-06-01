@@ -35,7 +35,7 @@ export class ExamResponseDto {
     example: '64f123456789abcdef123456',
   })
   @Expose()
-  id: string;
+  _id: string;
 
   @ApiProperty({
     description: 'Exam name',

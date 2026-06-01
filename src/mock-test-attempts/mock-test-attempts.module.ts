@@ -6,15 +6,15 @@ import {
   MockTestAttempt,
   MockTestAttemptSchema,
 } from './schemas/mock-test-attempt.schema';
-import { Question, QuestionSchema } from './schemas/question.schema';
 import { MockTestsModule } from '../mock-tests/mock-tests.module';
+import { QuestionsModule } from '../questions/questions.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: MockTestAttempt.name, schema: MockTestAttemptSchema },
-      { name: Question.name, schema: QuestionSchema },
     ]),
+    QuestionsModule,
     MockTestsModule, // Import to access MockTest model
   ],
   controllers: [MockTestAttemptsController],

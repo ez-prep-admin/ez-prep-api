@@ -18,6 +18,7 @@ import { SubjectsModule } from './subjects/subjects.module';
 import { TagsModule } from './tags/tags.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
+import { AdminModule } from './admin/admin.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
@@ -89,6 +90,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     TagsModule,
     AnalyticsModule,
     SearchModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

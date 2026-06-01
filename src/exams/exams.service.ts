@@ -67,13 +67,15 @@ export class ExamsService {
     limit: number = 10,
     search?: string,
     categoryId?: string,
-    activeOnly: boolean = false,
+    activeOnly: boolean = true,
   ): Promise<PaginatedExamsResponseDto> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query: FilterQuery<Exam> = {};
+    const query: FilterQuery<Exam> = {
+      isDeleted: false,
+    };
 
     if (activeOnly) {
       query.isActive = true;
@@ -90,7 +92,7 @@ export class ExamsService {
     const [exams, total] = await Promise.all([
       this.examModel
         .find(query)
-        .populate('category')
+        .populate('examGroup', 'name shortName')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -221,7 +223,7 @@ export class ExamsService {
     page: number = 1,
     limit: number = 10,
   ): Promise<PaginatedExamsResponseDto> {
-    return this.findAll(page, limit, undefined, categoryId, false);
+    return this.findAll(page, limit, undefined, categoryId, true);
   }
 
   /**
@@ -314,17 +316,37 @@ export class ExamsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(exam: ExamDocument): ExamResponseDto {
-    const obj = exam.toObject();
+    const obj = exam.toObject({ transform: false, virtuals: false });
+
     return new ExamResponseDto({
       ...obj,
-      category:
-        typeof obj.category === 'object' && obj.category._id
-          ? obj.category._id.toString()
-          : obj.category.toString(),
+      _id: obj._id,
+      examGroup: this.toPopulatedExamGroup(obj.examGroup),
       subjects: obj.subjects?.map(s => ({
         ...s,
-        subject: s.subject.toString(),
+        subject: s.subject,
       })),
     });
+  }
+
+  private toPopulatedExamGroup(
+    ref: unknown,
+  ): Types.ObjectId | string | { _id: Types.ObjectId; name: string; shortName?: string } {
+    if (!ref) {
+      return '';
+    }
+    if (ref instanceof Types.ObjectId || typeof ref === 'string') {
+      return ref;
+    }
+    const group = ref as {
+      _id: Types.ObjectId;
+      name: string;
+      shortName?: string;
+    };
+    return {
+      _id: group._id,
+      name: group.name,
+      shortName: group.shortName,
+    };
   }
 }

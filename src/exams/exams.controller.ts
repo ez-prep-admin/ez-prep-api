@@ -149,20 +149,20 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Get all exams with pagination',
     description:
-      'Retrieves all exams with optional filtering and search. Public endpoint.',
+      'Retrieves active, non-deleted exams with populated exam group. Sorted by newest first. Defaults: page=1, limit=10, activeOnly=true',
   })
   @ApiQuery({
     name: 'page',
     required: false,
     type: Number,
-    description: 'Page number',
+    description: 'Page number (minimum: 1)',
     example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Items per page',
+    description: 'Items per page (minimum: 1, maximum: 100)',
     example: 10,
   })
   @ApiQuery({
@@ -183,25 +183,48 @@ export class ExamsController {
     name: 'activeOnly',
     required: false,
     type: Boolean,
-    description: 'Show only active exams',
+    description: 'Show only active exams (default: true)',
     example: true,
   })
   @ApiResponse({
     status: 200,
     description: 'Exams retrieved successfully',
-    type: [ExamResponseDto],
+    schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          example: 'Exams retrieved successfully',
+        },
+        data: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/ExamResponseDto' },
+        },
+        pagination: {
+          type: 'object',
+          properties: {
+            total: { type: 'number', example: 25 },
+            page: { type: 'number', example: 1 },
+            limit: { type: 'number', example: 10 },
+            totalPages: { type: 'number', example: 3 },
+            hasNextPage: { type: 'boolean', example: true },
+            hasPrevPage: { type: 'boolean', example: false },
+          },
+        },
+      },
+    },
   })
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
     @Query('categoryId') categoryId?: string,
-    @Query('activeOnly', new DefaultValuePipe(false), ParseBoolPipe)
+    @Query('activeOnly', new DefaultValuePipe(true), ParseBoolPipe)
     activeOnly?: boolean,
   ): Promise<{
     message: string;
     data: ExamResponseDto[];
-    pagination: any;
+    pagination: PaginationMetaDto;
   }> {
     const result = await this.examsService.findAll(
       page,

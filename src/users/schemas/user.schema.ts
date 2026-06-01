@@ -157,6 +157,9 @@ export class User {
   @Prop({ default: false })
   isDeleted: boolean;
 
+  @Prop({ select: false })
+  passwordHash?: string;
+
   // ── Group 1: Extended profile ─────────────────────────────────────────────
   @Prop({ trim: true, maxlength: 500 })
   bio?: string;

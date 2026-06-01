@@ -13,6 +13,7 @@ import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
 import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
+import { PaginatedSubjectsResponseDto } from './dto/paginated-subjects-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 
 @Injectable()
@@ -57,15 +58,40 @@ export class SubjectsService {
   }
 
   /**
-   * Find all subjects
+   * Find all subjects with pagination
    */
-  async findAll(): Promise<SubjectResponseDto[]> {
-    const subjects = await this.subjectModel
-      .find()
-      .populate('topics', 'name')
-      .sort({ name: 1 })
-      .exec();
-    return subjects.map(subject => this.toResponseDto(subject));
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<PaginatedSubjectsResponseDto> {
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(Math.max(1, limit), 100);
+    const skip = (validPage - 1) * validLimit;
+
+    const [subjects, total] = await Promise.all([
+      this.subjectModel
+        .find()
+        .populate('topics', 'name')
+        .sort({ name: 1 })
+        .skip(skip)
+        .limit(validLimit)
+        .exec(),
+      this.subjectModel.countDocuments().exec(),
+    ]);
+
+    const totalPages = Math.ceil(total / validLimit);
+
+    return {
+      data: subjects.map(subject => this.toResponseDto(subject)),
+      pagination: {
+        total,
+        page: validPage,
+        limit: validLimit,
+        totalPages,
+        hasNextPage: validPage < totalPages,
+        hasPrevPage: validPage > 1,
+      },
+    };
   }
 
   /**
@@ -218,17 +244,15 @@ export class SubjectsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(subject: SubjectDocument): SubjectResponseDto {
-    const obj = subject.toObject();
+    const obj = subject.toObject({ transform: false, virtuals: false });
     return new SubjectResponseDto({
       ...obj,
-      id: obj._id?.toString() || obj.id,
+      _id: obj._id,
       topics:
         obj.topics?.map((topic: unknown) => {
           const topicDoc = topic as PopulatedDocument;
           return {
-            id:
-              topicDoc._id?.toString() ||
-              (typeof topic === 'string' ? topic : ''),
+            _id: topicDoc._id ?? topic,
             name: topicDoc.name || '',
           };
         }) || [],

@@ -7,6 +7,7 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
+import { UserRole } from '../common/enums/user-role.enum';
 
 export interface JwtPayload {
   sub: string; // user id
@@ -59,6 +60,15 @@ export class AuthService {
           this.logger.warn(`Inactive user attempted login: ${phoneNumber}`);
           throw new UnauthorizedException(
             'Your account has been deactivated. Please contact support.',
+          );
+        }
+
+        if (existingUser.role === UserRole.ADMIN) {
+          this.logger.warn(
+            `Admin user attempted OTP login: ${phoneNumber}`,
+          );
+          throw new UnauthorizedException(
+            'Admin accounts must use email/password login',
           );
         }
 
