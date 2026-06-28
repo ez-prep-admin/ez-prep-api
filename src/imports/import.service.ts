@@ -11,11 +11,19 @@ import { AiOutputValidator } from './validators/ai-output.validator';
 import { BusinessValidator } from './validators/business.validator';
 import { QuestionMapper } from './mapper/question.mapper';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from './config/business-validator.config';
-import { EnrichDebugResult, EnrichError } from './types/import-question';
+import {
+  EnrichDebugResult,
+  EnrichError,
+  PersistQuestionsResult,
+} from './types/import-question';
 import { AiOutputValidationError } from './validators/ai-output.validator';
 import { BusinessValidationError } from './validators/business.validator';
 import { QuestionChunkerService } from './chunking/question-chunker.service';
 import { AiQuestionBatchItem } from './types/ai-question-output';
+import { ImportQuestion } from './types/import-question';
+import { PersistQuestionValidator } from './validators/persist-question.validator';
+import { PersistQuestionValidationError } from './validators/persist-question.validator';
+import { QuestionPersistenceService } from './persistence/question-persistence.service';
 
 export interface ParseDebugResult {
   parserName: string;
@@ -52,6 +60,8 @@ export class ImportService {
     private readonly businessValidator: BusinessValidator,
     private readonly questionMapper: QuestionMapper,
     private readonly questionChunker: QuestionChunkerService,
+    private readonly persistQuestionValidator: PersistQuestionValidator,
+    private readonly questionPersistenceService: QuestionPersistenceService,
   ) {}
 
   async parseMarkdown(
@@ -110,7 +120,7 @@ export class ImportService {
     matchedQuestions: MatchedQuestion[],
   ): Promise<EnrichDebugResult> {
     const startedAt = Date.now();
-    const results: EnrichDebugResult['results'] = [];
+    const questions: ImportQuestion[] = [];
     const errors: EnrichError[] = [];
 
     const chunks = this.questionChunker.chunk(matchedQuestions);
@@ -137,7 +147,9 @@ export class ImportService {
           `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
         );
 
-        const batchOutputs = this.aiOutputValidator.validateBatch(rawJson);
+        const batchOutputs = this.aiOutputValidator
+          .validateBatch(rawJson)
+          .sort((left, right) => left.number - right.number);
         const returnedNumbers = new Set(
           batchOutputs.map(output => output.number),
         );
@@ -163,7 +175,7 @@ export class ImportService {
             }
 
             const question = this.processBatchItem(output, matched);
-            results.push({ number: output.number, question });
+            questions.push(question);
             this.logger.log(
               `[enrich] Question ${output.number} enriched successfully`,
             );
@@ -194,11 +206,9 @@ export class ImportService {
       }
     }
 
-    results.sort((left, right) => left.number - right.number);
-
     const summary = {
       total: matchedQuestions.length,
-      success: results.length,
+      success: questions.length,
       failed: errors.length,
       durationMs: Date.now() - startedAt,
     };
@@ -208,8 +218,7 @@ export class ImportService {
     );
 
     return {
-      questions: results.map(result => result.question),
-      results,
+      questions,
       errors,
       stats: {
         total: summary.total,
@@ -217,6 +226,71 @@ export class ImportService {
         failed: summary.failed,
       },
     };
+  }
+
+  async persistQuestions(payload: unknown): Promise<PersistQuestionsResult> {
+    const startedAt = Date.now();
+    const questions =
+      this.persistQuestionValidator.validateQuestionsPayload(payload);
+
+    this.logger.log(`[persist] Starting import of ${questions.length} question(s)`);
+
+    const saved: PersistQuestionsResult['saved'] = [];
+    const errors: PersistQuestionsResult['errors'] = [];
+
+    for (let index = 0; index < questions.length; index++) {
+      const question = questions[index];
+
+      try {
+        const validated = await this.persistQuestionValidator.validateQuestion(
+          question,
+          index,
+        );
+        const created =
+          await this.questionPersistenceService.saveOne(validated);
+
+        saved.push({
+          index,
+          questionId: created._id.toString(),
+        });
+        this.logger.log(
+          `[persist] Question ${index + 1}/${questions.length} saved as ${created._id.toString()}`,
+        );
+      } catch (error) {
+        const message = this.toPersistErrorMessage(error);
+        errors.push({ index, message });
+        this.logger.error(`[persist] Question at index ${index} failed: ${message}`);
+      }
+    }
+
+    const result = {
+      saved,
+      errors,
+      stats: {
+        total: questions.length,
+        saved: saved.length,
+        failed: errors.length,
+      },
+    };
+
+    this.logger.log(
+      `[persist] Completed in ${Date.now() - startedAt}ms — saved=${result.stats.saved}, failed=${result.stats.failed}`,
+    );
+
+    return result;
+  }
+
+  private toPersistErrorMessage(error: unknown): string {
+    if (error instanceof PersistQuestionValidationError) {
+      const details = error.details?.join('; ');
+      return details ? `${error.message} ${details}` : error.message;
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    return 'Unknown error';
   }
 
   private processBatchItem(

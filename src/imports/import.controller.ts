@@ -1,7 +1,15 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SkipTimeout } from '../common/decorators/skip-timeout.decorator';
 import { ImportService } from './import.service';
+import { PersistQuestionsDto } from './dto/persist-questions.dto';
 
 @ApiTags('imports')
 @Controller('imports')
@@ -28,14 +36,30 @@ export class ImportController {
   @ApiOperation({
     summary: 'Debug enrich parsed Flip test-25 questions with DeepSeek',
     description:
-      'Reads flip-test-25-parsed.json, sends all matched questions to DeepSeek in a single batch (chunked for larger papers later), validates with Zod and business rules, maps to the Question schema shape, and returns Mongo-ready question objects.',
+      'Reads flip-test-25-parsed.json, sends matched questions to DeepSeek in batch, validates with Zod and business rules, maps to the Question schema shape, and returns Mongo-ready question objects.',
   })
   @ApiResponse({
     status: 200,
     description:
-      'Array of mapped questions plus per-question errors and processing stats.',
+      'Mongo-ready questions array plus per-question errors and processing stats.',
   })
   async debugEnrichSample() {
     return this.importService.enrichFlipTestSample();
+  }
+
+  @Post('questions')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBody({ type: PersistQuestionsDto })
+  @ApiOperation({
+    summary: 'Persist enriched questions to MongoDB',
+    description:
+      'Accepts the questions array from the enrich API (full enrich response also supported) and saves each question to the questions collection one by one.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Per-question save results with MongoDB ids and any failures.',
+  })
+  async persistQuestions(@Body() body: unknown) {
+    return this.importService.persistQuestions(body);
   }
 }

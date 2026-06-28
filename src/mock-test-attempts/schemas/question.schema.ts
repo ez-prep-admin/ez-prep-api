@@ -3,6 +3,16 @@ import { Document, Types, Query } from 'mongoose';
 
 export type QuestionDocument = Question & Document;
 
+export const QUESTION_SOURCES = [
+  'PDF_UPLOAD',
+  'AI_GENERATED',
+  'MANUAL_INPUT',
+] as const;
+
+export type QuestionSource = (typeof QUESTION_SOURCES)[number];
+
+export const DEFAULT_QUESTION_SOURCE: QuestionSource = 'MANUAL_INPUT';
+
 // ImageMetadata sub-schema for S3 stored images
 @Schema({ _id: false })
 export class ImageMetadata {
@@ -133,6 +143,13 @@ export class Question {
 
   @Prop({ default: false })
   isDeleted: boolean;
+
+  @Prop({
+    type: String,
+    enum: QUESTION_SOURCES,
+    default: DEFAULT_QUESTION_SOURCE,
+  })
+  source?: QuestionSource;
 
   createdAt?: Date;
   updatedAt?: Date;

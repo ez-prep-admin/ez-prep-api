@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
 import { ImportController } from './import.controller';
 import { ImportService } from './import.service';
 import { MarkdownParserService } from './parser/markdown-parser.service';
@@ -14,8 +15,25 @@ import { BusinessValidator } from './validators/business.validator';
 import { QuestionMapper } from './mapper/question.mapper';
 import { MarkdownImageExtractorService } from './mapper/markdown-image.extractor';
 import { QuestionChunkerService } from './chunking/question-chunker.service';
+import { PersistQuestionValidator } from './validators/persist-question.validator';
+import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import {
+  Question,
+  QuestionSchema,
+} from '../mock-test-attempts/schemas/question.schema';
+import { Subject, SubjectSchema } from '../subjects/schemas/subject.schema';
+import { Topic, TopicSchema } from '../topics/schemas/topic.schema';
+import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
 
 @Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: Question.name, schema: QuestionSchema },
+      { name: Subject.name, schema: SubjectSchema },
+      { name: Topic.name, schema: TopicSchema },
+      { name: Exam.name, schema: ExamSchema },
+    ]),
+  ],
   controllers: [ImportController],
   providers: [
     ImportService,
@@ -32,6 +50,8 @@ import { QuestionChunkerService } from './chunking/question-chunker.service';
     QuestionMapper,
     MarkdownImageExtractorService,
     QuestionChunkerService,
+    PersistQuestionValidator,
+    QuestionPersistenceService,
   ],
   exports: [ImportService],
 })

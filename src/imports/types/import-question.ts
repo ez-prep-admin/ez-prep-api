@@ -1,5 +1,9 @@
 import { DifficultyLevel } from '../config/business-validator.config';
+import { QuestionSource } from '../../mock-test-attempts/schemas/question.schema';
 import { ImportImageMetadata } from './import-image-metadata';
+
+export const PDF_IMPORT_QUESTION_SOURCE =
+  'PDF_UPLOAD' as const satisfies QuestionSource;
 
 export interface ImportQuestionOption {
   id: string;
@@ -32,11 +36,32 @@ export interface ImportQuestion {
   difficultyLevel: DifficultyLevel;
   isActive: boolean;
   isDeleted: boolean;
+  source: typeof PDF_IMPORT_QUESTION_SOURCE;
 }
 
-export interface EnrichQuestionResult {
-  number: number;
-  question: ImportQuestion;
+/** Payload shape before persist validation; source is applied by Zod default. */
+export type ImportQuestionInput = Omit<ImportQuestion, 'source'> & {
+  source?: typeof PDF_IMPORT_QUESTION_SOURCE;
+};
+
+export interface PersistQuestionError {
+  index: number;
+  message: string;
+}
+
+export interface PersistedQuestionRef {
+  index: number;
+  questionId: string;
+}
+
+export interface PersistQuestionsResult {
+  saved: PersistedQuestionRef[];
+  errors: PersistQuestionError[];
+  stats: {
+    total: number;
+    saved: number;
+    failed: number;
+  };
 }
 
 export interface EnrichError {
@@ -47,7 +72,6 @@ export interface EnrichError {
 
 export interface EnrichDebugResult {
   questions: ImportQuestion[];
-  results: EnrichQuestionResult[];
   errors: EnrichError[];
   stats: {
     total: number;

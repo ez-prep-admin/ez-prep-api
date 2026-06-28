@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { FLIP_TEST_IMPORT_METADATA } from '../config/import-metadata.config';
 import { AiQuestionOutput } from '../types/ai-question-output';
-import { ImportQuestion } from '../types/import-question';
+import {
+  ImportQuestion,
+  PDF_IMPORT_QUESTION_SOURCE,
+} from '../types/import-question';
 import { MatchedQuestion } from '../types/matched-question';
 import { MarkdownImageExtractorService } from './markdown-image.extractor';
 
@@ -76,6 +79,7 @@ export class QuestionMapper {
       difficultyLevel: output.difficultyLevel,
       isActive: true,
       isDeleted: false,
+      source: PDF_IMPORT_QUESTION_SOURCE,
     };
   }
 }

@@ -98,6 +98,7 @@ Fig. 19.1`,
     expect(mapped.difficultyLevel).toBe('medium');
     expect(mapped.isActive).toBe(true);
     expect(mapped.isDeleted).toBe(false);
+    expect(mapped.source).toBe('PDF_UPLOAD');
   });
 
   it('extracts question images into image metadata instead of question text', () => {
@@ -125,7 +126,9 @@ Fig. 19.1`,
       'cdn.mathpix.com/cropped/example-1.jpg',
     );
     expect(mapped.questionText.en.image?.bucket).toBe(MATHPIX_PENDING_BUCKET);
-    expect(mapped.questionText.en.image?.key).toContain('cropped/example-1.jpg');
+    expect(mapped.questionText.en.image?.key).toContain(
+      'cropped/example-1.jpg',
+    );
   });
 
   it('validates batch AI JSON payloads with Zod', () => {

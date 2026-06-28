@@ -51,13 +51,23 @@ export class HttpExceptionFilter implements ExceptionFilter {
         const responseObj = exceptionResponse as {
           message?: string | string[];
           error?: string;
-          errors?: ValidationErrorDetail[];
+          errors?: ValidationErrorDetail[] | string[];
+          details?: ValidationErrorDetail[] | string[];
         };
         message = responseObj.message || exception.message;
         error = responseObj.error || exception.name;
-        // Include validation errors or other details if present
         if (responseObj.errors) {
-          details = responseObj.errors;
+          details = Array.isArray(responseObj.errors)
+            ? responseObj.errors.map(entry =>
+                typeof entry === 'string' ? { message: entry } : entry,
+              )
+            : responseObj.errors;
+        } else if (responseObj.details) {
+          details = Array.isArray(responseObj.details)
+            ? responseObj.details.map(entry =>
+                typeof entry === 'string' ? { message: entry } : entry,
+              )
+            : responseObj.details;
         }
       } else {
         message = exceptionResponse as string;
