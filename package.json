@@ -45,6 +45,7 @@
     "libphonenumber-js": "^1.12.17",
     "mongoose": "^8.18.1",
     "nest-winston": "^1.10.2",
+    "openai": "^6.45.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.14",

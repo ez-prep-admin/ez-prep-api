@@ -1,3 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/parser/mathpix-neet-parser.spec.ts">
+    <testCase name="Mathpix NEET parser (Flip test-25) splits questions and solutions sections" duration="2"/>
+    <testCase name="Mathpix NEET parser (Flip test-25) extracts 20 numbered questions" duration="1"/>
+    <testCase name="Mathpix NEET parser (Flip test-25) extracts 20 numbered solutions" duration="1"/>
+    <testCase name="Mathpix NEET parser (Flip test-25) keeps multi-line question content together" duration="0"/>
+    <testCase name="Mathpix NEET parser (Flip test-25) keeps multi-line solution content together" duration="1"/>
+    <testCase name="Mathpix NEET parser (Flip test-25) matches every question to its solution without warnings" duration="0"/>
+  </file>
 </testExecutions>
