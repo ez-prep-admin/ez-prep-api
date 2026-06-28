@@ -105,10 +105,10 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
     },
-    // Global timeout interceptor (30 seconds)
+    // Global timeout interceptor (30 seconds; skipped via @SkipTimeout())
     {
       provide: APP_INTERCEPTOR,
-      useValue: new TimeoutInterceptor(30000),
+      useClass: TimeoutInterceptor,
     },
     // Global rate limiting guard
     {

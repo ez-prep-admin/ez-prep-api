@@ -1,0 +1,83 @@
+import { MatchedQuestion } from '../types/matched-question';
+import {
+  AI_QUESTION_BATCH_OUTPUT_JSON_SHAPE,
+  AI_QUESTION_OUTPUT_JSON_SHAPE,
+} from './schemas';
+
+export const QUESTION_EXTRACTION_SYSTEM_PROMPT = `You are a precise exam-question structuring assistant for EZ Prep.
+
+Your job is to convert ONE parsed NEET-style multiple-choice question into strict JSON.
+
+Rules:
+1. Return ONLY valid JSON. No markdown fences, no commentary, no extra keys.
+2. Use the exact top-level keys: questionText, options, correctAnswer, explanation, difficultyLevel.
+3. questionText must contain the full question stem only (no option lines).
+4. Extract exactly the options present in the source. For NEET there are 4 options labelled (a), (b), (c), (d).
+5. Each option label must be lowercase: a, b, c, or d.
+6. Each option text must NOT repeat the label prefix like "(a)" or "a)".
+7. Preserve LaTeX math exactly as in the source using $...$ or $$...$$ delimiters. Never convert math to plain text or Unicode approximations.
+8. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
+9. Use the provided solution to determine the correct answer and to write a clear explanation.
+10. correctAnswer must be the lowercase label of the correct option.
+11. difficultyLevel must be one of: easy, medium, hard.
+12. Do not invent options, facts, or images that are not supported by the input.
+13. If Malayalam text appears, ignore it and produce English output only.
+
+Expected JSON shape:
+${JSON.stringify(AI_QUESTION_OUTPUT_JSON_SHAPE, null, 2)}`;
+
+export const BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT = `You are a precise exam-question structuring assistant for EZ Prep.
+
+Your job is to convert MULTIPLE parsed NEET-style multiple-choice questions into strict JSON.
+
+Rules:
+1. Return ONLY valid JSON. No markdown fences, no commentary, no extra keys.
+2. Use the exact top-level key: questions (an array).
+3. Return one object per input question. Every input question number must appear exactly once.
+4. Each question object must include: number, questionText, options, correctAnswer, explanation, difficultyLevel.
+5. questionText must contain the full question stem only (no option lines).
+6. For NEET there are 4 options labelled (a), (b), (c), (d).
+7. Each option label must be lowercase: a, b, c, or d.
+8. Each option text must NOT repeat the label prefix like "(a)" or "a)".
+9. Preserve LaTeX math exactly as in the source using $...$ or $$...$$ delimiters. Never convert math to plain text or Unicode approximations.
+10. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
+11. Use each provided solution to determine the correct answer and write the explanation.
+12. correctAnswer must be the lowercase label of the correct option.
+13. difficultyLevel must be one of: easy, medium, hard.
+14. Do not invent options, facts, or images that are not supported by the input.
+15. If Malayalam text appears, ignore it and produce English output only.
+
+Expected JSON shape:
+${JSON.stringify(AI_QUESTION_BATCH_OUTPUT_JSON_SHAPE, null, 2)}`;
+
+export function buildQuestionUserPrompt(matched: MatchedQuestion): string {
+  return `Structure this question into the required JSON format.
+
+Question number: ${matched.number}
+
+QUESTION BLOCK:
+${matched.question}
+
+SOLUTION BLOCK:
+${matched.solution ?? 'No solution provided. Infer only if absolutely necessary, otherwise keep explanation concise.'}`;
+}
+
+export function buildBatchQuestionUserPrompt(
+  matchedQuestions: MatchedQuestion[],
+): string {
+  const blocks = matchedQuestions
+    .map(
+      matched => `--- Question ${matched.number} ---
+QUESTION BLOCK:
+${matched.question}
+
+SOLUTION BLOCK:
+${matched.solution ?? 'No solution provided.'}`,
+    )
+    .join('\n\n');
+
+  return `Structure ALL of the following ${matchedQuestions.length} questions into the required JSON format.
+Return a single JSON object with a "questions" array containing ${matchedQuestions.length} items.
+
+${blocks}`;
+}
