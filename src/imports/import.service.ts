@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
 import { MatchedQuestion } from './types/matched-question';
 import { ParserWarning } from './types/parser-result';
@@ -27,6 +29,24 @@ import { ImportQuestion } from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import { S3Service } from '../aws/s3/s3.service';
+import { MathpixService } from '../integrations/mathpix/mathpix.service';
+import {
+  QuestionUpload,
+  QuestionUploadDocument,
+} from './schemas/question-upload.schema';
+import {
+  UploadQuestionPdfDto,
+  UploadQuestionPdfResponseDto,
+} from './dto/upload-question-pdf.dto';
+import {
+  ParseQuestionPdfDto,
+  ParseQuestionPdfResponseDto,
+  GetUploadDetailsResponseDto,
+  CategorizedUploadsResponseDto,
+  UploadMetadataDto,
+} from './dto/parse-question-pdf.dto';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface ParseDebugResult {
   parserName: string;
@@ -65,6 +85,10 @@ export class ImportService {
     private readonly questionChunker: QuestionChunkerService,
     private readonly persistQuestionValidator: PersistQuestionValidator,
     private readonly questionPersistenceService: QuestionPersistenceService,
+    private readonly s3Service: S3Service,
+    private readonly mathpixService: MathpixService,
+    @InjectModel(QuestionUpload.name)
+    private readonly questionUploadModel: Model<QuestionUploadDocument>,
   ) {}
 
   async parseMarkdown(
@@ -498,5 +522,398 @@ export class ImportService {
       stage: 'llm',
       message: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+
+  /**
+   * Upload a question paper PDF to S3 and track it in database
+   * @param file Uploaded PDF file (from Multer)
+   * @param dto Upload metadata
+   * @param userId User ID (from auth context)
+   * @returns Upload response with S3 details
+   */
+  async uploadQuestionPdf(
+    file: Express.Multer.File,
+    dto: UploadQuestionPdfDto,
+    userId?: string,
+  ): Promise<UploadQuestionPdfResponseDto> {
+    const startedAt = Date.now();
+
+    this.logger.log(
+      `[upload-pdf] Starting upload: ${file.originalname} (${file.size} bytes)`,
+    );
+
+    try {
+      // Generate title if not provided
+      const title = dto.title?.trim() || uuidv4();
+
+      // Generate S3 key for the upload
+      const s3Key = userId
+        ? this.s3Service.generateQuestionUploadKey(userId, file.originalname)
+        : this.s3Service.generateQuestionUploadKey('anonymous', file.originalname);
+
+      // Upload to S3
+      const uploadResult = await this.s3Service.uploadFile(file.buffer, {
+        key: s3Key,
+        contentType: file.mimetype,
+        metadata: {
+          originalName: file.originalname,
+          title: title,
+          uploadedBy: userId ?? 'anonymous',
+          ...dto.metadata,
+        },
+      });
+
+      this.logger.log(
+        `[upload-pdf] S3 upload successful: ${uploadResult.key} (etag=${uploadResult.etag})`,
+      );
+
+      // Create database record
+      const upload = new this.questionUploadModel({
+        title: title,
+        filename: file.originalname,
+        s3Key: uploadResult.key,
+        s3Bucket: uploadResult.bucket,
+        s3Region: uploadResult.region,
+        fileSize: uploadResult.size,
+        contentType: uploadResult.contentType,
+        status: 'uploaded',
+        subject: dto.subjectId ? new Types.ObjectId(dto.subjectId) : undefined,
+        topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
+        exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
+        difficultyLevel: dto.difficultyLevel,
+        metadata: dto.metadata ? new Map(Object.entries(dto.metadata)) : undefined,
+        uploadedBy: userId ? new Types.ObjectId(userId) : undefined,
+        source: 'PDF_UPLOAD',
+      });
+
+      await upload.save();
+
+      const response: UploadQuestionPdfResponseDto = {
+        uploadId: upload._id.toString(),
+        title: upload.title,
+        filename: upload.filename,
+        s3Key: upload.s3Key,
+        s3Bucket: upload.s3Bucket,
+        fileSize: upload.fileSize,
+        status: upload.status,
+        uploadedAt: upload.createdAt ?? new Date(),
+      };
+
+      this.logger.log(
+        `[upload-pdf] Upload completed in ${Date.now() - startedAt}ms (upload_id=${response.uploadId}, title="${title}")`,
+      );
+
+      return response;
+    } catch (error) {
+      this.logger.error(
+        `[upload-pdf] Upload failed after ${Date.now() - startedAt}ms`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Parse a question paper PDF using Mathpix API
+   * @param uploadId Upload ID from database
+   * @param dto Parse options
+   * @returns Parse response with markdown content
+   */
+  async parseQuestionPdf(
+    uploadId: string,
+    dto: ParseQuestionPdfDto = {},
+  ): Promise<ParseQuestionPdfResponseDto> {
+    const startedAt = Date.now();
+
+    this.logger.log(`[parse-pdf] Starting parse for upload_id=${uploadId}`);
+
+    // Find upload record
+    const upload = await this.questionUploadModel.findById(
+      new Types.ObjectId(uploadId),
+    );
+
+    if (!upload) {
+      throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
+    }
+
+    if (upload.status === 'parsing') {
+      throw new Error('This PDF is already being parsed');
+    }
+
+    try {
+      // Update status to parsing
+      upload.status = 'parsing';
+      upload.parsingStartedAt = new Date();
+      await upload.save();
+
+      this.logger.log(
+        `[parse-pdf] Fetching PDF from S3: ${upload.s3Key} (bucket=${upload.s3Bucket})`,
+      );
+
+      // Download PDF from S3
+      const pdfData = await this.s3Service.downloadFile(
+        upload.s3Key,
+        upload.s3Bucket,
+      );
+
+      this.logger.log(
+        `[parse-pdf] PDF downloaded: ${pdfData.contentLength} bytes`,
+      );
+
+      // Upload to S3 with public access for Mathpix (temporary)
+      const tempKey = `temp/${Date.now()}-${upload.filename}`;
+      const tempUploadResult = await this.s3Service.uploadFile(pdfData.body, {
+        key: tempKey,
+        contentType: 'application/pdf',
+        acl: 'public-read', // Make temporarily public for Mathpix
+      });
+
+      const pdfUrl = tempUploadResult.location!;
+
+      this.logger.log(
+        `[parse-pdf] Temporary public URL created: ${pdfUrl}`,
+      );
+
+      // Convert using Mathpix
+      const conversionResult = await this.mathpixService.convertPdfToMarkdown(
+        pdfUrl,
+        {
+          includeImages: true,
+          includeLatex: true,
+          ocrLanguage: 'en',
+        },
+        {
+          maxAttempts: dto.maxPollingAttempts ?? 60,
+          intervalMs: dto.pollingIntervalMs ?? 5000,
+        },
+      );
+
+      this.logger.log(
+        `[parse-pdf] Mathpix conversion completed: pdf_id=${conversionResult.pdfId}, time=${conversionResult.processingTimeMs}ms`,
+      );
+
+      // Clean up temporary file
+      await this.s3Service.deleteFile(tempKey);
+      this.logger.log(`[parse-pdf] Temporary file deleted: ${tempKey}`);
+
+      // Save markdown to S3
+      const markdownKey = `question-uploads/${userId ?? 'anonymous'}/markdown/${Date.now()}-${upload.filename.replace('.pdf', '.md')}`;
+      const markdownBuffer = Buffer.from(conversionResult.markdown, 'utf-8');
+      
+      const markdownUploadResult = await this.s3Service.uploadFile(markdownBuffer, {
+        key: markdownKey,
+        contentType: 'text/markdown',
+        metadata: {
+          originalPdfKey: upload.s3Key,
+          mathpixPdfId: conversionResult.pdfId,
+          title: upload.title,
+          uploadId: upload._id.toString(),
+        },
+        tags: {
+          type: 'markdown',
+          source: 'mathpix',
+          pdfUploadId: upload._id.toString(),
+        },
+      });
+
+      this.logger.log(
+        `[parse-pdf] Markdown saved to S3: ${markdownUploadResult.key}`,
+      );
+
+      // Update upload record with results (markdown stored ONLY in S3)
+      upload.status = 'parsed';
+      upload.markdownS3Key = markdownUploadResult.key;
+      upload.mathpixPdfId = conversionResult.pdfId;
+      upload.parsingCompletedAt = new Date();
+      await upload.save();
+
+      const response: ParseQuestionPdfResponseDto = {
+        uploadId: upload._id.toString(),
+        mathpixPdfId: conversionResult.pdfId,
+        markdown: conversionResult.markdown,
+        markdownS3Key: markdownUploadResult.key,
+        processingTimeMs: Date.now() - startedAt,
+        status: 'parsed',
+        markdownLength: conversionResult.markdown.length,
+      };
+
+      this.logger.log(
+        `[parse-pdf] Parse completed in ${response.processingTimeMs}ms (upload_id=${uploadId})`,
+      );
+
+      return response;
+    } catch (error) {
+      // Update status to failed
+      upload.status = 'failed';
+      upload.errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      await upload.save();
+
+      this.logger.error(
+        `[parse-pdf] Parse failed after ${Date.now() - startedAt}ms`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      throw error;
+    }
+  }
+
+  /**
+   * Get details of an uploaded question paper
+   * @param uploadId Upload ID
+   * @returns Upload details
+   */
+  async getUploadDetails(
+    uploadId: string,
+  ): Promise<GetUploadDetailsResponseDto> {
+    const upload = await this.questionUploadModel.findById(
+      new Types.ObjectId(uploadId),
+    );
+
+    if (!upload) {
+      throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
+    }
+
+    const uploadObj = upload.toObject();
+
+    return {
+      id: uploadObj.id,
+      title: upload.title,
+      filename: upload.filename,
+      s3Key: upload.s3Key,
+      fileSize: upload.fileSize,
+      status: upload.status,
+      subjectId: upload.subject?.toString(),
+      topicId: upload.topic?.toString(),
+      examIds: upload.exams?.map(id => id.toString()),
+      difficultyLevel: upload.difficultyLevel,
+      markdownS3Key: upload.markdownS3Key,
+      errorMessage: upload.errorMessage,
+      createdAt: upload.createdAt ?? new Date(),
+      updatedAt: upload.updatedAt ?? new Date(),
+    };
+  }
+
+  /**
+   * List uploaded question papers with categorization (parsed vs unparsed)
+   * @param page Page number (1-based)
+   * @param limit Items per page
+   * @returns Categorized list of uploads (parsed and unparsed)
+   */
+  async listUploads(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<CategorizedUploadsResponseDto> {
+    const skip = (page - 1) * limit;
+
+    // Fetch all uploads (we'll categorize them in memory)
+    const [allUploads, total] = await Promise.all([
+      this.questionUploadModel
+        .find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.questionUploadModel.countDocuments(),
+    ]);
+
+    // Count parsed and unparsed for pagination
+    const [parsedCount, unparsedCount] = await Promise.all([
+      this.questionUploadModel.countDocuments({ 
+        status: { $in: ['parsed', 'processing', 'completed'] } 
+      }),
+      this.questionUploadModel.countDocuments({ 
+        status: { $in: ['uploaded', 'parsing', 'failed'] } 
+      }),
+    ]);
+
+    // Helper function to map upload to metadata DTO
+    const mapToMetadata = (upload: QuestionUploadDocument): UploadMetadataDto => {
+      const uploadObj = upload.toObject();
+      return {
+        id: uploadObj.id,
+        title: upload.title,
+        filename: upload.filename,
+        fileSize: upload.fileSize,
+        status: upload.status,
+        subjectId: upload.subject?.toString(),
+        topicId: upload.topic?.toString(),
+        examIds: upload.exams?.map(id => id.toString()),
+        difficultyLevel: upload.difficultyLevel,
+        s3Key: upload.s3Key,
+        markdownS3Key: upload.markdownS3Key,
+        errorMessage: upload.errorMessage,
+        createdAt: upload.createdAt ?? new Date(),
+        updatedAt: upload.updatedAt ?? new Date(),
+      };
+    };
+
+    // Categorize uploads
+    const parsed: UploadMetadataDto[] = [];
+    const unparsed: UploadMetadataDto[] = [];
+
+    for (const upload of allUploads) {
+      const metadata = mapToMetadata(upload);
+      
+      // PDFs with status 'parsed', 'processing', or 'completed' have markdown
+      if (['parsed', 'processing', 'completed'].includes(upload.status)) {
+        parsed.push(metadata);
+      } else {
+        // 'uploaded', 'parsing', 'failed' are unparsed
+        unparsed.push(metadata);
+      }
+    }
+
+    return {
+      parsed,
+      unparsed,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        parsedCount,
+        unparsedCount,
+      },
+    };
+  }
+
+  /**
+   * Get markdown content from S3 for a parsed upload
+   * @param uploadId Upload ID
+   * @returns Markdown content as string
+   */
+  async getMarkdownContent(uploadId: string): Promise<string> {
+    const upload = await this.questionUploadModel.findById(
+      new Types.ObjectId(uploadId),
+    );
+
+    if (!upload) {
+      throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
+    }
+
+    if (!upload.markdownS3Key) {
+      throw new Error(
+        'Markdown not yet parsed. Please parse the PDF first using /imports/parse-pdf/:uploadId',
+      );
+    }
+
+    this.logger.log(
+      `[get-markdown] Fetching markdown from S3: ${upload.markdownS3Key}`,
+    );
+
+    // Download markdown from S3
+    const markdownData = await this.s3Service.downloadFile(
+      upload.markdownS3Key,
+      upload.s3Bucket,
+    );
+
+    const markdown = markdownData.body.toString('utf-8');
+
+    this.logger.log(
+      `[get-markdown] Retrieved markdown (${markdown.length} chars) for upload_id=${uploadId}`,
+    );
+
+    return markdown;
   }
 }

@@ -20,6 +20,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
 import { ImportModule } from './imports/import.module';
 import { ValidationModule } from './common/validators/validation.module';
+import { AwsModule } from './aws/aws.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -76,6 +77,8 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     ThrottlerModule.forRoot([securityConfig.rateLimit]),
     // Winston logging configuration
     WinstonModule.forRoot(winstonConfig),
+    // AWS services (Global module)
+    AwsModule,
     // Custom validation module
     ValidationModule,
     UsersModule,

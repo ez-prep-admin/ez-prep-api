@@ -27,6 +27,12 @@ import {
 import { Subject, SubjectSchema } from '../subjects/schemas/subject.schema';
 import { Topic, TopicSchema } from '../topics/schemas/topic.schema';
 import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
+import {
+  QuestionUpload,
+  QuestionUploadSchema,
+} from './schemas/question-upload.schema';
+import { AwsModule } from '../aws/aws.module';
+import { MathpixModule } from '../integrations/mathpix/mathpix.module';
 
 @Module({
   imports: [
@@ -35,7 +41,10 @@ import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
       { name: Subject.name, schema: SubjectSchema },
       { name: Topic.name, schema: TopicSchema },
       { name: Exam.name, schema: ExamSchema },
+      { name: QuestionUpload.name, schema: QuestionUploadSchema },
     ]),
+    AwsModule,
+    MathpixModule,
   ],
   controllers: [ImportController],
   providers: [
