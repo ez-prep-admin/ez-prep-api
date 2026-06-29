@@ -7,8 +7,11 @@ import { QuestionParserService } from './parser/question-parser.service';
 import { SolutionParserService } from './parser/solution-parser.service';
 import { QuestionMatcherService } from './parser/question-matcher.service';
 import { MathpixNeetQuestionBoundaryStrategy } from './parser/boundaries/mathpix-neet-question-boundary.strategy';
+import { AdaptiveBoundaryStrategy } from './parser/boundaries/adaptive-boundary.strategy';
 import { MathpixNeetParserStrategy } from './parser/strategies/mathpix-neet-parser.strategy';
+import { AdaptiveParserStrategy } from './parser/strategies/adaptive-parser.strategy';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
+import { StructureDetectorService } from './parser/structure-detector.service';
 import { DeepseekService } from './llm/deepseek.service';
 import { AiOutputValidator } from './validators/ai-output.validator';
 import { BusinessValidator } from './validators/business.validator';
@@ -42,8 +45,11 @@ import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
     SolutionParserService,
     QuestionMatcherService,
     MathpixNeetQuestionBoundaryStrategy,
+    AdaptiveBoundaryStrategy,
     MathpixNeetParserStrategy,
+    AdaptiveParserStrategy,
     DocumentParserFactory,
+    StructureDetectorService,
     DeepseekService,
     AiOutputValidator,
     BusinessValidator,

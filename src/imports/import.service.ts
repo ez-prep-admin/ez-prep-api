@@ -18,7 +18,10 @@ import {
 } from './types/import-question';
 import { AiOutputValidationError } from './validators/ai-output.validator';
 import { BusinessValidationError } from './validators/business.validator';
-import { QuestionChunkerService } from './chunking/question-chunker.service';
+import {
+  QuestionChunkerService,
+  QuestionChunk,
+} from './chunking/question-chunker.service';
 import { AiQuestionBatchItem } from './types/ai-question-output';
 import { ImportQuestion } from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
@@ -118,92 +121,47 @@ export class ImportService {
 
   async enrichMatchedQuestions(
     matchedQuestions: MatchedQuestion[],
+    options?: {
+      useParallel?: boolean;
+      maxRetries?: number;
+      adaptiveChunking?: boolean;
+    },
   ): Promise<EnrichDebugResult> {
     const startedAt = Date.now();
+    const useParallel = options?.useParallel ?? false;
+    const maxRetries = options?.maxRetries ?? 3;
+    const adaptiveChunking = options?.adaptiveChunking ?? false;
+
+    // Use adaptive chunking if enabled, otherwise use legacy chunking
+    const chunks = adaptiveChunking
+      ? this.questionChunker.chunkByTokenLimit(matchedQuestions, {
+          maxTokensPerChunk: 20000,
+        })
+      : this.questionChunker.chunk(matchedQuestions);
+
+    this.logger.log(
+      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking})`,
+    );
+
+    if (adaptiveChunking) {
+      const stats = this.questionChunker.getChunkingStats(matchedQuestions);
+      this.logger.log(
+        `[enrich] Chunking stats: ~${stats.totalTokens} tokens, avg ${stats.avgQuestionsPerChunk} questions/chunk, avg ${stats.avgTokensPerChunk} tokens/chunk`,
+      );
+    }
+
+    // Process chunks (parallel or sequential)
+    const chunkResults = useParallel
+      ? await this.processChunksParallel(chunks, maxRetries)
+      : await this.processChunksSequential(chunks, maxRetries);
+
+    // Aggregate results
     const questions: ImportQuestion[] = [];
     const errors: EnrichError[] = [];
 
-    const chunks = this.questionChunker.chunk(matchedQuestions);
-    this.logger.log(
-      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s)`,
-    );
-
-    for (const chunk of chunks) {
-      const chunkStartedAt = Date.now();
-      const numbers = chunk.questions
-        .map(question => question.number)
-        .join(', ');
-
-      this.logger.log(
-        `[enrich] Chunk ${chunk.chunkIndex}: sending ${chunk.questions.length} question(s) to DeepSeek [${numbers}]`,
-      );
-
-      try {
-        const rawJson = await this.deepseekService.extractQuestionsBatch(
-          chunk.questions,
-        );
-
-        this.logger.log(
-          `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
-        );
-
-        const batchOutputs = this.aiOutputValidator
-          .validateBatch(rawJson)
-          .sort((left, right) => left.number - right.number);
-        const returnedNumbers = new Set(
-          batchOutputs.map(output => output.number),
-        );
-
-        for (const matched of chunk.questions) {
-          if (!returnedNumbers.has(matched.number)) {
-            const message = `Question ${matched.number} missing from batch LLM response.`;
-            errors.push({ number: matched.number, stage: 'llm', message });
-            this.logger.error(`[enrich] ${message}`);
-          }
-        }
-
-        const matchedByNumber = new Map(
-          chunk.questions.map(question => [question.number, question]),
-        );
-
-        for (const output of batchOutputs) {
-          try {
-            const matched = matchedByNumber.get(output.number);
-
-            if (!matched) {
-              continue;
-            }
-
-            const question = this.processBatchItem(output, matched);
-            questions.push(question);
-            this.logger.log(
-              `[enrich] Question ${output.number} enriched successfully`,
-            );
-          } catch (error) {
-            const enrichError = this.toEnrichError(output.number, error);
-            errors.push(enrichError);
-            this.logger.error(
-              `[enrich] Question ${output.number} failed at stage=${enrichError.stage}: ${enrichError.message}`,
-            );
-          }
-        }
-      } catch (error) {
-        const enrichError = this.toEnrichError(0, error);
-        const message =
-          error instanceof Error ? error.message : 'Unknown chunk error';
-
-        this.logger.error(
-          `[enrich] Chunk ${chunk.chunkIndex} failed after ${Date.now() - chunkStartedAt}ms: ${message}`,
-        );
-
-        for (const matched of chunk.questions) {
-          errors.push({
-            number: matched.number,
-            stage: enrichError.stage,
-            message: `Chunk ${chunk.chunkIndex} failed: ${message}`,
-          });
-        }
-      }
+    for (const result of chunkResults) {
+      questions.push(...result.questions);
+      errors.push(...result.errors);
     }
 
     const summary = {
@@ -226,6 +184,184 @@ export class ImportService {
         failed: summary.failed,
       },
     };
+  }
+
+  /**
+   * Process chunks sequentially (legacy behavior)
+   */
+  private async processChunksSequential(
+    chunks: QuestionChunk[],
+    maxRetries: number,
+  ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
+    const results: Array<{ questions: ImportQuestion[]; errors: EnrichError[] }> = [];
+
+    for (const chunk of chunks) {
+      const result = await this.processChunkWithRetry(chunk, maxRetries);
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  /**
+   * Process chunks in parallel with Promise.allSettled
+   */
+  private async processChunksParallel(
+    chunks: QuestionChunk[],
+    maxRetries: number,
+  ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
+    this.logger.log(`[enrich] Processing ${chunks.length} chunk(s) in parallel`);
+
+    const promises = chunks.map(chunk =>
+      this.processChunkWithRetry(chunk, maxRetries),
+    );
+
+    const settled = await Promise.allSettled(promises);
+
+    return settled.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value;
+      } else {
+        // Handle rejected promise (should not happen with proper error handling in processChunkWithRetry)
+        this.logger.error(
+          `[enrich] Chunk ${index} promise rejected: ${result.reason}`,
+        );
+        const chunk = chunks[index];
+        return {
+          questions: [],
+          errors: chunk.questions.map(q => ({
+            number: q.number,
+            stage: 'llm' as const,
+            message: `Chunk processing failed: ${result.reason}`,
+          })),
+        };
+      }
+    });
+  }
+
+  /**
+   * Process a single chunk with retry logic and exponential backoff
+   */
+  private async processChunkWithRetry(
+    chunk: QuestionChunk,
+    maxRetries: number,
+    currentAttempt = 1,
+  ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
+    const chunkStartedAt = Date.now();
+    const numbers = chunk.questions
+      .map(question => question.number)
+      .join(', ');
+
+    this.logger.log(
+      `[enrich] Chunk ${chunk.chunkIndex} (attempt ${currentAttempt}/${maxRetries}): sending ${chunk.questions.length} question(s) to DeepSeek [${numbers}]`,
+    );
+
+    try {
+      const rawJson = await this.deepseekService.extractQuestionsBatch(
+        chunk.questions,
+      );
+
+      this.logger.log(
+        `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
+      );
+
+      return this.processChunkResponse(chunk, rawJson);
+    } catch (error) {
+      const duration = Date.now() - chunkStartedAt;
+      const message =
+        error instanceof Error ? error.message : 'Unknown chunk error';
+
+      this.logger.error(
+        `[enrich] Chunk ${chunk.chunkIndex} failed after ${duration}ms (attempt ${currentAttempt}/${maxRetries}): ${message}`,
+      );
+
+      // Retry with exponential backoff if attempts remaining
+      if (currentAttempt < maxRetries) {
+        const backoffMs = Math.min(1000 * Math.pow(2, currentAttempt - 1), 10000);
+        this.logger.log(
+          `[enrich] Chunk ${chunk.chunkIndex}: retrying after ${backoffMs}ms backoff`,
+        );
+        await this.sleep(backoffMs);
+        return this.processChunkWithRetry(chunk, maxRetries, currentAttempt + 1);
+      }
+
+      // All retries exhausted, return errors for all questions in chunk
+      this.logger.error(
+        `[enrich] Chunk ${chunk.chunkIndex}: all ${maxRetries} attempts failed`,
+      );
+
+      return {
+        questions: [],
+        errors: chunk.questions.map(q => ({
+          number: q.number,
+          stage: 'llm' as const,
+          message: `Chunk ${chunk.chunkIndex} failed after ${maxRetries} attempts: ${message}`,
+        })),
+      };
+    }
+  }
+
+  /**
+   * Process successful chunk response
+   */
+  private processChunkResponse(
+    chunk: QuestionChunk,
+    rawJson: string,
+  ): { questions: ImportQuestion[]; errors: EnrichError[] } {
+    const questions: ImportQuestion[] = [];
+    const errors: EnrichError[] = [];
+
+    const batchOutputs = this.aiOutputValidator
+      .validateBatch(rawJson)
+      .sort((left, right) => left.number - right.number);
+    const returnedNumbers = new Set(
+      batchOutputs.map(output => output.number),
+    );
+
+    // Check for missing questions in LLM response
+    for (const matched of chunk.questions) {
+      if (!returnedNumbers.has(matched.number)) {
+        const message = `Question ${matched.number} missing from batch LLM response.`;
+        errors.push({ number: matched.number, stage: 'llm', message });
+        this.logger.error(`[enrich] ${message}`);
+      }
+    }
+
+    const matchedByNumber = new Map(
+      chunk.questions.map(question => [question.number, question]),
+    );
+
+    // Process each output from LLM
+    for (const output of batchOutputs) {
+      try {
+        const matched = matchedByNumber.get(output.number);
+
+        if (!matched) {
+          continue;
+        }
+
+        const question = this.processBatchItem(output, matched);
+        questions.push(question);
+        this.logger.log(
+          `[enrich] Question ${output.number} enriched successfully`,
+        );
+      } catch (error) {
+        const enrichError = this.toEnrichError(output.number, error);
+        errors.push(enrichError);
+        this.logger.error(
+          `[enrich] Question ${output.number} failed at stage=${enrichError.stage}: ${enrichError.message}`,
+        );
+      }
+    }
+
+    return { questions, errors };
+  }
+
+  /**
+   * Sleep utility for exponential backoff
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async persistQuestions(payload: unknown): Promise<PersistQuestionsResult> {
