@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { FLIP_TEST_IMPORT_METADATA } from '../config/import-metadata.config';
 import { AiQuestionOutput } from '../types/ai-question-output';
 import {
   ImportQuestion,
+  ImportQuestionOption,
   PDF_IMPORT_QUESTION_SOURCE,
 } from '../types/import-question';
 import { MatchedQuestion } from '../types/matched-question';
@@ -23,19 +23,39 @@ export class QuestionMapper {
 
   map(
     output: AiQuestionOutput,
-    metadata: QuestionMapperMetadata = FLIP_TEST_IMPORT_METADATA,
+    metadata: QuestionMapperMetadata,
     source?: MatchedQuestion,
   ): ImportQuestion {
     const optionIds = new Map<string, string>();
 
-    const options = output.options.map(option => {
+    const options: ImportQuestionOption[] = output.options.map(option => {
       const id = randomUUID();
       optionIds.set(option.label, id);
+
+      const sourceOption = source?.question
+        ? this.markdownImageExtractor.extractOptionContent(
+            source.question,
+            option.label,
+          )
+        : null;
+
+      const optionImage = sourceOption?.image ?? null;
+      const optionText = option.text || sourceOption?.text || '';
+
+      if (optionImage) {
+        return {
+          id,
+          type: 'image' as const,
+          en: optionText || null,
+          ml: null,
+          image: optionImage,
+        };
+      }
 
       return {
         id,
         type: 'text' as const,
-        en: option.text,
+        en: optionText,
         ml: null,
       };
     });
@@ -53,9 +73,28 @@ export class QuestionMapper {
       source?.question,
     );
 
-    const explanationContent = this.markdownImageExtractor.extractFromText(
-      output.explanation,
-    );
+    const stemImageUrl = questionContent.image?.url;
+    if (stemImageUrl) {
+      for (let index = 0; index < options.length; index++) {
+        const option = options[index];
+        if (option.type === 'image' && option.image?.url === stemImageUrl) {
+          options[index] = {
+            id: option.id,
+            type: 'text',
+            en: option.en || '',
+            ml: null,
+          };
+        }
+      }
+    }
+
+    const explanationContent =
+      this.markdownImageExtractor.buildExplanationContent(
+        output.explanation,
+        source?.solution,
+      );
+
+    const hasImageOption = options.some(option => option.type === 'image');
 
     return {
       questionText: {
@@ -65,7 +104,7 @@ export class QuestionMapper {
         },
         ml: { text: null, image: null },
       },
-      optionType: 'text',
+      optionType: hasImageOption ? 'image' : 'text',
       options,
       explanation: {
         en: explanationContent.text,

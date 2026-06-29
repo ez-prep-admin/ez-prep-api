@@ -37,42 +37,16 @@ import {
   GetUploadDetailsResponseDto,
   CategorizedUploadsResponseDto,
 } from './dto/parse-question-pdf.dto';
+import {
+  EnrichQuestionsDto,
+  EnrichQuestionsResponseDto,
+} from './dto/enrich-questions.dto';
+import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 
 @ApiTags('imports')
 @Controller('imports')
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
-
-  @Get('debug/parse')
-  @ApiOperation({
-    summary: 'Debug parse Flip test-25 markdown sample',
-    description:
-      'Parses the Mathpix markdown sample in test/test_data, saves the matched question blocks to flip-test-25-parsed.json, and returns the parse result.',
-  })
-  @ApiResponse({
-    status: 200,
-    description:
-      'Parsed document with matched questions, parser warnings, and saved JSON path.',
-  })
-  async debugParseSample() {
-    return this.importService.parseFlipTestSample();
-  }
-
-  @Get('debug/enrich')
-  @SkipTimeout()
-  @ApiOperation({
-    summary: 'Debug enrich parsed Flip test-25 questions with DeepSeek',
-    description:
-      'Reads flip-test-25-parsed.json, sends matched questions to DeepSeek in batch, validates with Zod and business rules, maps to the Question schema shape, and returns Mongo-ready question objects.',
-  })
-  @ApiResponse({
-    status: 200,
-    description:
-      'Mongo-ready questions array plus per-question errors and processing stats.',
-  })
-  async debugEnrichSample() {
-    return this.importService.enrichFlipTestSample();
-  }
 
   @Post('questions')
   @HttpCode(HttpStatus.CREATED)
@@ -229,6 +203,87 @@ export class ImportController {
 
     return {
       message: 'PDF parsed successfully',
+      data: result,
+    };
+  }
+
+  @Post('parse-markdown/:uploadId')
+  @HttpCode(HttpStatus.OK)
+  @SkipTimeout()
+  @ApiOperation({
+    summary: 'Parse markdown into matched question blocks',
+    description:
+      'Fetches Mathpix markdown from S3, detects document structure (LLM), splits into questions/solutions, and returns a chunking preview for the enrich step.',
+  })
+  @ApiParam({
+    name: 'uploadId',
+    description: 'Upload ID with status parsed',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Markdown parsed into matched questions',
+    type: ParseMarkdownResponseDto,
+  })
+  async parseUploadMarkdown(
+    @Param('uploadId') uploadId: string,
+  ): Promise<{ message: string; data: ParseMarkdownResponseDto }> {
+    const result = await this.importService.parseUploadMarkdown(uploadId);
+
+    return {
+      message: 'Markdown parsed successfully',
+      data: result,
+    };
+  }
+
+  @Post('enrich/:uploadId')
+  @HttpCode(HttpStatus.OK)
+  @SkipTimeout()
+  @ApiOperation({
+    summary: 'Enrich an upload with DeepSeek (parse + chunk + LLM)',
+    description:
+      'End-to-end enrichment for an upload: parse markdown, adaptively chunk by token limit, send each chunk to DeepSeek, validate and map to Mongo-ready questions.',
+  })
+  @ApiParam({
+    name: 'uploadId',
+    description: 'Upload ID with markdown available in S3',
+  })
+  @ApiBody({ type: EnrichQuestionsDto, required: false })
+  @ApiResponse({
+    status: 200,
+    description: 'Enriched questions ready for persistence',
+    type: EnrichQuestionsResponseDto,
+  })
+  async enrichUpload(
+    @Param('uploadId') uploadId: string,
+    @Body() dto: EnrichQuestionsDto,
+  ) {
+    const result = await this.importService.enrichUpload(uploadId, dto);
+
+    return {
+      message: 'Questions enriched successfully',
+      data: result,
+    };
+  }
+
+  @Post('enrich')
+  @HttpCode(HttpStatus.OK)
+  @SkipTimeout()
+  @ApiOperation({
+    summary: 'Enrich matched questions with DeepSeek',
+    description:
+      'Accepts matchedQuestions from parse-markdown and runs adaptive chunking + DeepSeek enrichment. Use when you want to inspect parse output before calling the LLM.',
+  })
+  @ApiBody({ type: EnrichQuestionsDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Enriched questions ready for persistence',
+    type: EnrichQuestionsResponseDto,
+  })
+  async enrichQuestions(@Body() dto: EnrichQuestionsDto) {
+    const result = await this.importService.enrichQuestions(dto);
+
+    return {
+      message: 'Questions enriched successfully',
       data: result,
     };
   }

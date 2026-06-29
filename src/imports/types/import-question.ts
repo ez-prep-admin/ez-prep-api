@@ -7,9 +7,10 @@ export const PDF_IMPORT_QUESTION_SOURCE =
 
 export interface ImportQuestionOption {
   id: string;
-  type: 'text';
-  en: string;
+  type: 'text' | 'image';
+  en: string | null;
   ml: null;
+  image?: ImportImageMetadata | null;
 }
 
 export interface ImportQuestionTextLanguage {
@@ -22,7 +23,7 @@ export interface ImportQuestion {
     en: ImportQuestionTextLanguage;
     ml: { text: null; image: null };
   };
-  optionType: 'text';
+  optionType: 'text' | 'image';
   options: ImportQuestionOption[];
   explanation: {
     en: string;
@@ -66,7 +67,7 @@ export interface PersistQuestionsResult {
 
 export interface EnrichError {
   number: number;
-  stage: 'llm' | 'zod' | 'business' | 'mapping';
+  stage: 'llm' | 'zod' | 'business' | 'mapping' | 'image';
   message: string;
 }
 
@@ -77,5 +78,22 @@ export interface EnrichDebugResult {
     total: number;
     success: number;
     failed: number;
+    durationMs?: number;
+  };
+  chunking?: {
+    adaptiveChunking: boolean;
+    chunkCount: number;
+    totalTokens: number;
+    chunks: Array<{
+      chunkIndex: number;
+      questionCount: number;
+      estimatedTokens: number;
+      questionNumbers: number[];
+    }>;
+  };
+  parse?: {
+    fromCache: boolean;
+    parserName: string;
+    matchedCount: number;
   };
 }

@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import {
   S3Client,
   PutObjectCommand,
@@ -395,5 +396,34 @@ export class S3Service {
   generateQuestionUploadKey(_userId: string, filename: string): string {
     const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
     return `question-uploads/pdfs/${sanitized}`;
+  }
+
+  /**
+   * Generate a structured key for parsed question paper markdown
+   * Format: question-uploads/markdowns/{filename}
+   */
+  generateQuestionMarkdownKey(_userId: string, filename: string): string {
+    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    return `question-uploads/markdowns/${sanitized}`;
+  }
+
+  /**
+   * Structured key for imported question images
+   * Format: question-imports/{uploadId}/q{number}/{slot}-{hash}.{ext}
+   */
+  generateImportImageKey(
+    uploadId: string,
+    questionNumber: number,
+    slot: string,
+    extension: string,
+    sourceUrl: string,
+  ): string {
+    const hash = createHash('sha256')
+      .update(sourceUrl)
+      .digest('hex')
+      .slice(0, 12);
+    const safeSlot = slot.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return `question-imports/${safeUploadId}/q${questionNumber}/${safeSlot}-${hash}.${extension}`;
   }
 }

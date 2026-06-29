@@ -19,15 +19,6 @@ import {
 /**
  * Mathpix API Service
  * Handles PDF to Markdown conversion using Mathpix API
- *
- * API Documentation: https://docs.mathpix.com/
- *
- * SETUP REQUIRED:
- * 1. Sign up at https://mathpix.com/
- * 2. Get your APP_ID and APP_KEY from the dashboard
- * 3. Set environment variables:
- *    - MATHPIX_APP_ID=your_app_id
- *    - MATHPIX_APP_KEY=your_app_key
  */
 @Injectable()
 export class MathpixService {
@@ -38,7 +29,6 @@ export class MathpixService {
   private readonly baseUrl = 'https://api.mathpix.com/v3';
 
   constructor(private readonly configService: ConfigService) {
-    // TODO: Set MATHPIX_APP_ID and MATHPIX_APP_KEY in your .env file
     this.appId = this.configService.get<string>('MATHPIX_APP_ID') ?? '';
     this.appKey = this.configService.get<string>('MATHPIX_APP_KEY') ?? '';
 
@@ -94,14 +84,17 @@ export class MathpixService {
     // Step 2: Poll for completion
     const statusResponse = await this.pollForCompletion(pdfId, pollingOptions);
 
-    // Step 3: Extract result
+    // Step 3: Extract result (markdown is downloaded separately from status)
     if (statusResponse.status !== MathpixStatus.COMPLETED) {
       throw new InternalServerErrorException(
         `Mathpix conversion failed: ${statusResponse.error ?? 'Unknown error'}`,
       );
     }
 
-    if (!statusResponse.md) {
+    const markdown =
+      statusResponse.md ?? (await this.downloadResult(pdfId, 'md'));
+
+    if (!markdown) {
       throw new InternalServerErrorException(
         'Mathpix conversion completed but no markdown content returned',
       );
@@ -111,7 +104,7 @@ export class MathpixService {
 
     const result: MathpixConversionResult = {
       pdfId,
-      markdown: statusResponse.md,
+      markdown,
       html: statusResponse.html,
       processingTimeMs,
     };
@@ -136,16 +129,13 @@ export class MathpixService {
     this.validateCredentials();
 
     const payload: MathpixProcessRequest = {
-      src: pdfUrl,
+      url: pdfUrl,
       conversion_formats: {
         md: options.conversionFormats?.md ?? true,
         html: options.conversionFormats?.html ?? false,
         docx: options.conversionFormats?.docx ?? false,
-        tex: options.conversionFormats?.tex ?? false,
+        'tex.zip': options.conversionFormats?.tex ?? false,
       },
-      ocr_languages: options.ocrLanguage ? [options.ocrLanguage] : ['en'],
-      include_images: options.includeImages ?? true,
-      include_latex: options.includeLatex ?? true,
     };
 
     try {
@@ -154,7 +144,15 @@ export class MathpixService {
         payload,
       );
 
-      return response.data;
+      const data = response.data;
+
+      if (data.error || !data.pdf_id) {
+        const message =
+          data.error ?? data.error_info?.message ?? 'No pdf_id returned';
+        throw new BadRequestException(`Mathpix API error: ${message}`);
+      }
+
+      return data;
     } catch (error) {
       this.logger.error(
         '[mathpix] PDF processing request failed',
@@ -168,6 +166,38 @@ export class MathpixService {
 
       throw new InternalServerErrorException(
         'Failed to submit PDF to Mathpix API',
+      );
+    }
+  }
+
+  /**
+   * Download converted result in the requested format
+   */
+  async downloadResult(pdfId: string, format: string): Promise<string> {
+    this.validateCredentials();
+
+    try {
+      const response = await this.client.get<string>(
+        `/pdf/${pdfId}.${format}`,
+        {
+          responseType: 'text',
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error(
+        `[mathpix] Download failed for pdf_id=${pdfId}, format=${format}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      if (axios.isAxiosError(error)) {
+        const message = error.response?.data?.error ?? error.message;
+        throw new BadRequestException(`Mathpix API error: ${message}`);
+      }
+
+      throw new InternalServerErrorException(
+        'Failed to download result from Mathpix API',
       );
     }
   }
@@ -259,7 +289,7 @@ export class MathpixService {
         );
       }
 
-      // Still processing, wait before next poll
+      // received, loaded, split, or legacy processing — still in progress
       await this.sleep(intervalMs);
     }
 

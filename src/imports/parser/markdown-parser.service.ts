@@ -7,8 +7,13 @@ export class MarkdownParserService {
   parse(markdown: string, markers: DocumentMarkers): ParsedDocument {
     const normalized = this.normalize(markdown);
 
+    // Inline solutions: treat the full document as the questions section
     if (!markers.solutionsHeader) {
-      throw new BadRequestException('Solutions header marker is required.');
+      return {
+        rawMarkdown: normalized,
+        questionsSection: normalized,
+        solutionsSection: '',
+      };
     }
 
     const splitIndex = normalized.indexOf(markers.solutionsHeader);

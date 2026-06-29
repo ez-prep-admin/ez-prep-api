@@ -44,12 +44,9 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
   }
 
   /**
-   * Adaptive parser acts as fallback - supports any markdown
-   * Returns true for any input, making it the last resort parser
+   * Adaptive parser supports all markdown formats via AI structure detection.
    */
   supports(_markdown: string): boolean {
-    // Adaptive parser supports any format as fallback
-    // Should be registered last in DocumentParserFactory
     return true;
   }
 
@@ -180,6 +177,16 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
   clearCache(): void {
     this.cachedStructure = null;
     this.logger.debug('[adaptive-parser] Cleared structure cache');
+  }
+
+  /**
+   * Seed cached structure to skip redundant structure-detection LLM calls
+   */
+  seedStructure(structure: DocumentStructure): void {
+    this.cachedStructure = structure;
+    this.logger.debug(
+      `[adaptive-parser] Seeded cached structure (${structure.detectedFormat})`,
+    );
   }
 
   /**

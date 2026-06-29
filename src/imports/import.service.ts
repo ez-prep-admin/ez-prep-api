@@ -5,19 +5,20 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
+import { AdaptiveParserStrategy } from './parser/strategies/adaptive-parser.strategy';
 import { MatchedQuestion } from './types/matched-question';
-import { ParserWarning } from './types/parser-result';
-import { MarkdownParserService } from './parser/markdown-parser.service';
-import { SavedParseResult } from './types/saved-parse-result';
+import { ParserWarning, ParserError } from './types/parser-result';
+import { DocumentStructure } from './types/document-structure';
 import { DeepseekService } from './llm/deepseek.service';
 import { AiOutputValidator } from './validators/ai-output.validator';
 import { BusinessValidator } from './validators/business.validator';
-import { QuestionMapper } from './mapper/question.mapper';
+import {
+  QuestionMapper,
+  QuestionMapperMetadata,
+} from './mapper/question.mapper';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from './config/business-validator.config';
 import {
   EnrichDebugResult,
@@ -35,6 +36,11 @@ import { ImportQuestion } from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import {
+  ImportImageMaterializeError,
+  ImportImageStorageService,
+} from './images/import-image-storage.service';
+import { isPendingImportImage } from './types/import-image-metadata';
 import { S3Service } from '../aws/s3/s3.service';
 import { MathpixService } from '../integrations/mathpix/mathpix.service';
 import {
@@ -52,38 +58,29 @@ import {
   CategorizedUploadsResponseDto,
   UploadMetadataDto,
 } from './dto/parse-question-pdf.dto';
+import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
+import { EnrichQuestionsDto } from './dto/enrich-questions.dto';
 import { randomUUID } from 'crypto';
 
-export interface ParseDebugResult {
+export interface ParseMarkdownResult {
   parserName: string;
-  document: SavedParseResult['document'] & { rawMarkdown?: string };
   matchedQuestions: MatchedQuestion[];
   warnings: ParserWarning[];
+  errors: ParserError[];
   stats: {
     questionCount: number;
     solutionCount: number;
     matchedCount: number;
   };
-  savedTo?: string;
 }
 
 @Injectable()
 export class ImportService {
   private readonly logger = new Logger(ImportService.name);
 
-  private static readonly TEST_DATA_DIR = join(process.cwd(), 'test/test_data');
-  private static readonly FLIP_TEST_MARKDOWN_PATH = join(
-    ImportService.TEST_DATA_DIR,
-    'Flip test-25.md',
-  );
-  private static readonly FLIP_TEST_PARSED_JSON_PATH = join(
-    ImportService.TEST_DATA_DIR,
-    'flip-test-25-parsed.json',
-  );
-
   constructor(
     private readonly documentParserFactory: DocumentParserFactory,
-    private readonly markdownParser: MarkdownParserService,
+    private readonly adaptiveParser: AdaptiveParserStrategy,
     private readonly deepseekService: DeepseekService,
     private readonly aiOutputValidator: AiOutputValidator,
     private readonly businessValidator: BusinessValidator,
@@ -91,6 +88,7 @@ export class ImportService {
     private readonly questionChunker: QuestionChunkerService,
     private readonly persistQuestionValidator: PersistQuestionValidator,
     private readonly questionPersistenceService: QuestionPersistenceService,
+    private readonly importImageStorage: ImportImageStorageService,
     private readonly s3Service: S3Service,
     private readonly mathpixService: MathpixService,
     @InjectModel(QuestionUpload.name)
@@ -99,93 +97,313 @@ export class ImportService {
 
   async parseMarkdown(
     markdown: string,
-    options?: { saveToDisk?: boolean },
-  ): Promise<ParseDebugResult> {
+    options?: { cachedStructure?: DocumentStructure | null },
+  ): Promise<ParseMarkdownResult> {
+    this.adaptiveParser.clearCache();
+
+    if (options?.cachedStructure) {
+      this.adaptiveParser.seedStructure(options.cachedStructure);
+    }
+
     const parser = this.documentParserFactory.getParser(markdown);
-    const document = this.markdownParser.parse(
-      markdown,
-      parser.configuration.markers,
-    );
     const result = await parser.parseWithResult(markdown);
 
-    const response: ParseDebugResult = {
+    if (result.errors.length > 0 && result.data.length === 0) {
+      throw new BadRequestException({
+        message: 'Markdown parsing failed',
+        errors: result.errors,
+      });
+    }
+
+    return {
       parserName: parser.configuration.parserName,
-      document: {
-        questionsSection: document.questionsSection,
-        solutionsSection: document.solutionsSection,
-      },
       matchedQuestions: result.data,
       warnings: result.warnings,
+      errors: result.errors,
       stats: {
         questionCount: result.data.length,
         solutionCount: result.data.filter(item => item.solution).length,
         matchedCount: result.data.filter(item => item.solution).length,
       },
     };
+  }
 
-    if (options?.saveToDisk) {
-      response.savedTo = await this.saveParseResult(response);
+  private async resolveMatchedQuestionsForUpload(
+    uploadId: string,
+    forceReparse = false,
+  ): Promise<ParseMarkdownResult & { fromCache: boolean }> {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (
+      !forceReparse &&
+      upload.matchedQuestionsCache &&
+      upload.matchedQuestionsCache.length > 0
+    ) {
+      this.logger.log(
+        `[parse] Using cached matched questions for upload_id=${uploadId} (${upload.matchedQuestionsCache.length} items, parsed_at=${upload.markdownParsedAt?.toISOString() ?? 'unknown'})`,
+      );
+
+      const matchedQuestions =
+        upload.matchedQuestionsCache as MatchedQuestion[];
+
+      return {
+        parserName: upload.parserName ?? 'adaptive',
+        matchedQuestions,
+        warnings: [],
+        errors: [],
+        stats: {
+          questionCount: matchedQuestions.length,
+          solutionCount: matchedQuestions.filter(item => item.solution).length,
+          matchedCount: matchedQuestions.filter(item => item.solution).length,
+        },
+        fromCache: true,
+      };
     }
 
-    return response;
+    const markdown = await this.getMarkdownContent(uploadId);
+    const cachedStructure = upload.documentStructureCache as unknown as
+      | DocumentStructure
+      | undefined;
+
+    const parsed = await this.parseMarkdown(markdown, {
+      cachedStructure: forceReparse ? null : cachedStructure,
+    });
+
+    await this.saveParseCache(upload, parsed);
+
+    return {
+      ...parsed,
+      fromCache: false,
+    };
   }
 
-  async parseFlipTestSample(): Promise<ParseDebugResult> {
-    const markdown = await readFile(
-      ImportService.FLIP_TEST_MARKDOWN_PATH,
-      'utf-8',
-    );
+  private async saveParseCache(
+    upload: QuestionUploadDocument,
+    parsed: ParseMarkdownResult,
+  ): Promise<void> {
+    upload.parserName = parsed.parserName;
+    upload.matchedQuestionsCache = parsed.matchedQuestions;
+    upload.documentStructureCache = this.adaptiveParser.getCachedStructure() as
+      | unknown
+      | null as Record<string, unknown> | undefined;
+    upload.markdownParsedAt = new Date();
+    upload.questionCount = parsed.matchedQuestions.length;
+    await upload.save();
 
-    return this.parseMarkdown(markdown, { saveToDisk: true });
-  }
-
-  async enrichFlipTestSample(): Promise<EnrichDebugResult> {
-    this.logger.log('[enrich] Loading saved parse result from disk');
-    const saved = await this.loadSavedParseResult();
     this.logger.log(
-      `[enrich] Loaded ${saved.matchedQuestions.length} matched question(s) from ${ImportService.FLIP_TEST_PARSED_JSON_PATH}`,
+      `[parse] Cached ${parsed.matchedQuestions.length} matched question(s) on upload_id=${upload._id.toString()}`,
+    );
+  }
+
+  async parseUploadMarkdown(
+    uploadId: string,
+  ): Promise<ParseMarkdownResponseDto> {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (!upload.markdownS3Key) {
+      throw new BadRequestException(
+        'Markdown not available. Parse the PDF first using POST /imports/parse-pdf/:uploadId',
+      );
+    }
+
+    const markdown = await this.getMarkdownContent(uploadId);
+    const parsed = await this.parseMarkdown(markdown);
+    await this.saveParseCache(upload, parsed);
+
+    const chunkingPreview = this.questionChunker.getChunkingStats(
+      parsed.matchedQuestions,
     );
 
-    return this.enrichMatchedQuestions(saved.matchedQuestions);
+    return {
+      uploadId,
+      parserName: parsed.parserName,
+      matchedQuestions: parsed.matchedQuestions,
+      warnings: parsed.warnings,
+      errors: parsed.errors,
+      stats: parsed.stats,
+      chunkingPreview: {
+        estimatedChunks: chunkingPreview.estimatedChunks,
+        totalTokens: chunkingPreview.totalTokens,
+        avgQuestionsPerChunk: chunkingPreview.avgQuestionsPerChunk,
+        avgTokensPerChunk: chunkingPreview.avgTokensPerChunk,
+        chunks: chunkingPreview.chunks,
+      },
+    };
+  }
+
+  async enrichUpload(
+    uploadId: string,
+    dto: EnrichQuestionsDto = {},
+  ): Promise<EnrichDebugResult> {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (upload.status === 'processing') {
+      throw new ConflictException('This upload is already being enriched');
+    }
+
+    if (!upload.markdownS3Key) {
+      throw new BadRequestException(
+        'Markdown not available. Parse the PDF first using POST /imports/parse-pdf/:uploadId',
+      );
+    }
+
+    try {
+      upload.status = 'processing';
+      upload.errorMessage = undefined;
+      await upload.save();
+
+      const parsed = await this.resolveMatchedQuestionsForUpload(
+        uploadId,
+        dto.forceReparse ?? false,
+      );
+
+      const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
+
+      const result = await this.enrichMatchedQuestions(
+        parsed.matchedQuestions,
+        {
+          adaptiveChunking: dto.adaptiveChunking ?? true,
+          useParallel: dto.useParallel ?? false,
+          maxRetries: dto.maxRetries ?? 3,
+          maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
+          mapperMetadata,
+          uploadId,
+        },
+      );
+
+      upload.questionCount = result.questions.length;
+      upload.status = 'completed';
+      await upload.save();
+
+      return {
+        ...result,
+        parse: {
+          fromCache: parsed.fromCache,
+          parserName: parsed.parserName,
+          matchedCount: parsed.stats.matchedCount,
+        },
+      };
+    } catch (error) {
+      upload.status = 'failed';
+      upload.errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      await upload.save();
+      throw error;
+    }
+  }
+
+  async enrichQuestions(dto: EnrichQuestionsDto): Promise<EnrichDebugResult> {
+    if (!dto.matchedQuestions?.length) {
+      throw new BadRequestException(
+        'matchedQuestions is required. Run POST /imports/parse-markdown/:uploadId first, or use POST /imports/enrich/:uploadId.',
+      );
+    }
+
+    return this.enrichMatchedQuestions(dto.matchedQuestions, {
+      adaptiveChunking: dto.adaptiveChunking ?? true,
+      useParallel: dto.useParallel ?? false,
+      maxRetries: dto.maxRetries ?? 3,
+      maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
+      mapperMetadata: this.buildMapperMetadataFromDto(dto),
+    });
+  }
+
+  private buildMapperMetadataFromUpload(
+    upload: QuestionUploadDocument,
+  ): QuestionMapperMetadata {
+    if (!upload.subject || !upload.topic) {
+      throw new BadRequestException(
+        'Upload is missing subjectId or topicId. Provide them on upload-pdf before enriching.',
+      );
+    }
+
+    return {
+      subjectId: upload.subject.toString(),
+      topicId: upload.topic.toString(),
+      examIds: upload.exams?.map(id => id.toString()) ?? [],
+    };
+  }
+
+  private buildMapperMetadataFromDto(
+    dto: EnrichQuestionsDto,
+  ): QuestionMapperMetadata {
+    if (!dto.subjectId || !dto.topicId) {
+      throw new BadRequestException(
+        'subjectId and topicId are required when using POST /imports/enrich.',
+      );
+    }
+
+    return {
+      subjectId: dto.subjectId,
+      topicId: dto.topicId,
+      examIds: dto.examIds ?? [],
+    };
   }
 
   async enrichMatchedQuestions(
     matchedQuestions: MatchedQuestion[],
-    options?: {
+    options: {
       useParallel?: boolean;
       maxRetries?: number;
       adaptiveChunking?: boolean;
+      maxConcurrentChunks?: number;
+      mapperMetadata: QuestionMapperMetadata;
+      uploadId?: string;
     },
   ): Promise<EnrichDebugResult> {
     const startedAt = Date.now();
     const useParallel = options?.useParallel ?? false;
     const maxRetries = options?.maxRetries ?? 3;
-    const adaptiveChunking = options?.adaptiveChunking ?? false;
+    const adaptiveChunking = options?.adaptiveChunking ?? true;
+    const maxConcurrentChunks = options?.maxConcurrentChunks ?? 2;
 
-    // Use adaptive chunking if enabled, otherwise use legacy chunking
+    this.importImageStorage.clearSessionCache();
+
+    const chunkingOptions = {
+      maxTokensPerChunk: 20000,
+      promptOverheadTokens: 4000,
+    };
+
     const chunks = adaptiveChunking
-      ? this.questionChunker.chunkByTokenLimit(matchedQuestions, {
-          maxTokensPerChunk: 20000,
-        })
+      ? this.questionChunker.chunkByTokenLimit(
+          matchedQuestions,
+          chunkingOptions,
+        )
       : this.questionChunker.chunk(matchedQuestions);
+
+    const chunkingStats = {
+      totalTokens: this.questionChunker.estimateTotalTokens(matchedQuestions),
+      chunks: chunks.map(chunk => ({
+        chunkIndex: chunk.chunkIndex,
+        questionCount: chunk.questions.length,
+        estimatedTokens: chunk.estimatedTokens ?? 0,
+        questionNumbers: chunk.questions.map(question => question.number),
+      })),
+    };
 
     this.logger.log(
       `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking})`,
     );
 
-    if (adaptiveChunking) {
-      const stats = this.questionChunker.getChunkingStats(matchedQuestions);
-      this.logger.log(
-        `[enrich] Chunking stats: ~${stats.totalTokens} tokens, avg ${stats.avgQuestionsPerChunk} questions/chunk, avg ${stats.avgTokensPerChunk} tokens/chunk`,
-      );
-    }
+    this.logger.log(
+      `[enrich] Chunking stats: ~${chunkingStats.totalTokens} tokens across ${chunks.length} chunk(s)`,
+    );
 
-    // Process chunks (parallel or sequential)
     const chunkResults = useParallel
-      ? await this.processChunksParallel(chunks, maxRetries)
-      : await this.processChunksSequential(chunks, maxRetries);
+      ? await this.processChunksParallel(
+          chunks,
+          maxRetries,
+          maxConcurrentChunks,
+          options.mapperMetadata,
+          options.uploadId,
+        )
+      : await this.processChunksSequential(
+          chunks,
+          maxRetries,
+          options.mapperMetadata,
+          options.uploadId,
+        );
 
-    // Aggregate results
     const questions: ImportQuestion[] = [];
     const errors: EnrichError[] = [];
 
@@ -193,6 +411,8 @@ export class ImportService {
       questions.push(...result.questions);
       errors.push(...result.errors);
     }
+
+    errors.sort((left, right) => left.number - right.number);
 
     const summary = {
       total: matchedQuestions.length,
@@ -208,10 +428,12 @@ export class ImportService {
     return {
       questions,
       errors,
-      stats: {
-        total: summary.total,
-        success: summary.success,
-        failed: summary.failed,
+      stats: summary,
+      chunking: {
+        adaptiveChunking,
+        chunkCount: chunks.length,
+        totalTokens: chunkingStats.totalTokens,
+        chunks: chunkingStats.chunks,
       },
     };
   }
@@ -222,6 +444,8 @@ export class ImportService {
   private async processChunksSequential(
     chunks: QuestionChunk[],
     maxRetries: number,
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
   ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
     const results: Array<{
       questions: ImportQuestion[];
@@ -229,7 +453,12 @@ export class ImportService {
     }> = [];
 
     for (const chunk of chunks) {
-      const result = await this.processChunkWithRetry(chunk, maxRetries);
+      const result = await this.processChunkWithRetry(
+        chunk,
+        maxRetries,
+        mapperMetadata,
+        uploadId,
+      );
       results.push(result);
     }
 
@@ -242,36 +471,56 @@ export class ImportService {
   private async processChunksParallel(
     chunks: QuestionChunk[],
     maxRetries: number,
+    maxConcurrentChunks: number,
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
   ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
     this.logger.log(
-      `[enrich] Processing ${chunks.length} chunk(s) in parallel`,
+      `[enrich] Processing ${chunks.length} chunk(s) in parallel (concurrency=${maxConcurrentChunks})`,
     );
 
-    const promises = chunks.map(chunk =>
-      this.processChunkWithRetry(chunk, maxRetries),
-    );
+    const results: Array<{
+      questions: ImportQuestion[];
+      errors: EnrichError[];
+    }> = [];
 
-    const settled = await Promise.allSettled(promises);
+    for (let index = 0; index < chunks.length; index += maxConcurrentChunks) {
+      const batch = chunks.slice(index, index + maxConcurrentChunks);
+      const settled = await Promise.allSettled(
+        batch.map(chunk =>
+          this.processChunkWithRetry(
+            chunk,
+            maxRetries,
+            mapperMetadata,
+            uploadId,
+          ),
+        ),
+      );
 
-    return settled.map((result, index) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        // Handle rejected promise (should not happen with proper error handling in processChunkWithRetry)
+      settled.forEach((result, batchIndex) => {
+        const chunk = batch[batchIndex];
+
+        if (result.status === 'fulfilled') {
+          results.push(result.value);
+          return;
+        }
+
         this.logger.error(
-          `[enrich] Chunk ${index} promise rejected: ${result.reason}`,
+          `[enrich] Chunk ${chunk.chunkIndex} promise rejected: ${result.reason}`,
         );
-        const chunk = chunks[index];
-        return {
+
+        results.push({
           questions: [],
           errors: chunk.questions.map(q => ({
             number: q.number,
             stage: 'llm' as const,
             message: `Chunk processing failed: ${result.reason}`,
           })),
-        };
-      }
-    });
+        });
+      });
+    }
+
+    return results;
   }
 
   /**
@@ -280,6 +529,8 @@ export class ImportService {
   private async processChunkWithRetry(
     chunk: QuestionChunk,
     maxRetries: number,
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
     currentAttempt = 1,
   ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
     const chunkStartedAt = Date.now();
@@ -298,7 +549,12 @@ export class ImportService {
         `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
       );
 
-      return this.processChunkResponse(chunk, rawJson);
+      return await this.processChunkResponse(
+        chunk,
+        rawJson,
+        mapperMetadata,
+        uploadId,
+      );
     } catch (error) {
       const duration = Date.now() - chunkStartedAt;
       const message =
@@ -321,6 +577,8 @@ export class ImportService {
         return this.processChunkWithRetry(
           chunk,
           maxRetries,
+          mapperMetadata,
+          uploadId,
           currentAttempt + 1,
         );
       }
@@ -344,10 +602,12 @@ export class ImportService {
   /**
    * Process successful chunk response
    */
-  private processChunkResponse(
+  private async processChunkResponse(
     chunk: QuestionChunk,
     rawJson: string,
-  ): { questions: ImportQuestion[]; errors: EnrichError[] } {
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
+  ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
     const questions: ImportQuestion[] = [];
     const errors: EnrichError[] = [];
 
@@ -378,7 +638,12 @@ export class ImportService {
           continue;
         }
 
-        const question = this.processBatchItem(output, matched);
+        const question = await this.processBatchItem(
+          output,
+          matched,
+          mapperMetadata,
+          uploadId,
+        );
         questions.push(question);
         this.logger.log(
           `[enrich] Question ${output.number} enriched successfully`,
@@ -418,8 +683,14 @@ export class ImportService {
       const question = questions[index];
 
       try {
+        const withImages = this.questionHasPendingImages(question)
+          ? await this.importImageStorage.materializeQuestionImages(question, {
+              questionNumber: index + 1,
+            })
+          : question;
+
         const validated = await this.persistQuestionValidator.validateQuestion(
-          question,
+          withImages,
           index,
         );
         const created =
@@ -471,10 +742,12 @@ export class ImportService {
     return 'Unknown error';
   }
 
-  private processBatchItem(
+  private async processBatchItem(
     output: AiQuestionBatchItem,
     matched: MatchedQuestion,
-  ) {
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
+  ): Promise<ImportQuestion> {
     const { ...aiOutput } = output;
 
     const validated = this.businessValidator.validate(
@@ -482,38 +755,50 @@ export class ImportService {
       NEET_BUSINESS_VALIDATOR_CONFIG,
     );
 
-    return this.questionMapper.map(validated, undefined, matched);
+    const mapped = this.questionMapper.map(validated, mapperMetadata, matched);
+
+    return this.importImageStorage.materializeQuestionImages(mapped, {
+      uploadId,
+      questionNumber: matched.number,
+    });
   }
 
-  private async saveParseResult(result: ParseDebugResult): Promise<string> {
-    const payload: SavedParseResult = {
-      parserName: result.parserName,
-      document: result.document,
-      matchedQuestions: result.matchedQuestions,
-      warnings: result.warnings,
-      stats: result.stats,
-      savedAt: new Date().toISOString(),
-    };
+  private questionHasPendingImages(question: ImportQuestion): boolean {
+    if (
+      question.questionText.en.image &&
+      isPendingImportImage(question.questionText.en.image)
+    ) {
+      return true;
+    }
 
-    await writeFile(
-      ImportService.FLIP_TEST_PARSED_JSON_PATH,
-      JSON.stringify(payload, null, 2),
-      'utf-8',
+    if (
+      question.explanation.image &&
+      isPendingImportImage(question.explanation.image)
+    ) {
+      return true;
+    }
+
+    return question.options.some(
+      option => option.image && isPendingImportImage(option.image),
     );
-
-    this.logger.log(
-      `Saved parsed output to ${ImportService.FLIP_TEST_PARSED_JSON_PATH}`,
-    );
-
-    return ImportService.FLIP_TEST_PARSED_JSON_PATH;
   }
 
-  private async loadSavedParseResult(): Promise<SavedParseResult> {
-    const raw = await readFile(
-      ImportService.FLIP_TEST_PARSED_JSON_PATH,
-      'utf-8',
+  private async findUploadOrThrow(
+    uploadId: string,
+  ): Promise<QuestionUploadDocument> {
+    if (!Types.ObjectId.isValid(uploadId)) {
+      throw new BadRequestException(`Invalid upload ID: ${uploadId}`);
+    }
+
+    const upload = await this.questionUploadModel.findById(
+      new Types.ObjectId(uploadId),
     );
-    return JSON.parse(raw) as SavedParseResult;
+
+    if (!upload) {
+      throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
+    }
+
+    return upload;
   }
 
   private toEnrichError(number: number, error: unknown): EnrichError {
@@ -532,6 +817,14 @@ export class ImportService {
         number,
         stage: 'business',
         message: details ? `${error.message} ${details}` : error.message,
+      };
+    }
+
+    if (error instanceof ImportImageMaterializeError) {
+      return {
+        number,
+        stage: 'image',
+        message: error.message,
       };
     }
 
@@ -720,7 +1013,7 @@ export class ImportService {
       );
 
       // Save markdown to S3
-      const markdownKey = this.s3Service.generateQuestionUploadKey(
+      const markdownKey = this.s3Service.generateQuestionMarkdownKey(
         upload.uploadedBy?.toString() ?? 'anonymous',
         upload.filename.replace('.pdf', '.md'),
       );

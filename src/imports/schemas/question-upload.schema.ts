@@ -145,10 +145,38 @@ export class QuestionUpload {
   errorMessage?: string;
 
   /**
-   * Number of questions detected (populated after enrichment)
+   * Number of questions detected (populated after markdown parse / enrichment)
    */
   @Prop({ type: Number })
   questionCount?: number;
+
+  /**
+   * Parser used for the last successful markdown parse
+   */
+  @Prop({ type: String })
+  parserName?: string;
+
+  /**
+   * When markdown was last parsed into matched question blocks
+   */
+  @Prop({ type: Date })
+  markdownParsedAt?: Date;
+
+  /**
+   * Cached matched question blocks from parse-markdown (avoids re-parsing on enrich)
+   */
+  @Prop({ type: Object })
+  matchedQuestionsCache?: Array<{
+    number: number;
+    question: string;
+    solution?: string;
+  }>;
+
+  /**
+   * Cached adaptive structure detection result
+   */
+  @Prop({ type: Object })
+  documentStructureCache?: Record<string, unknown>;
 
   /**
    * User who uploaded the file

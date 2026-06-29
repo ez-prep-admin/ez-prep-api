@@ -41,21 +41,14 @@ export interface MathpixProcessOptions {
  */
 export interface MathpixProcessRequest {
   /**
-   * Source file URL or base64 encoded data
+   * HTTP URL where the PDF can be downloaded from
    */
-  src: string;
+  url: string;
 
   /**
    * Conversion formats
    */
   conversion_formats: Record<string, boolean>;
-
-  /**
-   * Additional options
-   */
-  ocr_languages?: string[];
-  include_images?: boolean;
-  include_latex?: boolean;
 }
 
 /**
@@ -65,23 +58,40 @@ export interface MathpixProcessResponse {
   /**
    * Unique PDF ID for tracking
    */
-  pdf_id: string;
+  pdf_id?: string;
 
   /**
    * Status of the processing
    */
-  status: 'processing' | 'completed' | 'error';
+  status?: 'processing' | 'completed' | 'error';
 
   /**
    * Message about the status
    */
   message?: string;
+
+  /**
+   * Error message when submission fails
+   */
+  error?: string;
+
+  /**
+   * Error details
+   */
+  error_info?: {
+    id: string;
+    message: string;
+  };
 }
 
 /**
  * Mathpix PDF status
  */
 export enum MathpixStatus {
+  RECEIVED = 'received',
+  LOADED = 'loaded',
+  SPLIT = 'split',
+  /** @deprecated Mathpix no longer returns this; kept for backward compatibility */
   PROCESSING = 'processing',
   COMPLETED = 'completed',
   ERROR = 'error',

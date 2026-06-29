@@ -73,6 +73,19 @@ export class AwsConfigService {
   }
 
   /**
+   * Dedicated bucket for question/option/explanation images
+   */
+  get s3ImageBucket(): string {
+    const value = this.configService.get<string>('AWS_S3_IMAGE_BUCKET');
+    if (!value) {
+      throw new Error(
+        'AWS_S3_IMAGE_BUCKET is not configured. Please set it in your .env file.',
+      );
+    }
+    return value;
+  }
+
+  /**
    * Validate all required AWS configuration
    * Call this during module initialization
    */
@@ -81,5 +94,6 @@ export class AwsConfigService {
     void this.secretAccessKey;
     void this.region;
     void this.s3Bucket;
+    void this.s3ImageBucket;
   }
 }

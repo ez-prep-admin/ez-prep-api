@@ -48,6 +48,7 @@ export class QuestionPersistenceService {
         type: option.type,
         en: option.en,
         ml: option.ml,
+        image: option.image ?? undefined,
       })),
       explanation: {
         en: question.explanation.en,

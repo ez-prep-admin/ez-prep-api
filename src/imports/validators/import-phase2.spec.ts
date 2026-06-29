@@ -129,6 +129,30 @@ Fig. 19.1`,
     expect(mapped.questionText.en.image?.key).toContain(
       'cropped/example-1.jpg',
     );
+    expect(mapped.options.every(option => option.type === 'text')).toBe(true);
+    expect(mapped.optionType).toBe('text');
+  });
+
+  it('assigns post-option Mathpix diagrams to the question stem, not the last option', () => {
+    const mapped = mapper.map(
+      validOutput,
+      {
+        subjectId: '67ba32f8f8ac13a9bd5e5758',
+        topicId: '6a365809474b7019244e0dbb',
+        examIds: ['67bdd043b24c5bec214287c4'],
+      },
+      questionWithImageSource,
+    );
+
+    expect(mapped.questionText.en.image?.url).toContain(
+      'cdn.mathpix.com/cropped/example-1.jpg',
+    );
+    expect(mapped.questionText.en.text).toContain('Fig. 19.1');
+    expect(mapped.options.every(option => option.type === 'text')).toBe(true);
+    expect(mapped.optionType).toBe('text');
+    expect(
+      mapped.options.find(option => option.en === '4')?.image,
+    ).toBeUndefined();
   });
 
   it('validates batch AI JSON payloads with Zod', () => {

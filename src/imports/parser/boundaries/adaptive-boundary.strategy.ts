@@ -32,7 +32,7 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
         `[adaptive-boundary] Invalid regex pattern: ${structure.questionPattern.regex}`,
         error instanceof Error ? error.stack : String(error),
       );
-      // Fallback to default NEET pattern
+      // Fallback to numbered question pattern
       this.regex = /^(\d+)\.\s(.*)$/;
       this.logger.warn(
         '[adaptive-boundary] Using fallback pattern: ^(\\d+)\\.\\s(.*)$',

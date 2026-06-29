@@ -10,36 +10,118 @@ import {
 } from '../prompt/structure-detection.prompt';
 
 /**
- * Zod schema for validating structure detection response
+ * Zod schema for validating structure detection response.
+ * Uses preprocessing so minor LLM formatting differences don't fail the whole parse.
  */
 const StructureDetectionSchema = z.object({
   questionPattern: z.object({
-    type: z.enum(['numbered', 'labeled', 'hierarchical']),
+    type: z.preprocess(
+      normalizeQuestionPatternType,
+      z.enum(['numbered', 'labeled', 'hierarchical']),
+    ),
     regex: z.string().min(1),
     exampleMatch: z.string().min(1),
-    prefix: z.string().optional(),
+    prefix: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? undefined),
   }),
   solutionPattern: z.object({
-    location: z.enum(['inline', 'separate', 'end-of-page', 'mixed']),
-    marker: z.string().optional(),
-    inlineFormat: z.string().optional(),
-    matchesQuestionNumbering: z.boolean(),
+    location: z.preprocess(
+      normalizeSolutionLocation,
+      z.enum(['inline', 'separate', 'end-of-page', 'mixed']),
+    ),
+    marker: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? undefined),
+    inlineFormat: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? undefined),
+    matchesQuestionNumbering: z.coerce.boolean(),
   }),
   delimiter: z.object({
-    type: z.enum(['heading', 'blank-line', 'marker', 'page-break']),
-    value: z.string(),
-    confidence: z.number().min(0).max(1),
+    type: z.preprocess(
+      normalizeDelimiterType,
+      z.enum(['heading', 'blank-line', 'marker', 'page-break']),
+    ),
+    value: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? ''),
+    confidence: z.coerce.number().min(0).max(1),
   }),
   metadata: z.object({
-    hasDifficulty: z.boolean(),
-    hasMarks: z.boolean(),
-    hasSubjectLabels: z.boolean(),
-    examType: z.string().optional(),
+    hasDifficulty: z.coerce.boolean(),
+    hasMarks: z.coerce.boolean(),
+    hasSubjectLabels: z.coerce.boolean(),
+    examType: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? undefined),
   }),
   detectedFormat: z.string().min(1),
-  confidence: z.number().min(0).max(1),
+  confidence: z.coerce.number().min(0).max(1),
   warnings: z.array(z.string()).optional(),
 });
+
+const KNOWN_SOLUTION_MARKERS = [
+  '## SOLUTIONS',
+  '## Solutions',
+  '## ANSWERS',
+  '## Answers',
+  'Answer Key',
+  'ANSWER KEY',
+  'Answers:',
+] as const;
+
+function normalizeQuestionPatternType(value: unknown): QuestionPatternType {
+  if (typeof value !== 'string') {
+    return 'numbered';
+  }
+
+  const normalized = value.toLowerCase().trim();
+  if (normalized.includes('hierarch')) return 'hierarchical';
+  if (normalized.includes('label')) return 'labeled';
+  return 'numbered';
+}
+
+function normalizeSolutionLocation(value: unknown): SolutionLocation {
+  if (typeof value !== 'string') {
+    return 'separate';
+  }
+
+  const normalized = value.toLowerCase().trim();
+  if (normalized.includes('inline')) return 'inline';
+  if (normalized.includes('mixed')) return 'mixed';
+  if (normalized.includes('page')) return 'end-of-page';
+  if (
+    normalized.includes('separate') ||
+    normalized.includes('section') ||
+    normalized.includes('distinct')
+  ) {
+    return 'separate';
+  }
+
+  return 'separate';
+}
+
+function normalizeDelimiterType(value: unknown): DelimiterType {
+  if (typeof value !== 'string') {
+    return 'blank-line';
+  }
+
+  const normalized = value.toLowerCase().trim();
+  if (normalized.includes('heading')) return 'heading';
+  if (normalized.includes('marker')) return 'marker';
+  if (normalized.includes('page')) return 'page-break';
+  return 'blank-line';
+}
+
+type QuestionPatternType = 'numbered' | 'labeled' | 'hierarchical';
+type SolutionLocation = 'inline' | 'separate' | 'end-of-page' | 'mixed';
+type DelimiterType = 'heading' | 'blank-line' | 'marker' | 'page-break';
 
 @Injectable()
 export class StructureDetectorService {
@@ -124,18 +206,19 @@ export class StructureDetectorService {
 
       // Parse and validate response
       const structure = this.parseAndValidate(content);
+      const enriched = this.enrichStructureFromDocument(markdown, structure);
 
       this.logger.log(
-        `[structure-detector] Structure detected: ${structure.detectedFormat} (confidence=${structure.confidence})`,
+        `[structure-detector] Structure detected: ${enriched.detectedFormat} (confidence=${enriched.confidence})`,
       );
 
-      if (structure.warnings && structure.warnings.length > 0) {
+      if (enriched.warnings && enriched.warnings.length > 0) {
         this.logger.warn(
-          `[structure-detector] Warnings: ${structure.warnings.join('; ')}`,
+          `[structure-detector] Warnings: ${enriched.warnings.join('; ')}`,
         );
       }
 
-      return structure;
+      return enriched;
     } catch (error) {
       this.logger.error(
         `[structure-detector] Failed after ${Date.now() - startedAt}ms`,
@@ -143,6 +226,42 @@ export class StructureDetectorService {
       );
       throw error;
     }
+  }
+
+  private enrichStructureFromDocument(
+    markdown: string,
+    structure: DocumentStructure,
+  ): DocumentStructure {
+    const warnings = [...(structure.warnings ?? [])];
+
+    if (
+      structure.solutionPattern.location === 'separate' &&
+      !structure.solutionPattern.marker
+    ) {
+      const inferredMarker = this.inferSolutionMarker(markdown);
+      if (inferredMarker) {
+        structure.solutionPattern.marker = inferredMarker;
+        warnings.push(
+          `Solution section marker inferred from document: "${inferredMarker}"`,
+        );
+      }
+    }
+
+    if (
+      structure.solutionPattern.location === 'inline' &&
+      !structure.solutionPattern.inlineFormat
+    ) {
+      structure.solutionPattern.inlineFormat = 'Ans:';
+    }
+
+    return {
+      ...structure,
+      warnings: warnings.length > 0 ? warnings : structure.warnings,
+    };
+  }
+
+  private inferSolutionMarker(markdown: string): string | undefined {
+    return KNOWN_SOLUTION_MARKERS.find(marker => markdown.includes(marker));
   }
 
   /**
