@@ -861,13 +861,12 @@ export class ImportService {
       // Generate title if not provided
       const title = dto.title?.trim() || randomUUID();
 
-      // Generate S3 key for the upload
-      const s3Key = userId
-        ? this.s3Service.generateQuestionUploadKey(userId, file.originalname)
-        : this.s3Service.generateQuestionUploadKey(
-            'anonymous',
-            file.originalname,
-          );
+      // Pre-assign upload id so every S3 object gets a unique path, even for duplicate filenames
+      const uploadObjectId = new Types.ObjectId();
+      const s3Key = this.s3Service.generateQuestionUploadKey(
+        uploadObjectId.toString(),
+        file.originalname,
+      );
 
       // Upload to S3
       const uploadResult = await this.s3Service.uploadFile(file.buffer, {
@@ -887,6 +886,7 @@ export class ImportService {
 
       // Create database record
       const upload = new this.questionUploadModel({
+        _id: uploadObjectId,
         title: title,
         filename: file.originalname,
         s3Key: uploadResult.key,
@@ -1014,8 +1014,8 @@ export class ImportService {
 
       // Save markdown to S3
       const markdownKey = this.s3Service.generateQuestionMarkdownKey(
-        upload.uploadedBy?.toString() ?? 'anonymous',
-        upload.filename.replace('.pdf', '.md'),
+        upload._id.toString(),
+        upload.filename.replace(/\.pdf$/i, '.md'),
       );
       const markdownBuffer = Buffer.from(conversionResult.markdown, 'utf-8');
 
