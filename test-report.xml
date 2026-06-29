@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/pdf-upload-file.validator.spec.ts">
-    <testCase name="PdfUploadFileValidator accepts a valid PDF buffer with application/pdf mimetype" duration="2"/>
-    <testCase name="PdfUploadFileValidator rejects files without a buffer" duration="0"/>
-    <testCase name="PdfUploadFileValidator rejects non-PDF mimetypes even when buffer looks like PDF" duration="0"/>
-    <testCase name="PdfUploadFileValidator rejects buffers missing the %PDF header" duration="0"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/aws/s3/s3.service.spec.ts">
+    <testCase name="S3Service key generation scopes PDF keys under a unique upload id" duration="2"/>
+    <testCase name="S3Service key generation scopes markdown keys under the upload id" duration="0"/>
+    <testCase name="S3Service key generation generates unique import image keys from upload and image ids" duration="0"/>
   </file>
 </testExecutions>

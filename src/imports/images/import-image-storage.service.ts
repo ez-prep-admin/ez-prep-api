@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import axios from 'axios';
 import { S3Service } from '../../aws/s3/s3.service';
 import { AwsConfigService } from '../../aws/config/aws.config';
@@ -130,46 +131,38 @@ export class ImportImageStorageService {
       return cached;
     }
 
-    const uploadId = context.uploadId ?? 'standalone';
+    const storageUploadId = context.uploadId ?? randomUUID();
+    const imageId = randomUUID();
     const extension = this.inferExtension(sourceUrl, image.contentType);
     const key = this.s3Service.generateImportImageKey(
-      uploadId,
-      context.questionNumber,
-      slot,
+      storageUploadId,
+      imageId,
       extension,
-      sourceUrl,
     );
 
-    let size = image.size;
+    const buffer = await this.downloadImage(sourceUrl);
+    const size = buffer.length;
 
-    if (!(await this.s3Service.objectExists(key, this.imageBucket))) {
-      const buffer = await this.downloadImage(sourceUrl);
-      size = buffer.length;
+    await this.s3Service.uploadFile(buffer, {
+      key,
+      bucket: this.imageBucket,
+      contentType: image.contentType ?? this.inferContentType(extension),
+      metadata: {
+        sourceUrl,
+        uploadId: storageUploadId,
+        imageId,
+        questionNumber: String(context.questionNumber),
+        slot,
+      },
+      tags: {
+        type: 'import-image',
+        source: 'mathpix',
+      },
+    });
 
-      await this.s3Service.uploadFile(buffer, {
-        key,
-        bucket: this.imageBucket,
-        contentType: image.contentType ?? this.inferContentType(extension),
-        metadata: {
-          sourceUrl,
-          uploadId,
-          questionNumber: String(context.questionNumber),
-          slot,
-        },
-        tags: {
-          type: 'import-image',
-          source: 'mathpix',
-        },
-      });
-
-      this.logger.log(
-        `[import-image] Uploaded ${key} (${size} bytes) for question ${context.questionNumber}`,
-      );
-    } else {
-      this.logger.debug(
-        `[import-image] Reusing existing object ${key} for question ${context.questionNumber}`,
-      );
-    }
+    this.logger.log(
+      `[import-image] Uploaded ${key} (${size} bytes) for question ${context.questionNumber}`,
+    );
 
     const stored = await this.buildStoredMetadata(
       key,

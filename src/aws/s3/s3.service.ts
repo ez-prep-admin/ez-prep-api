@@ -4,7 +4,6 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { createHash } from 'crypto';
 import {
   S3Client,
   PutObjectCommand,
@@ -388,42 +387,44 @@ export class S3Service {
 
   /**
    * Generate a structured key for question paper uploads
-   * Format: question-uploads/pdfs/{filename}
-   * @param userId User ID who uploaded the file
-   * @param filename Original filename
-   * @returns Generated S3 key
+   * Format: question-uploads/pdfs/{uploadId}/{filename}
    */
-  generateQuestionUploadKey(_userId: string, filename: string): string {
-    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    return `question-uploads/pdfs/${sanitized}`;
+  generateQuestionUploadKey(uploadId: string, filename: string): string {
+    const safeUploadId = this.sanitizePathSegment(uploadId);
+    const sanitized = this.sanitizeFilename(filename);
+    return `question-uploads/pdfs/${safeUploadId}/${sanitized}`;
   }
 
   /**
    * Generate a structured key for parsed question paper markdown
-   * Format: question-uploads/markdowns/{filename}
+   * Format: question-uploads/markdowns/{uploadId}/{filename}
    */
-  generateQuestionMarkdownKey(_userId: string, filename: string): string {
-    const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    return `question-uploads/markdowns/${sanitized}`;
+  generateQuestionMarkdownKey(uploadId: string, filename: string): string {
+    const safeUploadId = this.sanitizePathSegment(uploadId);
+    const sanitized = this.sanitizeFilename(filename);
+    return `question-uploads/markdowns/${safeUploadId}/${sanitized}`;
   }
 
   /**
    * Structured key for imported question images
-   * Format: question-imports/{uploadId}/q{number}/{slot}-{hash}.{ext}
+   * Format: question-imports/{uploadId}/{imageId}.{ext}
    */
   generateImportImageKey(
     uploadId: string,
-    questionNumber: number,
-    slot: string,
+    imageId: string,
     extension: string,
-    sourceUrl: string,
   ): string {
-    const hash = createHash('sha256')
-      .update(sourceUrl)
-      .digest('hex')
-      .slice(0, 12);
-    const safeSlot = slot.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeUploadId = uploadId.replace(/[^a-zA-Z0-9_-]/g, '_');
-    return `question-imports/${safeUploadId}/q${questionNumber}/${safeSlot}-${hash}.${extension}`;
+    const safeUploadId = this.sanitizePathSegment(uploadId);
+    const safeImageId = this.sanitizePathSegment(imageId);
+    const safeExt = extension.replace(/[^a-zA-Z0-9]/g, '') || 'jpg';
+    return `question-imports/${safeUploadId}/${safeImageId}.${safeExt}`;
+  }
+
+  private sanitizeFilename(filename: string): string {
+    return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private sanitizePathSegment(segment: string): string {
+    return segment.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
 }
