@@ -34,7 +34,9 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
       );
       // Fallback to default NEET pattern
       this.regex = /^(\d+)\.\s(.*)$/;
-      this.logger.warn('[adaptive-boundary] Using fallback pattern: ^(\\d+)\\.\\s(.*)$');
+      this.logger.warn(
+        '[adaptive-boundary] Using fallback pattern: ^(\\d+)\\.\\s(.*)$',
+      );
     }
   }
 
@@ -45,7 +47,9 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
    */
   isQuestionStart(line: string): boolean {
     if (!this.regex) {
-      throw new Error('AdaptiveBoundaryStrategy not initialized. Call initialize() first.');
+      throw new Error(
+        'AdaptiveBoundaryStrategy not initialized. Call initialize() first.',
+      );
     }
 
     return this.regex.test(line.trim());
@@ -58,7 +62,9 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
    */
   parseQuestionStart(line: string): ParsedQuestionStart | null {
     if (!this.regex || !this.structure) {
-      throw new Error('AdaptiveBoundaryStrategy not initialized. Call initialize() first.');
+      throw new Error(
+        'AdaptiveBoundaryStrategy not initialized. Call initialize() first.',
+      );
     }
 
     const trimmedLine = line.trim();

@@ -38,7 +38,9 @@ export class QuestionChunkerService {
   /**
    * Default chunking configuration
    */
-  private readonly defaultOptions: Required<Omit<ChunkingOptions, 'fixedChunkSize'>> = {
+  private readonly defaultOptions: Required<
+    Omit<ChunkingOptions, 'fixedChunkSize'>
+  > = {
     maxTokensPerChunk: 20000,
     minQuestionsPerChunk: 10,
     maxQuestionsPerChunk: 100,
@@ -46,11 +48,11 @@ export class QuestionChunkerService {
 
   /**
    * Splits matched questions into chunks for LLM calls.
-   * 
+   *
    * @param questions Array of matched questions to chunk
    * @param chunkSize Legacy parameter for fixed chunk size (default: all questions)
    * @returns Array of question chunks with metadata
-   * 
+   *
    * @deprecated Use chunkByTokenLimit() for adaptive chunking
    */
   chunk(
@@ -82,7 +84,7 @@ export class QuestionChunkerService {
 
   /**
    * Chunk questions adaptively based on estimated token count
-   * 
+   *
    * @param questions Array of matched questions to chunk
    * @param options Chunking configuration options
    * @returns Array of question chunks optimized for token limits
@@ -168,7 +170,7 @@ export class QuestionChunkerService {
   /**
    * Estimate token count for a text string
    * Uses rough approximation: characters / 4
-   * 
+   *
    * @param text Text to estimate tokens for
    * @returns Estimated number of tokens
    */
@@ -182,7 +184,7 @@ export class QuestionChunkerService {
 
   /**
    * Calculate total estimated tokens for all questions
-   * 
+   *
    * @param questions Array of matched questions
    * @returns Total estimated token count
    */
@@ -195,7 +197,7 @@ export class QuestionChunkerService {
 
   /**
    * Get chunking statistics for a set of questions
-   * 
+   *
    * @param questions Array of matched questions
    * @param options Chunking configuration
    * @returns Statistics about how questions would be chunked
@@ -219,13 +221,9 @@ export class QuestionChunkerService {
       totalTokens,
       estimatedChunks: chunks.length,
       avgQuestionsPerChunk:
-        chunks.length > 0
-          ? Math.round(totalQuestions / chunks.length)
-          : 0,
+        chunks.length > 0 ? Math.round(totalQuestions / chunks.length) : 0,
       avgTokensPerChunk:
-        chunks.length > 0
-          ? Math.round(totalTokens / chunks.length)
-          : 0,
+        chunks.length > 0 ? Math.round(totalTokens / chunks.length) : 0,
     };
   }
 }

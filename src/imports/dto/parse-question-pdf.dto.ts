@@ -48,13 +48,15 @@ export class ParseQuestionPdfResponseDto {
   mathpixPdfId: string;
 
   @ApiProperty({
-    description: 'Markdown content extracted from PDF (returned in immediate response only, not stored in database for space efficiency)',
+    description:
+      'Markdown content extracted from PDF (returned in immediate response only, not stored in database for space efficiency)',
   })
   markdown: string;
 
   @ApiPropertyOptional({
-    description: 'S3 key where markdown is saved (use this to retrieve markdown in future requests)',
-    example: 'question-uploads/anonymous/2023-06-29/markdown/1688035200000-neet_2023_physics.md',
+    description:
+      'S3 key where markdown is saved (use this to retrieve markdown in future requests)',
+    example: 'question-uploads/markdowns/neet_2023_physics.md',
   })
   markdownS3Key?: string;
 
@@ -113,7 +115,14 @@ export class GetUploadDetailsResponseDto {
 
   @ApiProperty({
     description: 'Upload status',
-    enum: ['uploaded', 'parsing', 'parsed', 'processing', 'completed', 'failed'],
+    enum: [
+      'uploaded',
+      'parsing',
+      'parsed',
+      'processing',
+      'completed',
+      'failed',
+    ],
   })
   status: string;
 
@@ -139,7 +148,8 @@ export class GetUploadDetailsResponseDto {
   difficultyLevel?: string;
 
   @ApiPropertyOptional({
-    description: 'S3 key for markdown file (if parsed). To retrieve markdown content, download from S3 using this key.',
+    description:
+      'S3 key for markdown file (if parsed). To retrieve markdown content, download from S3 using this key.',
   })
   markdownS3Key?: string;
 
@@ -189,7 +199,14 @@ export class UploadMetadataDto {
 
   @ApiProperty({
     description: 'Upload status',
-    enum: ['uploaded', 'parsing', 'parsed', 'processing', 'completed', 'failed'],
+    enum: [
+      'uploaded',
+      'parsing',
+      'parsed',
+      'processing',
+      'completed',
+      'failed',
+    ],
   })
   status: string;
 

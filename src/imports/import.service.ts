@@ -1,4 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { readFile, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { InjectModel } from '@nestjs/mongoose';
@@ -46,7 +52,7 @@ import {
   CategorizedUploadsResponseDto,
   UploadMetadataDto,
 } from './dto/parse-question-pdf.dto';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 export interface ParseDebugResult {
   parserName: string;
@@ -217,7 +223,10 @@ export class ImportService {
     chunks: QuestionChunk[],
     maxRetries: number,
   ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
-    const results: Array<{ questions: ImportQuestion[]; errors: EnrichError[] }> = [];
+    const results: Array<{
+      questions: ImportQuestion[];
+      errors: EnrichError[];
+    }> = [];
 
     for (const chunk of chunks) {
       const result = await this.processChunkWithRetry(chunk, maxRetries);
@@ -234,7 +243,9 @@ export class ImportService {
     chunks: QuestionChunk[],
     maxRetries: number,
   ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
-    this.logger.log(`[enrich] Processing ${chunks.length} chunk(s) in parallel`);
+    this.logger.log(
+      `[enrich] Processing ${chunks.length} chunk(s) in parallel`,
+    );
 
     const promises = chunks.map(chunk =>
       this.processChunkWithRetry(chunk, maxRetries),
@@ -272,9 +283,7 @@ export class ImportService {
     currentAttempt = 1,
   ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
     const chunkStartedAt = Date.now();
-    const numbers = chunk.questions
-      .map(question => question.number)
-      .join(', ');
+    const numbers = chunk.questions.map(question => question.number).join(', ');
 
     this.logger.log(
       `[enrich] Chunk ${chunk.chunkIndex} (attempt ${currentAttempt}/${maxRetries}): sending ${chunk.questions.length} question(s) to DeepSeek [${numbers}]`,
@@ -301,12 +310,19 @@ export class ImportService {
 
       // Retry with exponential backoff if attempts remaining
       if (currentAttempt < maxRetries) {
-        const backoffMs = Math.min(1000 * Math.pow(2, currentAttempt - 1), 10000);
+        const backoffMs = Math.min(
+          1000 * Math.pow(2, currentAttempt - 1),
+          10000,
+        );
         this.logger.log(
           `[enrich] Chunk ${chunk.chunkIndex}: retrying after ${backoffMs}ms backoff`,
         );
         await this.sleep(backoffMs);
-        return this.processChunkWithRetry(chunk, maxRetries, currentAttempt + 1);
+        return this.processChunkWithRetry(
+          chunk,
+          maxRetries,
+          currentAttempt + 1,
+        );
       }
 
       // All retries exhausted, return errors for all questions in chunk
@@ -338,9 +354,7 @@ export class ImportService {
     const batchOutputs = this.aiOutputValidator
       .validateBatch(rawJson)
       .sort((left, right) => left.number - right.number);
-    const returnedNumbers = new Set(
-      batchOutputs.map(output => output.number),
-    );
+    const returnedNumbers = new Set(batchOutputs.map(output => output.number));
 
     // Check for missing questions in LLM response
     for (const matched of chunk.questions) {
@@ -393,7 +407,9 @@ export class ImportService {
     const questions =
       this.persistQuestionValidator.validateQuestionsPayload(payload);
 
-    this.logger.log(`[persist] Starting import of ${questions.length} question(s)`);
+    this.logger.log(
+      `[persist] Starting import of ${questions.length} question(s)`,
+    );
 
     const saved: PersistQuestionsResult['saved'] = [];
     const errors: PersistQuestionsResult['errors'] = [];
@@ -419,7 +435,9 @@ export class ImportService {
       } catch (error) {
         const message = this.toPersistErrorMessage(error);
         errors.push({ index, message });
-        this.logger.error(`[persist] Question at index ${index} failed: ${message}`);
+        this.logger.error(
+          `[persist] Question at index ${index} failed: ${message}`,
+        );
       }
     }
 
@@ -457,7 +475,7 @@ export class ImportService {
     output: AiQuestionBatchItem,
     matched: MatchedQuestion,
   ) {
-    const { number: _number, ...aiOutput } = output;
+    const { ...aiOutput } = output;
 
     const validated = this.businessValidator.validate(
       aiOutput,
@@ -542,14 +560,21 @@ export class ImportService {
       `[upload-pdf] Starting upload: ${file.originalname} (${file.size} bytes)`,
     );
 
+    if (!file.buffer?.length) {
+      throw new BadRequestException('Uploaded file is empty or unreadable');
+    }
+
     try {
       // Generate title if not provided
-      const title = dto.title?.trim() || uuidv4();
+      const title = dto.title?.trim() || randomUUID();
 
       // Generate S3 key for the upload
       const s3Key = userId
         ? this.s3Service.generateQuestionUploadKey(userId, file.originalname)
-        : this.s3Service.generateQuestionUploadKey('anonymous', file.originalname);
+        : this.s3Service.generateQuestionUploadKey(
+            'anonymous',
+            file.originalname,
+          );
 
       // Upload to S3
       const uploadResult = await this.s3Service.uploadFile(file.buffer, {
@@ -581,7 +606,9 @@ export class ImportService {
         topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
         exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
         difficultyLevel: dto.difficultyLevel,
-        metadata: dto.metadata ? new Map(Object.entries(dto.metadata)) : undefined,
+        metadata: dto.metadata
+          ? new Map(Object.entries(dto.metadata))
+          : undefined,
         uploadedBy: userId ? new Types.ObjectId(userId) : undefined,
         source: 'PDF_UPLOAD',
       });
@@ -627,6 +654,10 @@ export class ImportService {
 
     this.logger.log(`[parse-pdf] Starting parse for upload_id=${uploadId}`);
 
+    if (!Types.ObjectId.isValid(uploadId)) {
+      throw new BadRequestException(`Invalid upload ID: ${uploadId}`);
+    }
+
     // Find upload record
     const upload = await this.questionUploadModel.findById(
       new Types.ObjectId(uploadId),
@@ -637,46 +668,42 @@ export class ImportService {
     }
 
     if (upload.status === 'parsing') {
-      throw new Error('This PDF is already being parsed');
+      throw new ConflictException('This PDF is already being parsed');
+    }
+
+    if (upload.status === 'parsed') {
+      throw new ConflictException(
+        'This PDF has already been parsed. Upload a new file to parse again.',
+      );
     }
 
     try {
       // Update status to parsing
       upload.status = 'parsing';
       upload.parsingStartedAt = new Date();
+      upload.errorMessage = undefined;
       await upload.save();
 
       this.logger.log(
-        `[parse-pdf] Fetching PDF from S3: ${upload.s3Key} (bucket=${upload.s3Bucket})`,
+        `[parse-pdf] Generating presigned URL for S3 object: ${upload.s3Key} (bucket=${upload.s3Bucket})`,
       );
 
-      // Download PDF from S3
-      const pdfData = await this.s3Service.downloadFile(
+      const presigned = await this.s3Service.getPresignedUrl(
         upload.s3Key,
         upload.s3Bucket,
+        {
+          expiresIn: 3600,
+          responseContentType: 'application/pdf',
+        },
       );
 
       this.logger.log(
-        `[parse-pdf] PDF downloaded: ${pdfData.contentLength} bytes`,
-      );
-
-      // Upload to S3 with public access for Mathpix (temporary)
-      const tempKey = `temp/${Date.now()}-${upload.filename}`;
-      const tempUploadResult = await this.s3Service.uploadFile(pdfData.body, {
-        key: tempKey,
-        contentType: 'application/pdf',
-        acl: 'public-read', // Make temporarily public for Mathpix
-      });
-
-      const pdfUrl = tempUploadResult.location!;
-
-      this.logger.log(
-        `[parse-pdf] Temporary public URL created: ${pdfUrl}`,
+        `[parse-pdf] Presigned URL created (expires at ${presigned.expiresAt.toISOString()})`,
       );
 
       // Convert using Mathpix
       const conversionResult = await this.mathpixService.convertPdfToMarkdown(
-        pdfUrl,
+        presigned.url,
         {
           includeImages: true,
           includeLatex: true,
@@ -692,29 +719,31 @@ export class ImportService {
         `[parse-pdf] Mathpix conversion completed: pdf_id=${conversionResult.pdfId}, time=${conversionResult.processingTimeMs}ms`,
       );
 
-      // Clean up temporary file
-      await this.s3Service.deleteFile(tempKey);
-      this.logger.log(`[parse-pdf] Temporary file deleted: ${tempKey}`);
-
       // Save markdown to S3
-      const markdownKey = `question-uploads/${userId ?? 'anonymous'}/markdown/${Date.now()}-${upload.filename.replace('.pdf', '.md')}`;
+      const markdownKey = this.s3Service.generateQuestionUploadKey(
+        upload.uploadedBy?.toString() ?? 'anonymous',
+        upload.filename.replace('.pdf', '.md'),
+      );
       const markdownBuffer = Buffer.from(conversionResult.markdown, 'utf-8');
-      
-      const markdownUploadResult = await this.s3Service.uploadFile(markdownBuffer, {
-        key: markdownKey,
-        contentType: 'text/markdown',
-        metadata: {
-          originalPdfKey: upload.s3Key,
-          mathpixPdfId: conversionResult.pdfId,
-          title: upload.title,
-          uploadId: upload._id.toString(),
+
+      const markdownUploadResult = await this.s3Service.uploadFile(
+        markdownBuffer,
+        {
+          key: markdownKey,
+          contentType: 'text/markdown',
+          metadata: {
+            originalPdfKey: upload.s3Key,
+            mathpixPdfId: conversionResult.pdfId,
+            title: upload.title,
+            uploadId: upload._id.toString(),
+          },
+          tags: {
+            type: 'markdown',
+            source: 'mathpix',
+            pdfUploadId: upload._id.toString(),
+          },
         },
-        tags: {
-          type: 'markdown',
-          source: 'mathpix',
-          pdfUploadId: upload._id.toString(),
-        },
-      });
+      );
 
       this.logger.log(
         `[parse-pdf] Markdown saved to S3: ${markdownUploadResult.key}`,
@@ -766,6 +795,10 @@ export class ImportService {
   async getUploadDetails(
     uploadId: string,
   ): Promise<GetUploadDetailsResponseDto> {
+    if (!Types.ObjectId.isValid(uploadId)) {
+      throw new BadRequestException(`Invalid upload ID: ${uploadId}`);
+    }
+
     const upload = await this.questionUploadModel.findById(
       new Types.ObjectId(uploadId),
     );
@@ -819,16 +852,18 @@ export class ImportService {
 
     // Count parsed and unparsed for pagination
     const [parsedCount, unparsedCount] = await Promise.all([
-      this.questionUploadModel.countDocuments({ 
-        status: { $in: ['parsed', 'processing', 'completed'] } 
+      this.questionUploadModel.countDocuments({
+        status: { $in: ['parsed', 'processing', 'completed'] },
       }),
-      this.questionUploadModel.countDocuments({ 
-        status: { $in: ['uploaded', 'parsing', 'failed'] } 
+      this.questionUploadModel.countDocuments({
+        status: { $in: ['uploaded', 'parsing', 'failed'] },
       }),
     ]);
 
     // Helper function to map upload to metadata DTO
-    const mapToMetadata = (upload: QuestionUploadDocument): UploadMetadataDto => {
+    const mapToMetadata = (
+      upload: QuestionUploadDocument,
+    ): UploadMetadataDto => {
       const uploadObj = upload.toObject();
       return {
         id: uploadObj.id,
@@ -854,7 +889,7 @@ export class ImportService {
 
     for (const upload of allUploads) {
       const metadata = mapToMetadata(upload);
-      
+
       // PDFs with status 'parsed', 'processing', or 'completed' have markdown
       if (['parsed', 'processing', 'completed'].includes(upload.status)) {
         parsed.push(metadata);
@@ -884,6 +919,10 @@ export class ImportService {
    * @returns Markdown content as string
    */
   async getMarkdownContent(uploadId: string): Promise<string> {
+    if (!Types.ObjectId.isValid(uploadId)) {
+      throw new BadRequestException(`Invalid upload ID: ${uploadId}`);
+    }
+
     const upload = await this.questionUploadModel.findById(
       new Types.ObjectId(uploadId),
     );
@@ -893,7 +932,7 @@ export class ImportService {
     }
 
     if (!upload.markdownS3Key) {
-      throw new Error(
+      throw new BadRequestException(
         'Markdown not yet parsed. Please parse the PDF first using /imports/parse-pdf/:uploadId',
       );
     }

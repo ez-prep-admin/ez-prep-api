@@ -70,7 +70,6 @@ export class S3Service {
     const bucket = options.bucket ?? this.defaultBucket;
     const key = options.key ?? this.generateKey();
     const contentType = options.contentType ?? 'application/octet-stream';
-    const acl = options.acl ?? 'private';
 
     this.logger.log(`[s3] Uploading file: ${key} to bucket: ${bucket}`);
 
@@ -80,7 +79,7 @@ export class S3Service {
         Key: key,
         Body: file,
         ContentType: contentType,
-        ACL: acl,
+        ...(options.acl ? { ACL: options.acl } : {}),
         Metadata: options.metadata,
         Tagging: options.tags
           ? Object.entries(options.tags)
@@ -100,7 +99,7 @@ export class S3Service {
         contentType,
         uploadedAt: new Date(),
         location:
-          acl === 'public-read'
+          options.acl === 'public-read'
             ? `https://${bucket}.s3.${this.region}.amazonaws.com/${key}`
             : undefined,
       };
@@ -135,7 +134,9 @@ export class S3Service {
   ): Promise<S3DownloadResult> {
     const targetBucket = bucket ?? this.defaultBucket;
 
-    this.logger.log(`[s3] Downloading file: ${key} from bucket: ${targetBucket}`);
+    this.logger.log(
+      `[s3] Downloading file: ${key} from bucket: ${targetBucket}`,
+    );
 
     try {
       const command = new GetObjectCommand({
@@ -197,7 +198,7 @@ export class S3Service {
   async deleteFile(
     key: string,
     bucket?: string,
-    options: S3DeleteOptions = {},
+    _options?: S3DeleteOptions,
   ): Promise<S3DeleteResult> {
     const targetBucket = bucket ?? this.defaultBucket;
 
@@ -361,7 +362,10 @@ export class S3Service {
       await this.s3Client.send(command);
       return true;
     } catch (error: any) {
-      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+      if (
+        error.name === 'NotFound' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
         return false;
       }
       throw error;
@@ -383,15 +387,13 @@ export class S3Service {
 
   /**
    * Generate a structured key for question paper uploads
-   * Format: question-uploads/{userId}/{date}/{filename}
+   * Format: question-uploads/pdfs/{filename}
    * @param userId User ID who uploaded the file
    * @param filename Original filename
    * @returns Generated S3 key
    */
-  generateQuestionUploadKey(userId: string, filename: string): string {
-    const date = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  generateQuestionUploadKey(_userId: string, filename: string): string {
     const sanitized = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const timestamp = Date.now();
-    return `question-uploads/${userId}/${date}/${timestamp}-${sanitized}`;
+    return `question-uploads/pdfs/${sanitized}`;
   }
 }

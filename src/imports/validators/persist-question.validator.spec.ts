@@ -1,5 +1,8 @@
 import { ValidationPipe } from '@nestjs/common';
-import { ImportQuestionSchema, PersistQuestionsBodySchema } from './import-question.schema';
+import {
+  ImportQuestionSchema,
+  PersistQuestionsBodySchema,
+} from './import-question.schema';
 import {
   ImportQuestionInput,
   PDF_IMPORT_QUESTION_SOURCE,
@@ -120,8 +123,8 @@ describe('Persist question validation', () => {
       metatype: Object,
     });
 
-    expect(PersistQuestionsBodySchema.parse(parsedWithoutDto).questions).toHaveLength(
-      1,
-    );
+    expect(
+      PersistQuestionsBodySchema.parse(parsedWithoutDto).questions,
+    ).toHaveLength(1);
   });
 });

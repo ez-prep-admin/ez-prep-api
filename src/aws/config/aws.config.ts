@@ -77,9 +77,9 @@ export class AwsConfigService {
    * Call this during module initialization
    */
   validateConfig(): void {
-    this.accessKeyId;
-    this.secretAccessKey;
-    this.region;
-    this.s3Bucket;
+    void this.accessKeyId;
+    void this.secretAccessKey;
+    void this.region;
+    void this.s3Bucket;
   }
 }

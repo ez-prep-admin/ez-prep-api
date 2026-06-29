@@ -10,7 +10,11 @@ import { QuestionBoundaryStrategy } from '../boundaries/question-boundary.strate
 import { StructureDetectorService } from '../structure-detector.service';
 import { DocumentStructure } from '../../types/document-structure';
 import { MatchedQuestion } from '../../types/matched-question';
-import { ParserResult } from '../../types/parser-result';
+import {
+  ParserError,
+  ParserResult,
+  ParserWarning,
+} from '../../types/parser-result';
 
 /**
  * Adaptive parser strategy that uses AI-powered structure detection
@@ -43,7 +47,7 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
    * Adaptive parser acts as fallback - supports any markdown
    * Returns true for any input, making it the last resort parser
    */
-  supports(markdown: string): boolean {
+  supports(_markdown: string): boolean {
     // Adaptive parser supports any format as fallback
     // Should be registered last in DocumentParserFactory
     return true;
@@ -103,19 +107,20 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
         solutions,
       );
 
-      // Add structure detection warnings if any
-      const allWarnings = [
-        ...warnings,
-        ...(structure.warnings ?? []).map(
-          w => `[Structure Detection] ${w}`,
-        ),
-      ];
+      const allWarnings: ParserWarning[] = [...warnings];
 
-      // Add low confidence warning
+      for (const warning of structure.warnings ?? []) {
+        allWarnings.push({
+          code: 'STRUCTURE_DETECTION',
+          message: `[Structure Detection] ${warning}`,
+        });
+      }
+
       if (structure.confidence < 0.7) {
-        allWarnings.push(
-          `Low confidence in structure detection (${structure.confidence.toFixed(2)}). Results may be inaccurate.`,
-        );
+        allWarnings.push({
+          code: 'LOW_CONFIDENCE',
+          message: `Low confidence in structure detection (${structure.confidence.toFixed(2)}). Results may be inaccurate.`,
+        });
       }
 
       return {
@@ -129,12 +134,15 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
         error instanceof Error ? error.stack : String(error),
       );
 
+      const parseError: ParserError = {
+        code: 'ADAPTIVE_PARSE_FAILED',
+        message: `Adaptive parsing failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+
       return {
         data: [],
         warnings: [],
-        errors: [
-          `Adaptive parsing failed: ${error instanceof Error ? error.message : String(error)}`,
-        ],
+        errors: [parseError],
       };
     }
   }

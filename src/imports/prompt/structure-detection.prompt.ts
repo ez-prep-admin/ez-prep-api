@@ -91,17 +91,13 @@ export function extractMarkdownSample(
     targetQuestions?: number;
   } = {},
 ): string {
-  const {
-    maxLines = 200,
-    maxChars = 5000,
-    targetQuestions = 5,
-  } = options;
+  const { maxLines = 200, maxChars = 5000, targetQuestions = 5 } = options;
 
   const lines = markdown.split('\n');
 
   // Strategy 1: Try to capture first N questions
   let questionCount = 0;
-  let capturedLines: string[] = [];
+  const capturedLines: string[] = [];
 
   for (const line of lines) {
     capturedLines.push(line);

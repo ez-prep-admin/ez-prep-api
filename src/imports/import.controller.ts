@@ -12,9 +12,9 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
-  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import {
   ApiBody,
   ApiConsumes,
@@ -92,7 +92,12 @@ export class ImportController {
 
   @Post('upload-pdf')
   @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Upload a question paper PDF',
@@ -112,7 +117,8 @@ export class ImportController {
         },
         title: {
           type: 'string',
-          description: 'Title/name for the PDF (optional). If not provided, a UUID will be generated.',
+          description:
+            'Title/name for the PDF (optional). If not provided, a UUID will be generated.',
           example: 'NEET 2023 Physics Paper',
         },
         subjectId: {
@@ -170,25 +176,11 @@ export class ImportController {
     // For now, using undefined (will be stored as 'anonymous')
     const userId = undefined;
 
-    // Parse examIds if provided as string (from form-data)
-    if (dto.examIds && typeof dto.examIds === 'string') {
-      try {
-        dto.examIds = JSON.parse(dto.examIds as any);
-      } catch {
-        throw new BadRequestException('Invalid examIds format. Must be a JSON array.');
-      }
-    }
-
-    // Parse metadata if provided as string (from form-data)
-    if (dto.metadata && typeof dto.metadata === 'string') {
-      try {
-        dto.metadata = JSON.parse(dto.metadata as any);
-      } catch {
-        throw new BadRequestException('Invalid metadata format. Must be a JSON object.');
-      }
-    }
-
-    const result = await this.importService.uploadQuestionPdf(file, dto, userId);
+    const result = await this.importService.uploadQuestionPdf(
+      file,
+      dto,
+      userId,
+    );
 
     return {
       message: 'Question paper PDF uploaded successfully',
@@ -305,10 +297,7 @@ export class ImportController {
     message: string;
     data: CategorizedUploadsResponseDto;
   }> {
-    const result = await this.importService.listUploads(
-      page ?? 1,
-      limit ?? 10,
-    );
+    const result = await this.importService.listUploads(page ?? 1, limit ?? 10);
 
     return {
       message: 'Uploads retrieved successfully',

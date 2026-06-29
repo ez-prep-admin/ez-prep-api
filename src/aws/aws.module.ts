@@ -6,7 +6,7 @@ import { S3Service } from './s3/s3.service';
 /**
  * AWS Module - Generic AWS services integration
  * Provides S3 and other AWS services across the application
- * 
+ *
  * @Global decorator makes this module available everywhere without re-importing
  */
 @Global()

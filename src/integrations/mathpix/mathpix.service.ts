@@ -19,9 +19,9 @@ import {
 /**
  * Mathpix API Service
  * Handles PDF to Markdown conversion using Mathpix API
- * 
+ *
  * API Documentation: https://docs.mathpix.com/
- * 
+ *
  * SETUP REQUIRED:
  * 1. Sign up at https://mathpix.com/
  * 2. Get your APP_ID and APP_KEY from the dashboard
@@ -52,8 +52,8 @@ export class MathpixService {
     this.client = axios.create({
       baseURL: this.baseUrl,
       headers: {
-        'app_id': this.appId,
-        'app_key': this.appKey,
+        app_id: this.appId,
+        app_key: this.appKey,
         'Content-Type': 'application/json',
       },
       timeout: 30000, // 30 seconds per request
@@ -68,7 +68,7 @@ export class MathpixService {
    * 1. Submit PDF for processing
    * 2. Poll for completion
    * 3. Return markdown result
-   * 
+   *
    * @param pdfUrl Public URL of the PDF file (must be accessible to Mathpix)
    * @param options Processing options
    * @param pollingOptions Polling configuration
@@ -206,7 +206,7 @@ export class MathpixService {
   /**
    * Poll for PDF conversion completion
    * Repeatedly checks status until completion or timeout
-   * 
+   *
    * @param pdfId PDF ID to poll
    * @param options Polling configuration
    * @returns Final status response when completed
@@ -289,9 +289,9 @@ export class MathpixService {
   /**
    * Convert PDF buffer to Markdown (uploads to S3 first, then processes)
    * This is a convenience method when you have a PDF buffer instead of URL
-   * 
+   *
    * Note: Requires S3Service to generate temporary pre-signed URL
-   * 
+   *
    * @param pdfBuffer PDF file as Buffer
    * @param options Processing options
    * @param pollingOptions Polling configuration
@@ -299,8 +299,8 @@ export class MathpixService {
    */
   async convertPdfBufferToMarkdown(
     pdfBuffer: Buffer,
-    options: MathpixProcessOptions = {},
-    pollingOptions: MathpixPollingOptions = {},
+    _options: MathpixProcessOptions = {},
+    _pollingOptions: MathpixPollingOptions = {},
   ): Promise<MathpixConversionResult> {
     // For this method to work, the PDF must be accessible via public URL
     // The calling code should:

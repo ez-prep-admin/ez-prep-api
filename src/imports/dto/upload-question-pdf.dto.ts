@@ -5,10 +5,31 @@ import {
   IsEnum,
   IsArray,
   ArrayMinSize,
-  ValidateNested,
+  IsObject,
+  Allow,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+function parseOptionalJsonField(value: unknown): unknown {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
+
+  return value;
+}
 
 /**
  * DTO for uploading a question paper PDF
@@ -16,12 +37,20 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
  */
 export class UploadQuestionPdfDto {
   /**
-   * PDF file (handled by Multer middleware)
-   * Not a class property - file is added to request by Multer
+   * Whitelisted so global ValidationPipe does not reject multipart `file`
+   * (actual file bytes are handled by Multer via @UploadedFile()).
    */
+  @ApiProperty({
+    type: 'string',
+    format: 'binary',
+    description: 'PDF file to upload (max 50MB)',
+  })
+  @Allow()
+  file?: unknown;
 
   @ApiPropertyOptional({
-    description: 'Title/name for the PDF (user-friendly identifier). If not provided, a UUID will be generated.',
+    description:
+      'Title/name for the PDF (user-friendly identifier). If not provided, a UUID will be generated.',
     example: 'NEET 2023 Physics Paper',
   })
   @IsOptional()
@@ -50,9 +79,19 @@ export class UploadQuestionPdfDto {
     type: [String],
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    const parsed = parseOptionalJsonField(value);
+    if (parsed === undefined) {
+      return undefined;
+    }
+    return Array.isArray(parsed) ? parsed : [parsed];
+  })
   @IsArray({ message: 'Exam IDs must be an array' })
   @ArrayMinSize(1, { message: 'At least one exam ID is required if provided' })
-  @IsMongoId({ each: true, message: 'Each exam ID must be a valid MongoDB ObjectId' })
+  @IsMongoId({
+    each: true,
+    message: 'Each exam ID must be a valid MongoDB ObjectId',
+  })
   examIds?: string[];
 
   @ApiPropertyOptional({
@@ -72,6 +111,8 @@ export class UploadQuestionPdfDto {
     type: 'object',
   })
   @IsOptional()
+  @Transform(({ value }) => parseOptionalJsonField(value))
+  @IsObject({ message: 'Metadata must be a JSON object' })
   metadata?: Record<string, string>;
 }
 
@@ -99,7 +140,7 @@ export class UploadQuestionPdfResponseDto {
 
   @ApiProperty({
     description: 'S3 object key (path)',
-    example: 'question-uploads/user123/2023-06-29/1719648000000-neet-2023-physics-paper.pdf',
+    example: 'question-uploads/pdfs/neet-2023-physics-paper.pdf',
   })
   s3Key: string;
 
@@ -117,7 +158,14 @@ export class UploadQuestionPdfResponseDto {
 
   @ApiProperty({
     description: 'Upload status',
-    enum: ['uploaded', 'parsing', 'parsed', 'processing', 'completed', 'failed'],
+    enum: [
+      'uploaded',
+      'parsing',
+      'parsed',
+      'processing',
+      'completed',
+      'failed',
+    ],
     example: 'uploaded',
   })
   status: string;

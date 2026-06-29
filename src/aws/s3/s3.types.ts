@@ -23,8 +23,8 @@ export interface S3UploadOptions {
   contentType?: string;
 
   /**
-   * ACL for the uploaded file
-   * @default 'private'
+   * ACL for the uploaded file.
+   * Omit to use the bucket default (recommended for buckets with ACLs disabled).
    */
   acl?: 'private' | 'public-read' | 'public-read-write' | 'authenticated-read';
 

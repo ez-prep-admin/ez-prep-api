@@ -2,10 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { z } from 'zod';
-import {
-  DocumentStructure,
-  StructureDetectionResponse,
-} from '../types/document-structure';
+import { DocumentStructure } from '../types/document-structure';
 import {
   buildStructureDetectionUserPrompt,
   extractMarkdownSample,
@@ -116,7 +113,9 @@ export class StructureDetectorService {
       const content = response.choices[0]?.message?.content;
 
       if (!content) {
-        throw new Error('DeepSeek returned an empty response for structure detection.');
+        throw new Error(
+          'DeepSeek returned an empty response for structure detection.',
+        );
       }
 
       this.logger.log(
@@ -160,10 +159,16 @@ export class StructureDetectorService {
       return validated as DocumentStructure;
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const issues = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join('; ');
-        throw new Error(`Structure detection response validation failed: ${issues}`);
+        const issues = error.issues
+          .map(issue => `${issue.path.join('.')}: ${issue.message}`)
+          .join('; ');
+        throw new Error(
+          `Structure detection response validation failed: ${issues}`,
+        );
       }
-      throw new Error(`Failed to parse structure detection response: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to parse structure detection response: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
