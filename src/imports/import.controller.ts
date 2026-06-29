@@ -11,10 +11,10 @@ import {
   UploadedFile,
   ParseFilePipe,
   MaxFileSizeValidator,
-  FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { PdfUploadFileValidator } from './validators/pdf-upload-file.validator';
 import {
   ApiBody,
   ApiConsumes,
@@ -138,7 +138,7 @@ export class ImportController {
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 50 * 1024 * 1024 }), // 50MB
-          new FileTypeValidator({ fileType: 'application/pdf' }),
+          new PdfUploadFileValidator({}),
         ],
         fileIsRequired: true,
       }),

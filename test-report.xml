@@ -1,52 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/mapper/markdown-image.extractor.spec.ts">
-    <testCase name="MarkdownImageExtractorService removes markdown image syntax and returns image metadata" duration="12">
-      <failure message="Error: expect(received).toBe(expected) // Object.is equality"><![CDATA[Error: expect(received).toBe(expected) // Object.is equality
-
-- Expected  - 0
-+ Received  + 1
-
-  See the diagram below.
-+
-  Fig. 19.1
-    at Object.<anonymous> (/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/mapper/markdown-image.extractor.spec.ts:11:25)
-    at Promise.then.completed (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/utils.js:298:28)
-    at new Promise (<anonymous>)
-    at callAsyncCircusFn (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/utils.js:231:10)
-    at _callCircusTest (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/run.js:316:40)
-    at processTicksAndRejections (node:internal/process/task_queues:95:5)
-    at _runTest (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/run.js:252:3)
-    at _runTestsForDescribeBlock (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/run.js:126:9)
-    at _runTestsForDescribeBlock (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/run.js:121:9)
-    at run (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/run.js:71:3)
-    at runAndTransformResultsToJestFormat (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapterInit.js:122:21)
-    at jestAdapter (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-circus/build/legacy-code-todo-rewrite/jestAdapter.js:79:19)
-    at runTestInternal (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-runner/build/runTest.js:367:16)
-    at runTest (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-runner/build/runTest.js:444:34)
-    at Object.worker (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/jest-runner/build/testWorker.js:106:12)]]></failure>
-    </testCase>
-    <testCase name="MarkdownImageExtractorService prefers images from the source markdown block over AI output" duration="1"/>
-    <testCase name="MarkdownImageExtractorService extracts diagrams placed after the option list into question content" duration="2"/>
-    <testCase name="MarkdownImageExtractorService does not attach post-option diagrams to the last option label" duration="1"/>
-  </file>
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/import-phase2.spec.ts">
-    <testCase name="Phase 2 import validators and mapper validates a correct AI JSON payload with Zod" duration="13"/>
-    <testCase name="Phase 2 import validators and mapper rejects malformed AI JSON" duration="10"/>
-    <testCase name="Phase 2 import validators and mapper passes NEET business validation" duration="1"/>
-    <testCase name="Phase 2 import validators and mapper rejects wrong option count for NEET" duration="2"/>
-    <testCase name="Phase 2 import validators and mapper maps validated output to the Question schema shape with option UUIDs" duration="2"/>
-    <testCase name="Phase 2 import validators and mapper extracts question images into image metadata instead of question text" duration="1"/>
-    <testCase name="Phase 2 import validators and mapper assigns post-option Mathpix diagrams to the question stem, not the last option" duration="11"/>
-    <testCase name="Phase 2 import validators and mapper validates batch AI JSON payloads with Zod" duration="2"/>
-    <testCase name="Phase 2 import validators and mapper chunks all questions into a single batch by default" duration="1"/>
-  </file>
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/persist-question.validator.spec.ts">
-    <testCase name="Persist question validation accepts a valid import question payload" duration="5"/>
-    <testCase name="Persist question validation defaults source to PDF_UPLOAD when omitted" duration="1"/>
-    <testCase name="Persist question validation rejects non-PDF_UPLOAD source values" duration="4"/>
-    <testCase name="Persist question validation rejects when correctAnswer does not match an option id" duration="1"/>
-    <testCase name="Persist question validation rejects questions without text or image" duration="0"/>
-    <testCase name="Persist question validation accepts full enrich API response after request body parsing" duration="15"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/pdf-upload-file.validator.spec.ts">
+    <testCase name="PdfUploadFileValidator accepts a valid PDF buffer with application/pdf mimetype" duration="2"/>
+    <testCase name="PdfUploadFileValidator rejects files without a buffer" duration="0"/>
+    <testCase name="PdfUploadFileValidator rejects non-PDF mimetypes even when buffer looks like PDF" duration="0"/>
+    <testCase name="PdfUploadFileValidator rejects buffers missing the %PDF header" duration="0"/>
   </file>
 </testExecutions>
