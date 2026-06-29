@@ -18,7 +18,9 @@ import { SubjectsModule } from './subjects/subjects.module';
 import { TagsModule } from './tags/tags.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
+import { ImportModule } from './imports/import.module';
 import { ValidationModule } from './common/validators/validation.module';
+import { AwsModule } from './aws/aws.module';
 import { securityConfig } from './common/config/security.config';
 import { winstonConfig } from './common/config/winston.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -75,6 +77,8 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     ThrottlerModule.forRoot([securityConfig.rateLimit]),
     // Winston logging configuration
     WinstonModule.forRoot(winstonConfig),
+    // AWS services (Global module)
+    AwsModule,
     // Custom validation module
     ValidationModule,
     UsersModule,
@@ -89,6 +93,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     TagsModule,
     AnalyticsModule,
     SearchModule,
+    ImportModule,
   ],
   controllers: [AppController],
   providers: [
@@ -103,10 +108,10 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
     },
-    // Global timeout interceptor (30 seconds)
+    // Global timeout interceptor (30 seconds; skipped via @SkipTimeout())
     {
       provide: APP_INTERCEPTOR,
-      useValue: new TimeoutInterceptor(30000),
+      useClass: TimeoutInterceptor,
     },
     // Global rate limiting guard
     {
