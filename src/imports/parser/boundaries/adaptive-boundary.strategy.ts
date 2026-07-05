@@ -16,6 +16,53 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
   private structure: DocumentStructure | null = null;
 
   /**
+   * Initialize for parsing the solutions/answers section (may use different numbering).
+   */
+  initializeForSolutions(structure: DocumentStructure): void {
+    const solutionRegex =
+      structure.solutionPattern.numberingRegex ??
+      (structure.solutionPattern.matchesQuestionNumbering
+        ? structure.questionPattern.regex
+        : undefined);
+
+    if (!solutionRegex) {
+      this.initialize(structure);
+      return;
+    }
+
+    this.structure = {
+      ...structure,
+      questionPattern: {
+        ...structure.questionPattern,
+        regex: solutionRegex,
+        type: solutionRegex.includes('Q(') ? 'labeled' : 'numbered',
+      },
+    };
+
+    try {
+      this.regex = new RegExp(solutionRegex);
+      this.logger.log(
+        `[adaptive-boundary] Initialized for solutions with pattern: ${solutionRegex}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[adaptive-boundary] Invalid solution regex: ${solutionRegex}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      this.initialize(structure);
+    }
+  }
+
+  /**
+   * Build a dedicated boundary strategy for the solutions section.
+   */
+  createSolutionBoundary(structure: DocumentStructure): AdaptiveBoundaryStrategy {
+    const boundary = new AdaptiveBoundaryStrategy();
+    boundary.initializeForSolutions(structure);
+    return boundary;
+  }
+
+  /**
    * Initialize the strategy with detected document structure
    * @param structure Document structure detected by StructureDetectorService
    */
@@ -74,8 +121,8 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
       return null;
     }
 
-    // Extract question number from capture groups
-    const questionNumber = this.extractQuestionNumber(match);
+    // Extract question number from capture groups or the matched line
+    const questionNumber = this.extractQuestionNumber(match, trimmedLine);
     if (questionNumber === null) {
       this.logger.warn(
         `[adaptive-boundary] Could not extract question number from line: ${trimmedLine}`,
@@ -96,32 +143,72 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
    * Extract question number from regex match
    * Handles different numbering schemes (numbered, labeled, hierarchical)
    */
-  private extractQuestionNumber(match: RegExpMatchArray): number | null {
+  private extractQuestionNumber(
+    match: RegExpMatchArray,
+    fullLine: string,
+  ): number | null {
     if (!this.structure) return null;
 
-    // First capture group should contain the number/label
+    // First capture group should contain the number/label when present
     const captured = match[1];
-    if (!captured) return null;
+    if (captured) {
+      const fromCapture = this.parseQuestionNumberToken(captured);
+      if (fromCapture !== null) {
+        return fromCapture;
+      }
+    }
+
+    // Fallback when the detected regex lacks a capture group (common LLM output)
+    const fromLine = this.extractQuestionNumberFromText(fullLine);
+    if (fromLine !== null) {
+      return fromLine;
+    }
+
+    return this.extractQuestionNumberFromText(match[0]);
+  }
+
+  private parseQuestionNumberToken(token: string): number | null {
+    if (!this.structure) return null;
 
     switch (this.structure.questionPattern.type) {
       case 'numbered':
-        // Simple numeric: "1", "2", "3"
-        return parseInt(captured, 10);
+        return parseInt(token, 10);
 
-      case 'labeled':
-        // Extract number from labels like "Q1", "Question 5"
-        const numMatch = captured.match(/\d+/);
+      case 'labeled': {
+        const numMatch = token.match(/\d+/);
         return numMatch ? parseInt(numMatch[0], 10) : null;
+      }
 
-      case 'hierarchical':
-        // For hierarchical (1.1, 1.2), use last number or composite
-        // For now, use first number as primary
-        const hierarchicalMatch = captured.match(/^(\d+)/);
+      case 'hierarchical': {
+        const hierarchicalMatch = token.match(/^(\d+)/);
         return hierarchicalMatch ? parseInt(hierarchicalMatch[1], 10) : null;
+      }
 
       default:
-        return parseInt(captured, 10);
+        return parseInt(token, 10);
     }
+  }
+
+  /**
+   * Best-effort extraction from a question heading line without capture groups.
+   */
+  private extractQuestionNumberFromText(text: string): number | null {
+    const patterns = [
+      /\\section\*\{Q(?:uestion)?\s*(\d+)\./i,
+      /\bQ(?:uestion)?\s*(\d+)\b/i,
+      /^#+\s*Q(?:uestion)?\s*(\d+)\b/i,
+      /^(\d+)\.\s/,
+      /^(\d+)\)\s/,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match?.[1]) {
+        return parseInt(match[1], 10);
+      }
+    }
+
+    return null;
   }
 
   /**

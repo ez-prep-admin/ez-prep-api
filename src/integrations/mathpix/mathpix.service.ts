@@ -91,8 +91,11 @@ export class MathpixService {
       );
     }
 
-    const markdown =
-      statusResponse.md ?? (await this.downloadResult(pdfId, 'md'));
+    const markdown = await this.resolveMarkdownContent(
+      pdfId,
+      statusResponse.md,
+      options,
+    );
 
     if (!markdown) {
       throw new InternalServerErrorException(
@@ -136,6 +139,8 @@ export class MathpixService {
         docx: options.conversionFormats?.docx ?? false,
         'tex.zip': options.conversionFormats?.tex ?? false,
       },
+      include_smiles: options.includeSmiles ?? true,
+      include_chemistry_as_image: options.includeChemistryAsImage ?? false,
     };
 
     try {
@@ -296,6 +301,33 @@ export class MathpixService {
     throw new InternalServerErrorException(
       `Mathpix conversion exceeded maximum polling attempts (${maxAttempts})`,
     );
+  }
+
+  /**
+   * Prefer native MMD output (preserves `<smiles>` tags) over converted MD.
+   */
+  private async resolveMarkdownContent(
+    pdfId: string,
+    statusMarkdown: string | undefined,
+    options: MathpixProcessOptions,
+  ): Promise<string> {
+    if (statusMarkdown) {
+      return statusMarkdown;
+    }
+
+    const preferMmd = options.preferMmdOutput ?? true;
+    if (preferMmd) {
+      try {
+        return await this.downloadResult(pdfId, 'mmd');
+      } catch (error) {
+        this.logger.warn(
+          `[mathpix] MMD download failed for pdf_id=${pdfId}, falling back to MD`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
+    return this.downloadResult(pdfId, 'md');
   }
 
   /**

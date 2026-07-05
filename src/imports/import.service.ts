@@ -266,6 +266,12 @@ export class ImportService {
         dto.forceReparse ?? false,
       );
 
+      if (parsed.matchedQuestions.length === 0) {
+        throw new BadRequestException(
+          'No questions could be parsed from the markdown. The document structure or question boundary pattern may be incorrect — re-parse the PDF or inspect the cached structure.',
+        );
+      }
+
       const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
 
       const result = await this.enrichMatchedQuestions(
@@ -280,12 +286,12 @@ export class ImportService {
         },
       );
 
-      if (result.questions.length === 0 && parsed.matchedQuestions.length > 0) {
+      if (result.questions.length === 0) {
         const firstError = result.rejected[0]?.message;
         throw new BadRequestException(
           firstError
             ? `Enrichment failed for all questions. First error: ${firstError}`
-            : 'Enrichment failed for all questions.',
+            : 'Enrichment produced no questions.',
         );
       }
 
@@ -1247,6 +1253,9 @@ export class ImportService {
         {
           includeImages: true,
           includeLatex: true,
+          includeSmiles: true,
+          includeChemistryAsImage: false,
+          preferMmdOutput: true,
           ocrLanguage: 'en',
         },
         {

@@ -55,6 +55,12 @@ export interface SolutionPattern {
    * Whether solutions use same numbering as questions
    */
   matchesQuestionNumbering: boolean;
+
+  /**
+   * Regex for solution entry lines when numbering differs from questions
+   * (e.g. questions use "## Q1." but answers use "1. (2)").
+   */
+  numberingRegex?: string;
 }
 
 export interface DelimiterPattern {
@@ -156,6 +162,7 @@ export interface StructureDetectionResponse {
     marker?: string;
     inlineFormat?: string;
     matchesQuestionNumbering: boolean;
+    numberingRegex?: string;
   };
   delimiter: {
     type: string;
