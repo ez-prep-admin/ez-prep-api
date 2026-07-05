@@ -26,7 +26,12 @@ import {
 } from '@nestjs/swagger';
 import { SkipTimeout } from '../common/decorators/skip-timeout.decorator';
 import { ImportService } from './import.service';
-import { PersistQuestionsDto } from './dto/persist-questions.dto';
+import {
+  CachedEnrichmentResponseDto,
+  FailedQuestionListItemDto,
+  ImportFailedQuestionDto,
+  PersistQuestionsResponseDto,
+} from './dto/persist-questions.dto';
 import {
   UploadQuestionPdfDto,
   UploadQuestionPdfResponseDto,
@@ -48,20 +53,44 @@ import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
 
-  @Post('questions')
+  @Post('questions/:uploadId')
   @HttpCode(HttpStatus.CREATED)
-  @ApiBody({ type: PersistQuestionsDto })
+  @SkipTimeout()
   @ApiOperation({
-    summary: 'Persist enriched questions to MongoDB',
+    summary: 'Import cached enriched questions to MongoDB',
     description:
-      'Accepts the questions array from the enrich API (full enrich response also supported) and saves each question to the questions collection one by one.',
+      'Loads successful questions cached on the upload document (from POST /imports/enrich/:uploadId) ' +
+      'and inserts them into the questions collection one by one. ' +
+      'On full success, sets upload status to `completed` and clears cached enrichment/parse data from the upload document.',
+  })
+  @ApiParam({
+    name: 'uploadId',
+    description: 'Upload ID from question_uploads with status `enriched`',
+    example: '507f1f77bcf86cd799439015',
   })
   @ApiResponse({
     status: 201,
-    description: 'Per-question save results with MongoDB ids and any failures.',
+    description:
+      'Per-question save results with MongoDB ids. Upload status becomes `completed` when all questions save.',
+    type: PersistQuestionsResponseDto,
   })
-  async persistQuestions(@Body() body: unknown) {
-    return this.importService.persistQuestions(body);
+  @ApiResponse({
+    status: 400,
+    description: 'Upload not enriched or no cached questions',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Upload not found',
+  })
+  async persistQuestions(
+    @Param('uploadId') uploadId: string,
+  ): Promise<{ message: string; data: PersistQuestionsResponseDto }> {
+    const result = await this.importService.persistQuestions(uploadId);
+
+    return {
+      message: result.summary,
+      data: result,
+    };
   }
 
   @Post('upload-pdf')
@@ -236,7 +265,8 @@ export class ImportController {
   @ApiOperation({
     summary: 'Enrich an upload with DeepSeek (parse + chunk + LLM)',
     description:
-      'End-to-end enrichment for an upload: parse markdown, adaptively chunk by token limit, send each chunk to DeepSeek, validate and map to Mongo-ready questions.',
+      'End-to-end enrichment for an upload: parse markdown, adaptively chunk by token limit, send each chunk to DeepSeek, validate and map to Mongo-ready questions. ' +
+      'Successful questions are cached on the upload document (status `enriched`). Rejected questions are stored in `failed_questions` with failure reason and source markdown.',
   })
   @ApiParam({
     name: 'uploadId',
@@ -251,11 +281,11 @@ export class ImportController {
   async enrichUpload(
     @Param('uploadId') uploadId: string,
     @Body() dto: EnrichQuestionsDto,
-  ) {
+  ): Promise<{ message: string; data: EnrichQuestionsResponseDto }> {
     const result = await this.importService.enrichUpload(uploadId, dto);
 
     return {
-      message: 'Questions enriched successfully',
+      message: result.summary,
       data: result,
     };
   }
@@ -274,11 +304,98 @@ export class ImportController {
     description: 'Enriched questions ready for persistence',
     type: EnrichQuestionsResponseDto,
   })
-  async enrichQuestions(@Body() dto: EnrichQuestionsDto) {
+  async enrichQuestions(@Body() dto: EnrichQuestionsDto): Promise<{
+    message: string;
+    data: EnrichQuestionsResponseDto;
+  }> {
     const result = await this.importService.enrichQuestions(dto);
 
     return {
-      message: 'Questions enriched successfully',
+      message: result.summary,
+      data: result,
+    };
+  }
+
+  @Get('uploads/:uploadId/enrichment')
+  @ApiOperation({
+    summary: 'Get cached enrichment result for an upload',
+    description:
+      'Returns the stored LLM enrichment output without re-running DeepSeek. Use after POST /imports/enrich/:uploadId.',
+  })
+  @ApiParam({ name: 'uploadId', description: 'Upload ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Cached enrichment result',
+    type: CachedEnrichmentResponseDto,
+  })
+  async getCachedEnrichment(@Param('uploadId') uploadId: string): Promise<{
+    message: string;
+    data: CachedEnrichmentResponseDto;
+  }> {
+    const result = await this.importService.getCachedEnrichment(uploadId);
+
+    return {
+      message: 'Cached enrichment retrieved successfully',
+      data: result,
+    };
+  }
+
+  @Get('uploads/:uploadId/failed-questions')
+  @ApiOperation({
+    summary: 'List failed questions for an upload',
+    description:
+      'Returns one document per rejected question from enrichment, including failure stage, message, and source markdown.',
+  })
+  @ApiParam({ name: 'uploadId', description: 'Upload ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Failed questions for the upload',
+    type: [FailedQuestionListItemDto],
+  })
+  async listFailedQuestions(@Param('uploadId') uploadId: string): Promise<{
+    message: string;
+    data: FailedQuestionListItemDto[];
+  }> {
+    const result =
+      await this.importService.listFailedQuestionsForUpload(uploadId);
+
+    return {
+      message: 'Failed questions retrieved successfully',
+      data: result,
+    };
+  }
+
+  @Post('failed-questions/:failedQuestionId/import')
+  @HttpCode(HttpStatus.CREATED)
+  @SkipTimeout()
+  @ApiOperation({
+    summary: 'Import a corrected failed question',
+    description:
+      'Validates and saves a fixed question to the questions collection, then deletes the failed_questions entry.',
+  })
+  @ApiParam({
+    name: 'failedQuestionId',
+    description: 'Failed question document ID',
+  })
+  @ApiBody({ type: ImportFailedQuestionDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Corrected question saved and failed entry removed',
+  })
+  async importFailedQuestion(
+    @Param('failedQuestionId') failedQuestionId: string,
+    @Body() body: ImportFailedQuestionDto,
+  ): Promise<{
+    message: string;
+    data: { questionId: string; failedQuestionId: string };
+  }> {
+    const result = await this.importService.importFailedQuestion(
+      failedQuestionId,
+      body.question,
+    );
+
+    return {
+      message: 'Failed question imported successfully',
       data: result,
     };
   }

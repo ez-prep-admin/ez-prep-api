@@ -120,6 +120,7 @@ export class GetUploadDetailsResponseDto {
       'parsing',
       'parsed',
       'processing',
+      'enriched',
       'completed',
       'failed',
     ],
@@ -152,6 +153,36 @@ export class GetUploadDetailsResponseDto {
     description: 'Error message (if failed)',
   })
   errorMessage?: string;
+
+  @ApiPropertyOptional({
+    description: 'When LLM enrichment last completed',
+  })
+  enrichedAt?: Date;
+
+  @ApiPropertyOptional({
+    description: 'Stats from the last enrichment run',
+    type: 'object',
+    additionalProperties: true,
+  })
+  enrichmentStats?: {
+    total: number;
+    success: number;
+    failed: number;
+    durationMs: number;
+  };
+
+  @ApiPropertyOptional({
+    description: 'Count of cached enriched questions awaiting persistence',
+    example: 23,
+  })
+  enrichedQuestionCount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Count of questions stored in failed_questions for this upload',
+    example: 2,
+  })
+  rejectedQuestionCount?: number;
 
   @ApiProperty({
     description: 'Upload timestamp',
@@ -199,6 +230,7 @@ export class UploadMetadataDto {
       'parsing',
       'parsed',
       'processing',
+      'enriched',
       'completed',
       'failed',
     ],

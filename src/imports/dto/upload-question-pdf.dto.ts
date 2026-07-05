@@ -151,6 +151,7 @@ export class UploadQuestionPdfResponseDto {
       'parsing',
       'parsed',
       'processing',
+      'enriched',
       'completed',
       'failed',
     ],

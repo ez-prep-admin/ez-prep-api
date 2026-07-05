@@ -1,13 +1,8 @@
-import { ValidationPipe } from '@nestjs/common';
-import {
-  ImportQuestionSchema,
-  PersistQuestionsBodySchema,
-} from './import-question.schema';
+import { ImportQuestionSchema } from './import-question.schema';
 import {
   ImportQuestionInput,
   PDF_IMPORT_QUESTION_SOURCE,
 } from '../types/import-question';
-import { PersistQuestionsDto } from '../dto/persist-questions.dto';
 
 describe('Persist question validation', () => {
   const validQuestion: ImportQuestionInput = {
@@ -90,41 +85,5 @@ describe('Persist question validation', () => {
         },
       }),
     ).toThrow();
-  });
-
-  it('accepts full enrich API response after request body parsing', async () => {
-    const enrichResponse = {
-      questions: [
-        {
-          ...validQuestion,
-          options: validQuestion.options,
-        },
-      ],
-      errors: [],
-      stats: { total: 1, success: 1, failed: 0 },
-    };
-
-    const validationPipe = new ValidationPipe({
-      transform: true,
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transformOptions: { enableImplicitConversion: true },
-    });
-
-    const parsedWithDto = await validationPipe.transform(enrichResponse, {
-      type: 'body',
-      metatype: PersistQuestionsDto,
-    });
-
-    expect(() => PersistQuestionsBodySchema.parse(parsedWithDto)).toThrow();
-
-    const parsedWithoutDto = await validationPipe.transform(enrichResponse, {
-      type: 'body',
-      metatype: Object,
-    });
-
-    expect(
-      PersistQuestionsBodySchema.parse(parsedWithoutDto).questions,
-    ).toHaveLength(1);
   });
 });

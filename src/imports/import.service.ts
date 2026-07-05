@@ -24,6 +24,7 @@ import {
   EnrichDebugResult,
   EnrichError,
   PersistQuestionsResult,
+  RejectedQuestion,
 } from './types/import-question';
 import { AiOutputValidationError } from './validators/ai-output.validator';
 import { BusinessValidationError } from './validators/business.validator';
@@ -36,6 +37,8 @@ import { ImportQuestion } from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import { FailedQuestionService } from './persistence/failed-question.service';
+import { FailedQuestionDocument } from './schemas/failed-question.schema';
 import {
   ImportImageMaterializeError,
   ImportImageStorageService,
@@ -93,6 +96,7 @@ export class ImportService {
     private readonly questionChunker: QuestionChunkerService,
     private readonly persistQuestionValidator: PersistQuestionValidator,
     private readonly questionPersistenceService: QuestionPersistenceService,
+    private readonly failedQuestionService: FailedQuestionService,
     private readonly importImageStorage: ImportImageStorageService,
     private readonly s3Service: S3Service,
     private readonly mathpixService: MathpixService,
@@ -277,7 +281,7 @@ export class ImportService {
       );
 
       if (result.questions.length === 0 && parsed.matchedQuestions.length > 0) {
-        const firstError = result.errors[0]?.message;
+        const firstError = result.rejected[0]?.message;
         throw new BadRequestException(
           firstError
             ? `Enrichment failed for all questions. First error: ${firstError}`
@@ -285,12 +289,31 @@ export class ImportService {
         );
       }
 
+      await this.failedQuestionService.replaceForUpload(
+        uploadId,
+        result.rejected,
+      );
+
+      upload.enrichedQuestions = result.questions as unknown as Record<
+        string,
+        unknown
+      >[];
+      upload.enrichmentStats = {
+        total: result.stats.total,
+        success: result.stats.success,
+        failed: result.stats.failed,
+        durationMs: result.stats.durationMs ?? 0,
+      };
+      upload.enrichedAt = new Date();
       upload.questionCount = result.questions.length;
-      upload.status = 'completed';
+      upload.status = 'enriched';
+      upload.errorMessage = undefined;
       await upload.save();
 
       return {
         ...result,
+        uploadId,
+        status: 'enriched',
         parse: {
           fromCache: parsed.fromCache,
           parserName: parsed.parserName,
@@ -429,10 +452,18 @@ export class ImportService {
 
     errors.sort((left, right) => left.number - right.number);
 
+    const matchedByNumber = new Map(
+      matchedQuestions.map(question => [question.number, question]),
+    );
+
+    const rejected: RejectedQuestion[] = errors.map(error =>
+      this.toRejectedQuestion(error, matchedByNumber),
+    );
+
     const summary = {
       total: matchedQuestions.length,
       success: questions.length,
-      failed: errors.length,
+      failed: rejected.length,
       durationMs: Date.now() - startedAt,
     };
 
@@ -442,8 +473,9 @@ export class ImportService {
 
     return {
       questions,
-      errors,
+      rejected,
       stats: summary,
+      summary: this.buildEnrichSummaryMessage(summary),
       chunking: {
         adaptiveChunking,
         chunkCount: chunks.length,
@@ -682,10 +714,34 @@ export class ImportService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async persistQuestions(payload: unknown): Promise<PersistQuestionsResult> {
+  async persistQuestions(uploadId: string): Promise<
+    PersistQuestionsResult & {
+      uploadId: string;
+      uploadStatus?: string;
+      summary: string;
+    }
+  > {
     const startedAt = Date.now();
-    const questions =
-      this.persistQuestionValidator.validateQuestionsPayload(payload);
+
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (!upload.enrichedQuestions?.length) {
+      throw new BadRequestException(
+        'No enriched questions cached for this upload. Run POST /imports/enrich/:uploadId first.',
+      );
+    }
+
+    if (upload.status !== 'enriched') {
+      throw new BadRequestException(
+        `Upload must be in enriched status to persist (current: ${upload.status}).`,
+      );
+    }
+
+    const questions = upload.enrichedQuestions as unknown as ImportQuestion[];
+
+    this.logger.log(
+      `[persist] Loading ${questions.length} cached question(s) for upload_id=${uploadId}`,
+    );
 
     this.logger.log(
       `[persist] Starting import of ${questions.length} question(s)`,
@@ -700,6 +756,7 @@ export class ImportService {
       try {
         const withImages = this.questionHasPendingImages(question)
           ? await this.importImageStorage.materializeQuestionImages(question, {
+              uploadId,
               questionNumber: index + 1,
             })
           : question;
@@ -727,14 +784,33 @@ export class ImportService {
       }
     }
 
+    let uploadStatus: string | undefined;
+
+    if (errors.length === 0) {
+      await this.finalizeCompletedUpload(uploadId, saved.length);
+      uploadStatus = 'completed';
+    } else {
+      const savedIndices = new Set(saved.map(item => item.index));
+      upload.enrichedQuestions = questions
+        .filter((_, index) => !savedIndices.has(index))
+        .map(question => question as unknown as Record<string, unknown>);
+      await upload.save();
+      uploadStatus = 'enriched';
+    }
+
+    const stats = {
+      total: questions.length,
+      saved: saved.length,
+      failed: errors.length,
+    };
+
     const result = {
       saved,
       errors,
-      stats: {
-        total: questions.length,
-        saved: saved.length,
-        failed: errors.length,
-      },
+      stats,
+      uploadId,
+      uploadStatus,
+      summary: this.buildPersistSummaryMessage(stats),
     };
 
     this.logger.log(
@@ -742,6 +818,103 @@ export class ImportService {
     );
 
     return result;
+  }
+
+  /**
+   * Marks an upload completed and strips heavy caches/metadata via $unset.
+   * Setting Mongoose Object fields to undefined does not reliably remove them,
+   * so we issue an explicit $unset to keep the document lean once questions are
+   * safely in the questions collection. The doc is retained only for tracking.
+   */
+  private async finalizeCompletedUpload(
+    uploadId: string,
+    savedCount: number,
+  ): Promise<void> {
+    await this.questionUploadModel.updateOne(
+      { _id: new Types.ObjectId(uploadId) },
+      {
+        $set: { status: 'completed', questionCount: savedCount },
+        $unset: {
+          enrichedQuestions: '',
+          matchedQuestionsCache: '',
+          documentStructureCache: '',
+          enrichmentStats: '',
+        },
+      },
+    );
+
+    this.logger.log(
+      `[persist] Upload ${uploadId} marked completed; cleared cached questions and parse caches`,
+    );
+  }
+
+  async getCachedEnrichment(uploadId: string) {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (!upload.enrichedAt && !upload.enrichedQuestions?.length) {
+      throw new NotFoundException(
+        'No enrichment result cached for this upload. Run POST /imports/enrich/:uploadId first.',
+      );
+    }
+
+    const rejected = await this.failedQuestionService.listByUpload(uploadId);
+
+    return {
+      uploadId,
+      status: upload.status,
+      questions: upload.enrichedQuestions ?? [],
+      rejected: rejected.map(doc => this.toFailedQuestionListItem(doc)),
+      stats: upload.enrichmentStats ?? {
+        total: 0,
+        success: 0,
+        failed: rejected.length,
+        durationMs: 0,
+      },
+      enrichedAt: upload.enrichedAt,
+    };
+  }
+
+  async listFailedQuestionsForUpload(uploadId: string) {
+    await this.findUploadOrThrow(uploadId);
+    const docs = await this.failedQuestionService.listByUpload(uploadId);
+    return docs.map(doc => this.toFailedQuestionListItem(doc));
+  }
+
+  async importFailedQuestion(
+    failedQuestionId: string,
+    questionPayload: unknown,
+  ): Promise<{ questionId: string; failedQuestionId: string }> {
+    const failed =
+      await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
+
+    const withImages =
+      questionPayload &&
+      typeof questionPayload === 'object' &&
+      this.questionHasPendingImages(questionPayload as ImportQuestion)
+        ? await this.importImageStorage.materializeQuestionImages(
+            questionPayload as ImportQuestion,
+            {
+              uploadId: failed.uploadId.toString(),
+              questionNumber: failed.questionNumber,
+            },
+          )
+        : (questionPayload as ImportQuestion);
+
+    const validated = await this.persistQuestionValidator.validateQuestion(
+      withImages,
+      0,
+    );
+    const created = await this.questionPersistenceService.saveOne(validated);
+    await this.failedQuestionService.deleteById(failedQuestionId);
+
+    this.logger.log(
+      `[failed-questions] Imported fixed question ${created._id.toString()} and removed failed_question_id=${failedQuestionId}`,
+    );
+
+    return {
+      questionId: created._id.toString(),
+      failedQuestionId,
+    };
   }
 
   private toPersistErrorMessage(error: unknown): string {
@@ -814,6 +987,66 @@ export class ImportService {
     }
 
     return upload;
+  }
+
+  private buildEnrichSummaryMessage(stats: {
+    total: number;
+    success: number;
+    failed: number;
+  }): string {
+    if (stats.failed === 0) {
+      return `Enrichment complete: all ${stats.success} question(s) passed validation and are ready to import.`;
+    }
+
+    if (stats.success === 0) {
+      return `Enrichment failed: all ${stats.failed} of ${stats.total} question(s) were rejected. Review failed questions and fix them separately.`;
+    }
+
+    return `Enrichment complete: ${stats.success} of ${stats.total} question(s) passed and are ready to import. ${stats.failed} failed — review and fix them separately before importing.`;
+  }
+
+  private buildPersistSummaryMessage(stats: {
+    total: number;
+    saved: number;
+    failed: number;
+  }): string {
+    if (stats.failed === 0) {
+      return `Import complete: ${stats.saved} question(s) saved to the database. Upload marked as completed.`;
+    }
+
+    if (stats.saved === 0) {
+      return `Import failed: none of the ${stats.total} question(s) could be saved. Fix the errors and retry.`;
+    }
+
+    return `Import partially complete: ${stats.saved} of ${stats.total} question(s) saved, ${stats.failed} failed. Upload remains enriched — retry to import the remaining questions.`;
+  }
+
+  private toRejectedQuestion(
+    error: EnrichError,
+    matchedByNumber: Map<number, MatchedQuestion>,
+  ): RejectedQuestion {
+    return {
+      ...error,
+      matchedQuestion: matchedByNumber.get(error.number) ?? {
+        number: error.number,
+        question: '',
+      },
+    };
+  }
+
+  private toFailedQuestionListItem(doc: FailedQuestionDocument) {
+    const item = doc.toObject();
+    return {
+      id: item.id,
+      uploadId: doc.uploadId.toString(),
+      questionNumber: doc.questionNumber,
+      failureStage: doc.failureStage,
+      failureMessage: doc.failureMessage,
+      matchedQuestion: doc.matchedQuestion,
+      questionDraft: doc.questionDraft,
+      createdAt: doc.createdAt ?? new Date(),
+      updatedAt: doc.updatedAt ?? new Date(),
+    };
   }
 
   private toEnrichError(number: number, error: unknown): EnrichError {
@@ -1128,6 +1361,11 @@ export class ImportService {
       examIds: upload.exams?.map(id => id.toString()),
       markdownS3Key: upload.markdownS3Key,
       errorMessage: upload.errorMessage,
+      enrichedAt: upload.enrichedAt,
+      enrichmentStats: upload.enrichmentStats,
+      enrichedQuestionCount: upload.enrichedQuestions?.length ?? 0,
+      rejectedQuestionCount:
+        await this.failedQuestionService.countByUpload(uploadId),
       createdAt: upload.createdAt ?? new Date(),
       updatedAt: upload.updatedAt ?? new Date(),
     };

@@ -19,6 +19,7 @@ import { ImportImageStorageService } from './images/import-image-storage.service
 import { QuestionChunkerService } from './chunking/question-chunker.service';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import { FailedQuestionService } from './persistence/failed-question.service';
 import {
   Question,
   QuestionSchema,
@@ -30,6 +31,10 @@ import {
   QuestionUpload,
   QuestionUploadSchema,
 } from './schemas/question-upload.schema';
+import {
+  FailedQuestion,
+  FailedQuestionSchema,
+} from './schemas/failed-question.schema';
 import { AwsModule } from '../aws/aws.module';
 import { MathpixModule } from '../integrations/mathpix/mathpix.module';
 
@@ -41,6 +46,7 @@ import { MathpixModule } from '../integrations/mathpix/mathpix.module';
       { name: Topic.name, schema: TopicSchema },
       { name: Exam.name, schema: ExamSchema },
       { name: QuestionUpload.name, schema: QuestionUploadSchema },
+      { name: FailedQuestion.name, schema: FailedQuestionSchema },
     ]),
     AwsModule,
     MathpixModule,
@@ -65,6 +71,7 @@ import { MathpixModule } from '../integrations/mathpix/mathpix.module';
     QuestionChunkerService,
     PersistQuestionValidator,
     QuestionPersistenceService,
+    FailedQuestionService,
   ],
   exports: [ImportService],
 })

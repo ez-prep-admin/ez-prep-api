@@ -1,6 +1,7 @@
 import { DifficultyLevel } from '../config/business-validator.config';
 import { QuestionSource } from '../../mock-test-attempts/schemas/question.schema';
 import { ImportImageMetadata } from './import-image-metadata';
+import { MatchedQuestion } from './matched-question';
 
 export const PDF_IMPORT_QUESTION_SOURCE =
   'PDF_UPLOAD' as const satisfies QuestionSource;
@@ -71,15 +72,21 @@ export interface EnrichError {
   message: string;
 }
 
+export interface RejectedQuestion extends EnrichError {
+  matchedQuestion: MatchedQuestion;
+  questionDraft?: Record<string, unknown>;
+}
+
 export interface EnrichDebugResult {
   questions: ImportQuestion[];
-  errors: EnrichError[];
+  rejected: RejectedQuestion[];
   stats: {
     total: number;
     success: number;
     failed: number;
     durationMs?: number;
   };
+  summary: string;
   chunking?: {
     adaptiveChunking: boolean;
     chunkCount: number;
@@ -96,4 +103,6 @@ export interface EnrichDebugResult {
     parserName: string;
     matchedCount: number;
   };
+  uploadId?: string;
+  status?: string;
 }

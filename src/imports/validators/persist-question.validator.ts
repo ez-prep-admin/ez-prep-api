@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -16,7 +15,6 @@ import { Exam, ExamDocument } from '../../exams/schemas/exam.schema';
 import { ImportQuestion, ImportQuestionInput } from '../types/import-question';
 import {
   ImportQuestionSchema,
-  PersistQuestionsBodySchema,
 } from './import-question.schema';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from '../config/business-validator.config';
 import type { z } from 'zod';
@@ -45,27 +43,6 @@ export class PersistQuestionValidator {
     @InjectModel(Exam.name)
     private readonly examModel: Model<ExamDocument>,
   ) {}
-
-  validateQuestionsPayload(payload: unknown): ImportQuestion[] {
-    try {
-      const parsed = PersistQuestionsBodySchema.parse(payload);
-      this.logger.log(
-        `[persist] Payload schema validated for ${parsed.questions.length} question(s)`,
-      );
-      return parsed.questions as ImportQuestion[];
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new BadRequestException({
-          message: 'Invalid questions payload.',
-          details: error.issues.map(
-            issue => `${issue.path.join('.') || 'root'}: ${issue.message}`,
-          ),
-        });
-      }
-
-      throw error;
-    }
-  }
 
   async validateQuestion(
     question: ImportQuestionInput,
