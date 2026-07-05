@@ -8,6 +8,10 @@ import {
   buildQuestionUserPrompt,
   QUESTION_EXTRACTION_SYSTEM_PROMPT,
 } from '../prompt/question.prompt';
+import { DeepseekLlmResult } from './deepseek.types';
+
+/** Default output budget for 20-question batch enrichment with LaTeX explanations */
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
 
 @Injectable()
 export class DeepseekService {
@@ -43,12 +47,21 @@ export class DeepseekService {
     const configured = this.configService.get<string | number>(
       'DEEPSEEK_MAX_OUTPUT_TOKENS',
     );
-    const parsed = Number(configured ?? 8192);
+    const parsed = Number(configured ?? DEFAULT_MAX_OUTPUT_TOKENS);
 
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 8192;
+    return Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_MAX_OUTPUT_TOKENS;
   }
 
   async extractQuestion(matched: MatchedQuestion): Promise<string> {
+    const result = await this.extractQuestionDetailed(matched);
+    return result.content;
+  }
+
+  async extractQuestionDetailed(
+    matched: MatchedQuestion,
+  ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     this.logger.log(`[deepseek] Single request started for Q${matched.number}`);
 
@@ -69,24 +82,22 @@ export class DeepseekService {
       ],
     });
 
-    const content = response.choices[0]?.message?.content;
+    const result = this.toLlmResult(response);
 
-    if (!content) {
+    if (!result.content) {
       throw new Error(
         `DeepSeek returned an empty response for question ${matched.number}.`,
       );
     }
 
-    this.logger.log(
-      `[deepseek] Single request finished for Q${matched.number} in ${Date.now() - startedAt}ms (tokens=${response.usage?.total_tokens ?? 'n/a'})`,
-    );
+    this.logCompletion('Single', `Q${matched.number}`, startedAt, result);
 
-    return content;
+    return result;
   }
 
   async extractQuestionsBatch(
     matchedQuestions: MatchedQuestion[],
-  ): Promise<string> {
+  ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     const numbers = matchedQuestions
       .map(question => question.number)
@@ -113,18 +124,49 @@ export class DeepseekService {
       ],
     });
 
-    const content = response.choices[0]?.message?.content;
+    const result = this.toLlmResult(response);
 
-    if (!content) {
+    if (!result.content) {
       throw new Error(
         `DeepSeek returned an empty batch response for questions [${numbers}].`,
       );
     }
 
-    this.logger.log(
-      `[deepseek] Batch request finished in ${Date.now() - startedAt}ms (tokens=${response.usage?.total_tokens ?? 'n/a'}, chars=${content.length})`,
-    );
+    this.logCompletion('Batch', `[${numbers}]`, startedAt, result);
 
-    return content;
+    if (result.finishReason === 'length') {
+      this.logger.warn(
+        `[deepseek] Batch response truncated (finish_reason=length, completion_tokens=${result.completionTokens ?? 'n/a'}, max_output_tokens=${this.maxOutputTokens}, chars=${result.content.length})`,
+      );
+    }
+
+    return result;
+  }
+
+  private toLlmResult(
+    response: OpenAI.Chat.Completions.ChatCompletion,
+  ): DeepseekLlmResult {
+    const choice = response.choices[0];
+
+    return {
+      content: choice?.message?.content ?? '',
+      finishReason: choice?.finish_reason ?? null,
+      completionTokens: response.usage?.completion_tokens ?? null,
+      promptTokens: response.usage?.prompt_tokens ?? null,
+      totalTokens: response.usage?.total_tokens ?? null,
+    };
+  }
+
+  private logCompletion(
+    mode: 'Single' | 'Batch',
+    label: string,
+    startedAt: number,
+    result: DeepseekLlmResult,
+  ): void {
+    this.logger.log(
+      `[deepseek] ${mode} request finished for ${label} in ${Date.now() - startedAt}ms ` +
+        `(tokens=${result.totalTokens ?? 'n/a'}, completion_tokens=${result.completionTokens ?? 'n/a'}, ` +
+        `finish_reason=${result.finishReason ?? 'n/a'}, chars=${result.content.length})`,
+    );
   }
 }

@@ -198,6 +198,28 @@ export class EnrichParseMetaDto {
   matchedCount: number;
 }
 
+export class StartEnrichUploadResponseDto {
+  @ApiProperty({
+    description: 'Upload ID for polling enrichment status',
+    example: '507f1f77bcf86cd799439015',
+  })
+  uploadId: string;
+
+  @ApiProperty({
+    description: 'Upload status while enrichment runs in the background',
+    enum: ['processing'],
+    example: 'processing',
+  })
+  status: 'processing';
+
+  @ApiProperty({
+    description: 'Instructions for polling until enrichment completes',
+    example:
+      'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
+  })
+  message: string;
+}
+
 export class EnrichQuestionsResponseDto {
   @ApiPropertyOptional({
     description: 'Upload ID when enrichment was run via enrich/:uploadId',

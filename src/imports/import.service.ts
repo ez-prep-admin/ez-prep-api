@@ -13,6 +13,7 @@ import { MatchedQuestion } from './types/matched-question';
 import { ParserWarning, ParserError } from './types/parser-result';
 import { DocumentStructure } from './types/document-structure';
 import { DeepseekService } from './llm/deepseek.service';
+import { DeepseekLlmResult } from './llm/deepseek.types';
 import { AiOutputValidator } from './validators/ai-output.validator';
 import { BusinessValidator } from './validators/business.validator';
 import {
@@ -74,6 +75,12 @@ const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
 const ENRICH_PROMPT_OVERHEAD_TOKENS = 8000;
 const ENRICH_MAX_QUESTIONS_PER_CHUNK = 20;
 
+export interface StartEnrichUploadResult {
+  uploadId: string;
+  status: 'processing';
+  message: string;
+}
+
 export interface ParseMarkdownResult {
   parserName: string;
   matchedQuestions: MatchedQuestion[];
@@ -88,6 +95,8 @@ export interface ParseMarkdownResult {
 
 @Injectable()
 export class ImportService {
+  /** In-process guard against duplicate enrich jobs before Mongo status is saved */
+  private readonly activeEnrichJobs = new Set<string>();
   private readonly logger = new Logger(ImportService.name);
 
   constructor(
@@ -244,13 +253,17 @@ export class ImportService {
     };
   }
 
-  async enrichUpload(
+  /**
+   * Starts enrichment asynchronously. Returns immediately with status `processing`.
+   * Poll GET /imports/uploads/:uploadId until status is `enriched` or `failed`.
+   */
+  async startEnrichUpload(
     uploadId: string,
     dto: EnrichQuestionsDto = {},
-  ): Promise<EnrichDebugResult> {
+  ): Promise<StartEnrichUploadResult> {
     const upload = await this.findUploadOrThrow(uploadId);
 
-    if (upload.status === 'processing') {
+    if (upload.status === 'processing' || this.activeEnrichJobs.has(uploadId)) {
       throw new ConflictException('This upload is already being enriched');
     }
 
@@ -260,11 +273,68 @@ export class ImportService {
       );
     }
 
-    try {
-      upload.status = 'processing';
-      upload.errorMessage = undefined;
-      await upload.save();
+    // Fail fast on missing metadata before accepting the job.
+    this.buildMapperMetadataFromUpload(upload);
 
+    upload.status = 'processing';
+    upload.errorMessage = undefined;
+    await upload.save();
+
+    this.activeEnrichJobs.add(uploadId);
+    void this.runEnrichUploadInBackground(uploadId, dto).finally(() => {
+      this.activeEnrichJobs.delete(uploadId);
+    });
+
+    this.logger.log(
+      `[enrich] Accepted background enrichment job for upload_id=${uploadId}`,
+    );
+
+    return {
+      uploadId,
+      status: 'processing',
+      message:
+        'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
+    };
+  }
+
+  private async runEnrichUploadInBackground(
+    uploadId: string,
+    dto: EnrichQuestionsDto,
+  ): Promise<void> {
+    try {
+      await this.executeEnrichUpload(uploadId, dto);
+    } catch (error) {
+      this.logger.error(
+        `[enrich] Background enrichment failed for upload_id=${uploadId}: ${
+          error instanceof Error ? error.message : error
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      try {
+        const upload = await this.findUploadOrThrow(uploadId);
+        if (upload.status === 'processing') {
+          upload.status = 'failed';
+          upload.errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          await upload.save();
+        }
+      } catch (saveError) {
+        this.logger.error(
+          `[enrich] Failed to persist failure status for upload_id=${uploadId}`,
+          saveError instanceof Error ? saveError.stack : saveError,
+        );
+      }
+    }
+  }
+
+  private async executeEnrichUpload(
+    uploadId: string,
+    dto: EnrichQuestionsDto = {},
+  ): Promise<EnrichDebugResult> {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    try {
       const parsed = await this.resolveMatchedQuestionsForUpload(
         uploadId,
         dto.forceReparse ?? false,
@@ -319,6 +389,10 @@ export class ImportService {
       upload.status = 'enriched';
       upload.errorMessage = undefined;
       await upload.save();
+
+      this.logger.log(
+        `[enrich] Background enrichment completed for upload_id=${uploadId} — success=${result.stats.success}, failed=${result.stats.failed}`,
+      );
 
       return {
         ...result,
@@ -602,17 +676,23 @@ export class ImportService {
     );
 
     try {
-      const rawJson = await this.deepseekService.extractQuestionsBatch(
+      const llmResult = await this.deepseekService.extractQuestionsBatch(
         chunk.questions,
       );
 
       this.logger.log(
-        `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
+        `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms (finish_reason=${llmResult.finishReason ?? 'n/a'})`,
       );
+
+      if (llmResult.finishReason === 'length') {
+        throw new AiOutputValidationError(
+          'Model batch response was truncated before valid JSON could be produced.',
+        );
+      }
 
       return await this.processChunkResponse(
         chunk,
-        rawJson,
+        llmResult,
         mapperMetadata,
         uploadId,
       );
@@ -669,7 +749,7 @@ export class ImportService {
    */
   private async processChunkResponse(
     chunk: QuestionChunk,
-    rawJson: string,
+    llmResult: DeepseekLlmResult,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
   ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
@@ -677,7 +757,13 @@ export class ImportService {
     const errors: EnrichError[] = [];
 
     const batchOutputs = this.aiOutputValidator
-      .validateBatch(rawJson)
+      .validateBatch(llmResult.content, {
+        chunkIndex: chunk.chunkIndex,
+        questionNumbers: chunk.questions.map(question => question.number),
+        finishReason: llmResult.finishReason,
+        completionTokens: llmResult.completionTokens,
+        responseChars: llmResult.content.length,
+      })
       .sort((left, right) => left.number - right.number);
     const returnedNumbers = new Set(batchOutputs.map(output => output.number));
 

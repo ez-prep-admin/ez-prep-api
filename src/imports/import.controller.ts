@@ -47,6 +47,7 @@ import {
 import {
   EnrichQuestionsDto,
   EnrichQuestionsResponseDto,
+  StartEnrichUploadResponseDto,
 } from './dto/enrich-questions.dto';
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 
@@ -262,13 +263,14 @@ export class ImportController {
   }
 
   @Post('enrich/:uploadId')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @SkipTimeout()
   @ApiOperation({
-    summary: 'Enrich an upload with DeepSeek (parse + chunk + LLM)',
+    summary: 'Start enrichment for an upload (async)',
     description:
-      'End-to-end enrichment for an upload: parse markdown, adaptively chunk by token limit, send each chunk to DeepSeek, validate and map to Mongo-ready questions. ' +
-      'Successful questions are cached on the upload document (status `enriched`). Rejected questions are stored in `failed_questions` with failure reason and source markdown.',
+      'Accepts the enrichment job immediately (202) and runs parse + chunk + DeepSeek in the background. ' +
+      'Poll GET /imports/uploads/:uploadId until status is `enriched` or `failed`. ' +
+      'Successful questions are cached on the upload document. Rejected questions are stored in `failed_questions`.',
   })
   @ApiParam({
     name: 'uploadId',
@@ -276,18 +278,22 @@ export class ImportController {
   })
   @ApiBody({ type: EnrichQuestionsDto, required: false })
   @ApiResponse({
-    status: 200,
-    description: 'Enriched questions ready for persistence',
-    type: EnrichQuestionsResponseDto,
+    status: 202,
+    description: 'Enrichment job accepted; poll upload status for completion',
+    type: StartEnrichUploadResponseDto,
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Upload is already being enriched',
   })
   async enrichUpload(
     @Param('uploadId') uploadId: string,
     @Body() dto: EnrichQuestionsDto,
-  ): Promise<{ message: string; data: EnrichQuestionsResponseDto }> {
-    const result = await this.importService.enrichUpload(uploadId, dto);
+  ): Promise<{ message: string; data: StartEnrichUploadResponseDto }> {
+    const result = await this.importService.startEnrichUpload(uploadId, dto);
 
     return {
-      message: result.summary,
+      message: result.message,
       data: result,
     };
   }
