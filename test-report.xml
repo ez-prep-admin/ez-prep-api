@@ -1,8 +1,98 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/aws/s3/s3.service.spec.ts">
-    <testCase name="S3Service key generation scopes PDF keys under a unique upload id" duration="2"/>
-    <testCase name="S3Service key generation scopes markdown keys under the upload id" duration="0"/>
-    <testCase name="S3Service key generation generates unique import image keys from upload and image ids" duration="0"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/import-phase2.spec.ts">
+    <testCase name="Phase 2 import validators and mapper validates a correct AI JSON payload with Zod" duration="51">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper rejects malformed AI JSON" duration="2">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper passes NEET business validation" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper rejects wrong option count for NEET" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper maps validated output to the Question schema shape with option UUIDs" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper extracts question images into image metadata instead of question text" duration="1">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper assigns post-option Mathpix diagrams to the question stem, not the last option" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper validates batch AI JSON payloads with Zod" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="Phase 2 import validators and mapper chunks all questions into a single batch by default" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+  </file>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/json-salvage.util.spec.ts">
+    <testCase name="json-salvage.util parses valid JSON directly" duration="39">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="json-salvage.util strips markdown fences before parsing" duration="6">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="json-salvage.util extracts a JSON object from surrounding text" duration="0">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
+    <testCase name="json-salvage.util truncates previews for logging" duration="1">
+      <failure message="Error: Instance closed unexpectedly with code &quot;48&quot; and signal &quot;null&quot;"><![CDATA[Error: Instance closed unexpectedly with code "48" and signal "null"
+    at MongoInstance.closeHandler (/Users/sharun/Documents/Personal Projects/ez-prep-api/node_modules/mongodb-memory-server-core/src/util/MongoInstance.ts:581:52)
+    at ChildProcess.emit (node:events:519:28)
+    at maybeClose (node:internal/child_process:1105:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:305:5)]]></failure>
+    </testCase>
   </file>
 </testExecutions>

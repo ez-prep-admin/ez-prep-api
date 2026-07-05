@@ -8,6 +8,7 @@ import {
   extractMarkdownSample,
   STRUCTURE_DETECTION_SYSTEM_PROMPT,
 } from '../prompt/structure-detection.prompt';
+import { normalizeDocumentStructure } from './document-structure.normalizer';
 
 /**
  * Zod schema for validating structure detection response.
@@ -40,6 +41,10 @@ const StructureDetectionSchema = z.object({
       .optional()
       .transform(value => value ?? undefined),
     matchesQuestionNumbering: z.coerce.boolean(),
+    numberingRegex: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform(value => value ?? undefined),
   }),
   delimiter: z.object({
     type: z.preprocess(
@@ -65,16 +70,6 @@ const StructureDetectionSchema = z.object({
   confidence: z.coerce.number().min(0).max(1),
   warnings: z.array(z.string()).optional(),
 });
-
-const KNOWN_SOLUTION_MARKERS = [
-  '## SOLUTIONS',
-  '## Solutions',
-  '## ANSWERS',
-  '## Answers',
-  'Answer Key',
-  'ANSWER KEY',
-  'Answers:',
-] as const;
 
 function normalizeQuestionPatternType(value: unknown): QuestionPatternType {
   if (typeof value !== 'string') {
@@ -163,6 +158,7 @@ export class StructureDetectorService {
       maxLines?: number;
       maxChars?: number;
       targetQuestions?: number;
+      solutionSampleChars?: number;
     },
   ): Promise<DocumentStructure> {
     const startedAt = Date.now();
@@ -206,19 +202,19 @@ export class StructureDetectorService {
 
       // Parse and validate response
       const structure = this.parseAndValidate(content);
-      const enriched = this.enrichStructureFromDocument(markdown, structure);
+      const normalized = normalizeDocumentStructure(markdown, structure);
 
       this.logger.log(
-        `[structure-detector] Structure detected: ${enriched.detectedFormat} (confidence=${enriched.confidence})`,
+        `[structure-detector] Structure detected: ${normalized.detectedFormat} (confidence=${normalized.confidence})`,
       );
 
-      if (enriched.warnings && enriched.warnings.length > 0) {
+      if (normalized.warnings && normalized.warnings.length > 0) {
         this.logger.warn(
-          `[structure-detector] Warnings: ${enriched.warnings.join('; ')}`,
+          `[structure-detector] Warnings: ${normalized.warnings.join('; ')}`,
         );
       }
 
-      return enriched;
+      return normalized;
     } catch (error) {
       this.logger.error(
         `[structure-detector] Failed after ${Date.now() - startedAt}ms`,
@@ -226,42 +222,6 @@ export class StructureDetectorService {
       );
       throw error;
     }
-  }
-
-  private enrichStructureFromDocument(
-    markdown: string,
-    structure: DocumentStructure,
-  ): DocumentStructure {
-    const warnings = [...(structure.warnings ?? [])];
-
-    if (
-      structure.solutionPattern.location === 'separate' &&
-      !structure.solutionPattern.marker
-    ) {
-      const inferredMarker = this.inferSolutionMarker(markdown);
-      if (inferredMarker) {
-        structure.solutionPattern.marker = inferredMarker;
-        warnings.push(
-          `Solution section marker inferred from document: "${inferredMarker}"`,
-        );
-      }
-    }
-
-    if (
-      structure.solutionPattern.location === 'inline' &&
-      !structure.solutionPattern.inlineFormat
-    ) {
-      structure.solutionPattern.inlineFormat = 'Ans:';
-    }
-
-    return {
-      ...structure,
-      warnings: warnings.length > 0 ? warnings : structure.warnings,
-    };
-  }
-
-  private inferSolutionMarker(markdown: string): string | undefined {
-    return KNOWN_SOLUTION_MARKERS.find(marker => markdown.includes(marker));
   }
 
   /**

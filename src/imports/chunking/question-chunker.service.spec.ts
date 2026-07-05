@@ -33,4 +33,19 @@ describe('QuestionChunkerService', () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0].questions).toHaveLength(5);
   });
+
+  it('respects maxQuestionsPerChunk even when token budget allows more', () => {
+    const questions: MatchedQuestion[] = Array.from({ length: 46 }, (_, i) => ({
+      number: i + 1,
+      question: `Question ${i + 1}`,
+      solution: `Solution ${i + 1}`,
+    }));
+
+    const chunks = chunker.chunkByTokenLimit(questions, {
+      maxQuestionsPerChunk: 20,
+    });
+
+    expect(chunks).toHaveLength(3);
+    expect(chunks.map(chunk => chunk.questions.length)).toEqual([20, 20, 6]);
+  });
 });

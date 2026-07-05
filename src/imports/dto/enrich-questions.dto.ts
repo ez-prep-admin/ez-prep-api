@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { MatchedQuestion } from '../types/matched-question';
+import { ImportQuestionPayloadDto } from './import-question.dto';
 
 export class EnrichQuestionsDto {
   @ApiPropertyOptional({
@@ -98,18 +99,171 @@ export class EnrichQuestionsDto {
   maxConcurrentChunks?: number;
 }
 
+export class MatchedQuestionDto {
+  @ApiProperty({ example: 1 })
+  number: number;
+
+  @ApiProperty({ description: 'Raw question markdown from the PDF parser' })
+  question: string;
+
+  @ApiPropertyOptional({ description: 'Raw solution markdown when available' })
+  solution?: string;
+}
+
+export class RejectedQuestionDto {
+  @ApiProperty({
+    example: 3,
+    description: 'Question number in the source paper',
+  })
+  number: number;
+
+  @ApiProperty({
+    enum: ['llm', 'zod', 'business', 'mapping', 'image'],
+    description: 'Pipeline stage where validation failed',
+  })
+  stage: string;
+
+  @ApiProperty({
+    description: 'Human-readable failure reason for the admin UI',
+    example:
+      'Model output failed business validation: expected 4 options, got 3',
+  })
+  message: string;
+
+  @ApiProperty({
+    type: MatchedQuestionDto,
+    description:
+      'Original matched question block so the admin can fix and retry',
+  })
+  matchedQuestion: MatchedQuestionDto;
+
+  @ApiPropertyOptional({
+    description:
+      'Partial LLM-mapped question payload when failure happened after LLM output',
+    type: ImportQuestionPayloadDto,
+  })
+  questionDraft?: ImportQuestionPayloadDto;
+}
+
+export class EnrichStatsDto {
+  @ApiProperty({ example: 25 })
+  total: number;
+
+  @ApiProperty({ example: 23 })
+  success: number;
+
+  @ApiProperty({ example: 2 })
+  failed: number;
+
+  @ApiPropertyOptional({ example: 84210 })
+  durationMs?: number;
+}
+
+export class EnrichChunkInfoDto {
+  @ApiProperty({ example: 0 })
+  chunkIndex: number;
+
+  @ApiProperty({ example: 10 })
+  questionCount: number;
+
+  @ApiProperty({ example: 12450 })
+  estimatedTokens: number;
+
+  @ApiProperty({ type: [Number], example: [1, 2, 3, 4, 5] })
+  questionNumbers: number[];
+}
+
+export class EnrichChunkingDto {
+  @ApiProperty({ example: true })
+  adaptiveChunking: boolean;
+
+  @ApiProperty({ example: 3 })
+  chunkCount: number;
+
+  @ApiProperty({ example: 38200 })
+  totalTokens: number;
+
+  @ApiProperty({ type: [EnrichChunkInfoDto] })
+  chunks: EnrichChunkInfoDto[];
+}
+
+export class EnrichParseMetaDto {
+  @ApiProperty({ example: true })
+  fromCache: boolean;
+
+  @ApiProperty({ example: 'adaptive' })
+  parserName: string;
+
+  @ApiProperty({ example: 25 })
+  matchedCount: number;
+}
+
+export class StartEnrichUploadResponseDto {
+  @ApiProperty({
+    description: 'Upload ID for polling enrichment status',
+    example: '507f1f77bcf86cd799439015',
+  })
+  uploadId: string;
+
+  @ApiProperty({
+    description: 'Upload status while enrichment runs in the background',
+    enum: ['processing'],
+    example: 'processing',
+  })
+  status: 'processing';
+
+  @ApiProperty({
+    description: 'Instructions for polling until enrichment completes',
+    example:
+      'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
+  })
+  message: string;
+}
+
 export class EnrichQuestionsResponseDto {
+  @ApiPropertyOptional({
+    description: 'Upload ID when enrichment was run via enrich/:uploadId',
+    example: '507f1f77bcf86cd799439015',
+  })
+  uploadId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Upload status after enrichment (enriched until questions are persisted)',
+    enum: ['enriched'],
+    example: 'enriched',
+  })
+  status?: string;
+
+  @ApiProperty({
+    description:
+      'Mongo-ready questions that passed Zod schema validation and NEET business rules',
+    type: 'array',
+    items: { type: 'object' },
+  })
   questions: unknown[];
-  errors: Array<{ number: number; stage: string; message: string }>;
-  stats: {
-    total: number;
-    success: number;
-    failed: number;
-  };
-  chunking?: {
-    chunkCount: number;
-    totalTokens: number;
-    avgQuestionsPerChunk: number;
-    avgTokensPerChunk: number;
-  };
+
+  @ApiProperty({
+    description:
+      'Questions that failed enrichment with stage, reason, and source markdown for admin review',
+    type: [RejectedQuestionDto],
+  })
+  rejected: RejectedQuestionDto[];
+
+  @ApiProperty({ type: EnrichStatsDto })
+  stats: EnrichStatsDto;
+
+  @ApiProperty({
+    description:
+      'Human-readable enrichment outcome for admin toasts (e.g. success/failed counts)',
+    example:
+      'Enrichment complete: 23 of 25 question(s) passed and are ready to import. 2 failed — review and fix them separately before importing.',
+  })
+  summary: string;
+
+  @ApiPropertyOptional({ type: EnrichChunkingDto })
+  chunking?: EnrichChunkingDto;
+
+  @ApiPropertyOptional({ type: EnrichParseMetaDto })
+  parse?: EnrichParseMetaDto;
 }

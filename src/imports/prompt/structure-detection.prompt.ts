@@ -1,4 +1,5 @@
 import { StructureDetectionResponse } from '../types/document-structure';
+import { KNOWN_SOLUTION_MARKERS } from '../parser/document-structure.normalizer';
 
 /**
  * JSON schema shape for structure detection response
@@ -44,26 +45,28 @@ Rules:
    - "labeled" for alphanumeric labels (Q1, Q2, or A), B), etc.)
    - "hierarchical" for multi-level (1.1, 1.2, 2.1, etc.)
 4. Provide a regex pattern that matches question start lines. Escape special characters properly.
+   The regex MUST include a capture group for the question number (e.g. ^## Q(\\d+)\\.\\s for "## Q1." headings, or ^(\\d+)\\.\\s for "1." style).
 5. Identify where solutions are located (use EXACTLY one of these location values):
    - "inline" if solutions immediately follow questions
    - "separate" if solutions are in a distinct section
    - "end-of-page" if solutions appear at page bottom
    - "mixed" if there's a combination
-6. If solutions are separate, provide the section marker string (e.g., "## SOLUTIONS"). Omit marker only for inline solutions.
-7. Identify delimiter type between questions:
+6. If solutions are separate, provide the section marker string (e.g., "## SOLUTIONS", "## ANSWERS AND SOLUTIONS"). Omit marker only for inline solutions.
+7. Set matchesQuestionNumbering to false when the answers section uses different line prefixes than questions (common: questions as "## Q1." but answers as "1. (2)"). When false, optionally provide solutionPattern.numberingRegex with a capture group for the answer entry number.
+8. Identify delimiter type between questions:
    - "heading" for markdown headings
    - "blank-line" for empty lines
    - "marker" for special characters (---, ***)
    - "page-break" for page break indicators
-8. Analyze metadata presence:
+9. Analyze metadata presence:
    - hasDifficulty: Does document show difficulty levels?
    - hasMarks: Does document show marks/points per question?
    - hasSubjectLabels: Does document show subject/topic names?
    - examType: Try to identify exam type (NEET, JEE, AIIMS, etc.) or leave undefined
-9. Provide detectedFormat as a human-readable description (e.g., "NEET Standard Format", "JEE Advanced with inline solutions")
-10. Set confidence (0-1) based on pattern consistency in the sample
-11. Add warnings array for any anomalies, inconsistencies, or edge cases detected
-12. Base analysis ONLY on the provided sample, do not invent patterns
+10. Provide detectedFormat as a human-readable description (e.g., "NEET Standard Format", "JEE Advanced with inline solutions")
+11. Set confidence (0-1) based on pattern consistency in the sample
+12. Add warnings array for any anomalies, inconsistencies, or edge cases detected
+13. Base analysis ONLY on the provided sample, do not invent patterns
 
 Expected JSON shape:
 ${JSON.stringify(STRUCTURE_DETECTION_JSON_SHAPE, null, 2)}`;
@@ -108,7 +111,12 @@ export function extractMarkdownSample(
   for (const line of lines) {
     capturedLines.push(line);
 
-    if (/^\s*\d+\.\s/.test(line) || /^\s*[Q]\d+/i.test(line)) {
+    if (
+      /^\s*\d+\.\s/.test(line) ||
+      /^\s*##\s*Q\d+/i.test(line) ||
+      /^\s*Q\d+/i.test(line) ||
+      /^\\section\*\{Q\d+/i.test(line)
+    ) {
       questionCount++;
       if (questionCount >= targetQuestions) {
         break;
@@ -126,17 +134,7 @@ export function extractMarkdownSample(
   let sample = capturedLines.join('\n');
 
   // Append a solutions-section snippet so the LLM can detect separate answer keys
-  const solutionMarkers = [
-    '## SOLUTIONS',
-    '## Solutions',
-    '## ANSWERS',
-    '## Answers',
-    'Answer Key',
-    'ANSWER KEY',
-    'Answers:',
-  ];
-
-  for (const marker of solutionMarkers) {
+  for (const marker of KNOWN_SOLUTION_MARKERS) {
     const markerIndex = markdown.indexOf(marker);
     if (markerIndex === -1) {
       continue;

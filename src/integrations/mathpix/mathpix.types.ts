@@ -30,6 +30,24 @@ export interface MathpixProcessOptions {
   includeLatex?: boolean;
 
   /**
+   * Enable chemistry diagram OCR as MMD SMILES syntax (e.g. `<smiles>...</smiles>`)
+   * @default true
+   */
+  includeSmiles?: boolean;
+
+  /**
+   * Return chemical diagrams as image crops with SMILES in alt-text instead of inline SMILES
+   * @default false
+   */
+  includeChemistryAsImage?: boolean;
+
+  /**
+   * Download Mathpix Markdown (.mmd) instead of converted .md for richer SMILES support
+   * @default true
+   */
+  preferMmdOutput?: boolean;
+
+  /**
    * OCR language
    * @default 'en'
    */
@@ -49,6 +67,16 @@ export interface MathpixProcessRequest {
    * Conversion formats
    */
   conversion_formats: Record<string, boolean>;
+
+  /**
+   * Enable chemistry diagram OCR via SMILES in MMD text output
+   */
+  include_smiles?: boolean;
+
+  /**
+   * Return chemical diagrams as image crops (with SMILES in alt-text)
+   */
+  include_chemistry_as_image?: boolean;
 }
 
 /**

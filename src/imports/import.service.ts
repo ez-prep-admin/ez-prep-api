@@ -13,6 +13,7 @@ import { MatchedQuestion } from './types/matched-question';
 import { ParserWarning, ParserError } from './types/parser-result';
 import { DocumentStructure } from './types/document-structure';
 import { DeepseekService } from './llm/deepseek.service';
+import { DeepseekLlmResult } from './llm/deepseek.types';
 import { AiOutputValidator } from './validators/ai-output.validator';
 import { BusinessValidator } from './validators/business.validator';
 import {
@@ -20,10 +21,12 @@ import {
   QuestionMapperMetadata,
 } from './mapper/question.mapper';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from './config/business-validator.config';
+import type { DifficultyLevel } from './config/business-validator.config';
 import {
   EnrichDebugResult,
   EnrichError,
   PersistQuestionsResult,
+  RejectedQuestion,
 } from './types/import-question';
 import { AiOutputValidationError } from './validators/ai-output.validator';
 import { BusinessValidationError } from './validators/business.validator';
@@ -32,10 +35,15 @@ import {
   QuestionChunk,
 } from './chunking/question-chunker.service';
 import { AiQuestionBatchItem } from './types/ai-question-output';
-import { ImportQuestion } from './types/import-question';
+import {
+  ImportQuestion,
+  PDF_IMPORT_QUESTION_SOURCE,
+} from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
+import { FailedQuestionService } from './persistence/failed-question.service';
+import { FailedQuestionDocument } from './schemas/failed-question.schema';
 import {
   ImportImageMaterializeError,
   ImportImageStorageService,
@@ -55,12 +63,23 @@ import {
   ParseQuestionPdfDto,
   ParseQuestionPdfResponseDto,
   GetUploadDetailsResponseDto,
-  CategorizedUploadsResponseDto,
+  UploadsListResponseDto,
   UploadMetadataDto,
 } from './dto/parse-question-pdf.dto';
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 import { EnrichQuestionsDto } from './dto/enrich-questions.dto';
 import { randomUUID } from 'crypto';
+
+/** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
+const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
+const ENRICH_PROMPT_OVERHEAD_TOKENS = 8000;
+const ENRICH_MAX_QUESTIONS_PER_CHUNK = 20;
+
+export interface StartEnrichUploadResult {
+  uploadId: string;
+  status: 'processing';
+  message: string;
+}
 
 export interface ParseMarkdownResult {
   parserName: string;
@@ -76,6 +95,8 @@ export interface ParseMarkdownResult {
 
 @Injectable()
 export class ImportService {
+  /** In-process guard against duplicate enrich jobs before Mongo status is saved */
+  private readonly activeEnrichJobs = new Set<string>();
   private readonly logger = new Logger(ImportService.name);
 
   constructor(
@@ -88,6 +109,7 @@ export class ImportService {
     private readonly questionChunker: QuestionChunkerService,
     private readonly persistQuestionValidator: PersistQuestionValidator,
     private readonly questionPersistenceService: QuestionPersistenceService,
+    private readonly failedQuestionService: FailedQuestionService,
     private readonly importImageStorage: ImportImageStorageService,
     private readonly s3Service: S3Service,
     private readonly mathpixService: MathpixService,
@@ -231,13 +253,17 @@ export class ImportService {
     };
   }
 
-  async enrichUpload(
+  /**
+   * Starts enrichment asynchronously. Returns immediately with status `processing`.
+   * Poll GET /imports/uploads/:uploadId until status is `enriched` or `failed`.
+   */
+  async startEnrichUpload(
     uploadId: string,
     dto: EnrichQuestionsDto = {},
-  ): Promise<EnrichDebugResult> {
+  ): Promise<StartEnrichUploadResult> {
     const upload = await this.findUploadOrThrow(uploadId);
 
-    if (upload.status === 'processing') {
+    if (upload.status === 'processing' || this.activeEnrichJobs.has(uploadId)) {
       throw new ConflictException('This upload is already being enriched');
     }
 
@@ -247,15 +273,78 @@ export class ImportService {
       );
     }
 
-    try {
-      upload.status = 'processing';
-      upload.errorMessage = undefined;
-      await upload.save();
+    // Fail fast on missing metadata before accepting the job.
+    this.buildMapperMetadataFromUpload(upload);
 
+    upload.status = 'processing';
+    upload.errorMessage = undefined;
+    await upload.save();
+
+    this.activeEnrichJobs.add(uploadId);
+    void this.runEnrichUploadInBackground(uploadId, dto).finally(() => {
+      this.activeEnrichJobs.delete(uploadId);
+    });
+
+    this.logger.log(
+      `[enrich] Accepted background enrichment job for upload_id=${uploadId}`,
+    );
+
+    return {
+      uploadId,
+      status: 'processing',
+      message:
+        'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
+    };
+  }
+
+  private async runEnrichUploadInBackground(
+    uploadId: string,
+    dto: EnrichQuestionsDto,
+  ): Promise<void> {
+    try {
+      await this.executeEnrichUpload(uploadId, dto);
+    } catch (error) {
+      this.logger.error(
+        `[enrich] Background enrichment failed for upload_id=${uploadId}: ${
+          error instanceof Error ? error.message : error
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      try {
+        const upload = await this.findUploadOrThrow(uploadId);
+        if (upload.status === 'processing') {
+          upload.status = 'failed';
+          upload.errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          await upload.save();
+        }
+      } catch (saveError) {
+        this.logger.error(
+          `[enrich] Failed to persist failure status for upload_id=${uploadId}`,
+          saveError instanceof Error ? saveError.stack : saveError,
+        );
+      }
+    }
+  }
+
+  private async executeEnrichUpload(
+    uploadId: string,
+    dto: EnrichQuestionsDto = {},
+  ): Promise<EnrichDebugResult> {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    try {
       const parsed = await this.resolveMatchedQuestionsForUpload(
         uploadId,
         dto.forceReparse ?? false,
       );
+
+      if (parsed.matchedQuestions.length === 0) {
+        throw new BadRequestException(
+          'No questions could be parsed from the markdown. The document structure or question boundary pattern may be incorrect — re-parse the PDF or inspect the cached structure.',
+        );
+      }
 
       const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
 
@@ -271,12 +360,44 @@ export class ImportService {
         },
       );
 
+      if (result.questions.length === 0) {
+        const firstError = result.rejected[0]?.message;
+        throw new BadRequestException(
+          firstError
+            ? `Enrichment failed for all questions. First error: ${firstError}`
+            : 'Enrichment produced no questions.',
+        );
+      }
+
+      await this.failedQuestionService.replaceForUpload(
+        uploadId,
+        result.rejected,
+      );
+
+      upload.enrichedQuestions = result.questions as unknown as Record<
+        string,
+        unknown
+      >[];
+      upload.enrichmentStats = {
+        total: result.stats.total,
+        success: result.stats.success,
+        failed: result.stats.failed,
+        durationMs: result.stats.durationMs ?? 0,
+      };
+      upload.enrichedAt = new Date();
       upload.questionCount = result.questions.length;
-      upload.status = 'completed';
+      upload.status = 'enriched';
+      upload.errorMessage = undefined;
       await upload.save();
+
+      this.logger.log(
+        `[enrich] Background enrichment completed for upload_id=${uploadId} — success=${result.stats.success}, failed=${result.stats.failed}`,
+      );
 
       return {
         ...result,
+        uploadId,
+        status: 'enriched',
         parse: {
           fromCache: parsed.fromCache,
           parserName: parsed.parserName,
@@ -360,8 +481,9 @@ export class ImportService {
     this.importImageStorage.clearSessionCache();
 
     const chunkingOptions = {
-      maxTokensPerChunk: 20000,
-      promptOverheadTokens: 4000,
+      maxTokensPerChunk: ENRICH_MAX_TOKENS_PER_CHUNK,
+      promptOverheadTokens: ENRICH_PROMPT_OVERHEAD_TOKENS,
+      maxQuestionsPerChunk: ENRICH_MAX_QUESTIONS_PER_CHUNK,
     };
 
     const chunks = adaptiveChunking
@@ -382,7 +504,7 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking})`,
+      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${ENRICH_MAX_QUESTIONS_PER_CHUNK})`,
     );
 
     this.logger.log(
@@ -414,10 +536,18 @@ export class ImportService {
 
     errors.sort((left, right) => left.number - right.number);
 
+    const matchedByNumber = new Map(
+      matchedQuestions.map(question => [question.number, question]),
+    );
+
+    const rejected: RejectedQuestion[] = errors.map(error =>
+      this.toRejectedQuestion(error, matchedByNumber),
+    );
+
     const summary = {
       total: matchedQuestions.length,
       success: questions.length,
-      failed: errors.length,
+      failed: rejected.length,
       durationMs: Date.now() - startedAt,
     };
 
@@ -427,8 +557,9 @@ export class ImportService {
 
     return {
       questions,
-      errors,
+      rejected,
       stats: summary,
+      summary: this.buildEnrichSummaryMessage(summary),
       chunking: {
         adaptiveChunking,
         chunkCount: chunks.length,
@@ -515,6 +646,10 @@ export class ImportService {
             number: q.number,
             stage: 'llm' as const,
             message: `Chunk processing failed: ${result.reason}`,
+            questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+              questionMarkdown: q.question,
+              solutionMarkdown: q.solution,
+            }),
           })),
         });
       });
@@ -541,17 +676,23 @@ export class ImportService {
     );
 
     try {
-      const rawJson = await this.deepseekService.extractQuestionsBatch(
+      const llmResult = await this.deepseekService.extractQuestionsBatch(
         chunk.questions,
       );
 
       this.logger.log(
-        `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms`,
+        `[enrich] Chunk ${chunk.chunkIndex}: DeepSeek responded in ${Date.now() - chunkStartedAt}ms (finish_reason=${llmResult.finishReason ?? 'n/a'})`,
       );
+
+      if (llmResult.finishReason === 'length') {
+        throw new AiOutputValidationError(
+          'Model batch response was truncated before valid JSON could be produced.',
+        );
+      }
 
       return await this.processChunkResponse(
         chunk,
-        rawJson,
+        llmResult,
         mapperMetadata,
         uploadId,
       );
@@ -594,6 +735,10 @@ export class ImportService {
           number: q.number,
           stage: 'llm' as const,
           message: `Chunk ${chunk.chunkIndex} failed after ${maxRetries} attempts: ${message}`,
+          questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+            questionMarkdown: q.question,
+            solutionMarkdown: q.solution,
+          }),
         })),
       };
     }
@@ -604,7 +749,7 @@ export class ImportService {
    */
   private async processChunkResponse(
     chunk: QuestionChunk,
-    rawJson: string,
+    llmResult: DeepseekLlmResult,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
   ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
@@ -612,7 +757,13 @@ export class ImportService {
     const errors: EnrichError[] = [];
 
     const batchOutputs = this.aiOutputValidator
-      .validateBatch(rawJson)
+      .validateBatch(llmResult.content, {
+        chunkIndex: chunk.chunkIndex,
+        questionNumbers: chunk.questions.map(question => question.number),
+        finishReason: llmResult.finishReason,
+        completionTokens: llmResult.completionTokens,
+        responseChars: llmResult.content.length,
+      })
       .sort((left, right) => left.number - right.number);
     const returnedNumbers = new Set(batchOutputs.map(output => output.number));
 
@@ -620,7 +771,15 @@ export class ImportService {
     for (const matched of chunk.questions) {
       if (!returnedNumbers.has(matched.number)) {
         const message = `Question ${matched.number} missing from batch LLM response.`;
-        errors.push({ number: matched.number, stage: 'llm', message });
+        errors.push({
+          number: matched.number,
+          stage: 'llm',
+          message,
+          questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+            questionMarkdown: matched.question,
+            solutionMarkdown: matched.solution,
+          }),
+        });
         this.logger.error(`[enrich] ${message}`);
       }
     }
@@ -650,7 +809,19 @@ export class ImportService {
         );
       } catch (error) {
         const enrichError = this.toEnrichError(output.number, error);
-        errors.push(enrichError);
+        const matched = matchedByNumber.get(output.number);
+
+        errors.push({
+          ...enrichError,
+          questionDraft:
+            matched &&
+            this.buildQuestionDraftOnFailure(
+              output,
+              matched,
+              mapperMetadata,
+              error,
+            ),
+        });
         this.logger.error(
           `[enrich] Question ${output.number} failed at stage=${enrichError.stage}: ${enrichError.message}`,
         );
@@ -667,10 +838,34 @@ export class ImportService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async persistQuestions(payload: unknown): Promise<PersistQuestionsResult> {
+  async persistQuestions(uploadId: string): Promise<
+    PersistQuestionsResult & {
+      uploadId: string;
+      uploadStatus?: string;
+      summary: string;
+    }
+  > {
     const startedAt = Date.now();
-    const questions =
-      this.persistQuestionValidator.validateQuestionsPayload(payload);
+
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (!upload.enrichedQuestions?.length) {
+      throw new BadRequestException(
+        'No enriched questions cached for this upload. Run POST /imports/enrich/:uploadId first.',
+      );
+    }
+
+    if (upload.status !== 'enriched') {
+      throw new BadRequestException(
+        `Upload must be in enriched status to persist (current: ${upload.status}).`,
+      );
+    }
+
+    const questions = upload.enrichedQuestions as unknown as ImportQuestion[];
+
+    this.logger.log(
+      `[persist] Loading ${questions.length} cached question(s) for upload_id=${uploadId}`,
+    );
 
     this.logger.log(
       `[persist] Starting import of ${questions.length} question(s)`,
@@ -685,6 +880,7 @@ export class ImportService {
       try {
         const withImages = this.questionHasPendingImages(question)
           ? await this.importImageStorage.materializeQuestionImages(question, {
+              uploadId,
               questionNumber: index + 1,
             })
           : question;
@@ -712,14 +908,33 @@ export class ImportService {
       }
     }
 
+    let uploadStatus: string | undefined;
+
+    if (errors.length === 0) {
+      await this.finalizeCompletedUpload(uploadId, saved.length);
+      uploadStatus = 'completed';
+    } else {
+      const savedIndices = new Set(saved.map(item => item.index));
+      upload.enrichedQuestions = questions
+        .filter((_, index) => !savedIndices.has(index))
+        .map(question => question as unknown as Record<string, unknown>);
+      await upload.save();
+      uploadStatus = 'enriched';
+    }
+
+    const stats = {
+      total: questions.length,
+      saved: saved.length,
+      failed: errors.length,
+    };
+
     const result = {
       saved,
       errors,
-      stats: {
-        total: questions.length,
-        saved: saved.length,
-        failed: errors.length,
-      },
+      stats,
+      uploadId,
+      uploadStatus,
+      summary: this.buildPersistSummaryMessage(stats),
     };
 
     this.logger.log(
@@ -727,6 +942,158 @@ export class ImportService {
     );
 
     return result;
+  }
+
+  /**
+   * Marks an upload completed and strips heavy caches/metadata via $unset.
+   * Setting Mongoose Object fields to undefined does not reliably remove them,
+   * so we issue an explicit $unset to keep the document lean once questions are
+   * safely in the questions collection. The doc is retained only for tracking.
+   */
+  private async finalizeCompletedUpload(
+    uploadId: string,
+    savedCount: number,
+  ): Promise<void> {
+    await this.questionUploadModel.updateOne(
+      { _id: new Types.ObjectId(uploadId) },
+      {
+        $set: { status: 'completed', questionCount: savedCount },
+        $unset: {
+          enrichedQuestions: '',
+          matchedQuestionsCache: '',
+          documentStructureCache: '',
+          enrichmentStats: '',
+        },
+      },
+    );
+
+    this.logger.log(
+      `[persist] Upload ${uploadId} marked completed; cleared cached questions and parse caches`,
+    );
+  }
+
+  async getCachedEnrichment(uploadId: string) {
+    const upload = await this.findUploadOrThrow(uploadId);
+
+    if (!upload.enrichedAt && !upload.enrichedQuestions?.length) {
+      throw new NotFoundException(
+        'No enrichment result cached for this upload. Run POST /imports/enrich/:uploadId first.',
+      );
+    }
+
+    const rejected = await this.failedQuestionService.listByUpload(uploadId);
+    const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
+
+    return {
+      uploadId,
+      status: upload.status,
+      questions: upload.enrichedQuestions ?? [],
+      rejected: rejected.map(doc =>
+        this.toFailedQuestionListItem(doc, mapperMetadata),
+      ),
+      stats: upload.enrichmentStats ?? {
+        total: 0,
+        success: 0,
+        failed: rejected.length,
+        durationMs: 0,
+      },
+      enrichedAt: upload.enrichedAt,
+    };
+  }
+
+  async listFailedQuestions(page = 1, limit = 10) {
+    const { docs, total } = await this.failedQuestionService.listPaginated(
+      page,
+      limit,
+    );
+    const metadataByUploadId = await this.loadMapperMetadataByUploadIds(docs);
+
+    const items = docs.map(doc => {
+      const mapperMetadata = metadataByUploadId.get(doc.uploadId.toString());
+      return this.toFailedQuestionListItem(
+        doc,
+        mapperMetadata ?? {
+          subjectId: '',
+          topicId: '',
+          examIds: [],
+        },
+      );
+    });
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 0,
+      },
+    };
+  }
+
+  async getFailedQuestion(failedQuestionId: string) {
+    const doc =
+      await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
+    const upload = await this.findUploadOrThrow(doc.uploadId.toString());
+    const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
+
+    return this.toFailedQuestionListItem(doc, mapperMetadata);
+  }
+
+  async importFailedQuestion(
+    failedQuestionId: string,
+    questionPayload: unknown,
+  ): Promise<{ questionId: string; failedQuestionId: string }> {
+    const failed =
+      await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
+
+    try {
+      const withImages =
+        questionPayload &&
+        typeof questionPayload === 'object' &&
+        this.questionHasPendingImages(questionPayload as ImportQuestion)
+          ? await this.importImageStorage.materializeQuestionImages(
+              questionPayload as ImportQuestion,
+              {
+                uploadId: failed.uploadId.toString(),
+                questionNumber: failed.questionNumber,
+              },
+            )
+          : (questionPayload as ImportQuestion);
+
+      const validated = await this.persistQuestionValidator.validateQuestion(
+        withImages,
+        0,
+      );
+      const created = await this.questionPersistenceService.saveOne(validated);
+      await this.failedQuestionService.deleteById(failedQuestionId);
+
+      this.logger.log(
+        `[failed-questions] Imported fixed question ${created._id.toString()} and removed failed_question_id=${failedQuestionId}`,
+      );
+
+      return {
+        questionId: created._id.toString(),
+        failedQuestionId,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      if (error instanceof PersistQuestionValidationError) {
+        throw new BadRequestException({
+          message: error.message,
+          details: error.details,
+        });
+      }
+
+      throw new BadRequestException(this.toPersistErrorMessage(error));
+    }
   }
 
   private toPersistErrorMessage(error: unknown): string {
@@ -748,18 +1115,155 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
   ): Promise<ImportQuestion> {
-    const { ...aiOutput } = output;
-
-    const validated = this.businessValidator.validate(
-      aiOutput,
-      NEET_BUSINESS_VALIDATOR_CONFIG,
+    const mapped = this.mapBatchItemToImportQuestion(
+      output,
+      matched,
+      mapperMetadata,
     );
-
-    const mapped = this.questionMapper.map(validated, mapperMetadata, matched);
 
     return this.importImageStorage.materializeQuestionImages(mapped, {
       uploadId,
       questionNumber: matched.number,
+    });
+  }
+
+  private mapBatchItemToImportQuestion(
+    output: AiQuestionBatchItem,
+    matched: MatchedQuestion,
+    mapperMetadata: QuestionMapperMetadata,
+    skipBusinessValidation = false,
+  ): ImportQuestion {
+    const { number: _ignoredQuestionNumber, ...aiOutput } = output;
+    void _ignoredQuestionNumber;
+
+    const validated = skipBusinessValidation
+      ? aiOutput
+      : this.businessValidator.validate(
+          aiOutput,
+          NEET_BUSINESS_VALIDATOR_CONFIG,
+        );
+
+    return this.questionMapper.map(validated, mapperMetadata, matched);
+  }
+
+  private buildQuestionDraftOnFailure(
+    output: AiQuestionBatchItem,
+    matched: MatchedQuestion,
+    mapperMetadata: QuestionMapperMetadata,
+    error: unknown,
+  ): ImportQuestion {
+    if (error instanceof ImportImageMaterializeError) {
+      try {
+        return this.mapBatchItemToImportQuestion(
+          output,
+          matched,
+          mapperMetadata,
+        );
+      } catch {
+        // Fall through to best-effort draft below.
+      }
+    }
+
+    try {
+      return this.mapBatchItemToImportQuestion(
+        output,
+        matched,
+        mapperMetadata,
+        true,
+      );
+    } catch {
+      return this.buildMetadataQuestionShell(mapperMetadata, {
+        questionMarkdown: matched.question,
+        solutionMarkdown: matched.solution,
+        difficultyLevel: output.difficultyLevel,
+      });
+    }
+  }
+
+  private buildMetadataQuestionShell(
+    metadata: QuestionMapperMetadata,
+    options?: {
+      questionMarkdown?: string;
+      solutionMarkdown?: string;
+      difficultyLevel?: DifficultyLevel;
+    },
+  ): ImportQuestion {
+    const optionIds = Array.from(
+      { length: NEET_BUSINESS_VALIDATOR_CONFIG.optionCount },
+      () => randomUUID(),
+    );
+
+    return {
+      questionText: {
+        en: {
+          text: options?.questionMarkdown ?? '',
+          image: null,
+        },
+        ml: { text: null, image: null },
+      },
+      optionType: 'text',
+      options: optionIds.map(id => ({
+        id,
+        type: 'text' as const,
+        en: '',
+        ml: null,
+      })),
+      explanation: {
+        en: options?.solutionMarkdown ?? '',
+        ml: null,
+        image: null,
+      },
+      correctAnswer: optionIds[0],
+      subject: metadata.subjectId,
+      topic: metadata.topicId,
+      exams: [...metadata.examIds],
+      difficultyLevel: options?.difficultyLevel ?? 'medium',
+      isActive: true,
+      isDeleted: false,
+      source: PDF_IMPORT_QUESTION_SOURCE,
+    };
+  }
+
+  private async loadMapperMetadataByUploadIds(
+    docs: FailedQuestionDocument[],
+  ): Promise<Map<string, QuestionMapperMetadata>> {
+    const uploadIds = [...new Set(docs.map(doc => doc.uploadId.toString()))];
+
+    if (uploadIds.length === 0) {
+      return new Map();
+    }
+
+    const uploads = await this.questionUploadModel.find({
+      _id: { $in: uploadIds.map(id => new Types.ObjectId(id)) },
+    });
+
+    const metadataByUploadId = new Map<string, QuestionMapperMetadata>();
+
+    for (const upload of uploads) {
+      if (!upload.subject || !upload.topic) {
+        continue;
+      }
+
+      metadataByUploadId.set(
+        upload._id.toString(),
+        this.buildMapperMetadataFromUpload(upload),
+      );
+    }
+
+    return metadataByUploadId;
+  }
+
+  private resolveFailedQuestionEditPayload(
+    doc: FailedQuestionDocument,
+    mapperMetadata: QuestionMapperMetadata,
+  ): ImportQuestion {
+    if (doc.questionDraft && typeof doc.questionDraft === 'object') {
+      return doc.questionDraft as unknown as ImportQuestion;
+    }
+
+    return this.buildMetadataQuestionShell(mapperMetadata, {
+      questionMarkdown: doc.matchedQuestion.question,
+      solutionMarkdown: doc.matchedQuestion.solution,
     });
   }
 
@@ -799,6 +1303,72 @@ export class ImportService {
     }
 
     return upload;
+  }
+
+  private buildEnrichSummaryMessage(stats: {
+    total: number;
+    success: number;
+    failed: number;
+  }): string {
+    if (stats.failed === 0) {
+      return `Enrichment complete: all ${stats.success} question(s) passed validation and are ready to import.`;
+    }
+
+    if (stats.success === 0) {
+      return `Enrichment failed: all ${stats.failed} of ${stats.total} question(s) were rejected. Review failed questions and fix them separately.`;
+    }
+
+    return `Enrichment complete: ${stats.success} of ${stats.total} question(s) passed and are ready to import. ${stats.failed} failed — review and fix them separately before importing.`;
+  }
+
+  private buildPersistSummaryMessage(stats: {
+    total: number;
+    saved: number;
+    failed: number;
+  }): string {
+    if (stats.failed === 0) {
+      return `Import complete: ${stats.saved} question(s) saved to the database. Upload marked as completed.`;
+    }
+
+    if (stats.saved === 0) {
+      return `Import failed: none of the ${stats.total} question(s) could be saved. Fix the errors and retry.`;
+    }
+
+    return `Import partially complete: ${stats.saved} of ${stats.total} question(s) saved, ${stats.failed} failed. Upload remains enriched — retry to import the remaining questions.`;
+  }
+
+  private toRejectedQuestion(
+    error: EnrichError,
+    matchedByNumber: Map<number, MatchedQuestion>,
+  ): RejectedQuestion {
+    return {
+      ...error,
+      matchedQuestion: matchedByNumber.get(error.number) ?? {
+        number: error.number,
+        question: '',
+      },
+    };
+  }
+
+  private toFailedQuestionListItem(
+    doc: FailedQuestionDocument,
+    mapperMetadata: QuestionMapperMetadata,
+  ) {
+    const item = doc.toObject();
+    const question = this.resolveFailedQuestionEditPayload(doc, mapperMetadata);
+
+    return {
+      id: item.id,
+      uploadId: doc.uploadId.toString(),
+      questionNumber: doc.questionNumber,
+      failureStage: doc.failureStage,
+      failureMessage: doc.failureMessage,
+      matchedQuestion: doc.matchedQuestion,
+      questionDraft: doc.questionDraft as unknown as ImportQuestion | undefined,
+      question,
+      createdAt: doc.createdAt ?? new Date(),
+      updatedAt: doc.updatedAt ?? new Date(),
+    };
   }
 
   private toEnrichError(number: number, error: unknown): EnrichError {
@@ -898,7 +1468,6 @@ export class ImportService {
         subject: dto.subjectId ? new Types.ObjectId(dto.subjectId) : undefined,
         topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
         exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
-        difficultyLevel: dto.difficultyLevel,
         metadata: dto.metadata
           ? new Map(Object.entries(dto.metadata))
           : undefined,
@@ -1000,6 +1569,9 @@ export class ImportService {
         {
           includeImages: true,
           includeLatex: true,
+          includeSmiles: true,
+          includeChemistryAsImage: false,
+          preferMmdOutput: true,
           ocrLanguage: 'en',
         },
         {
@@ -1112,9 +1684,13 @@ export class ImportService {
       subjectId: upload.subject?.toString(),
       topicId: upload.topic?.toString(),
       examIds: upload.exams?.map(id => id.toString()),
-      difficultyLevel: upload.difficultyLevel,
       markdownS3Key: upload.markdownS3Key,
       errorMessage: upload.errorMessage,
+      enrichedAt: upload.enrichedAt,
+      enrichmentStats: upload.enrichmentStats,
+      enrichedQuestionCount: upload.enrichedQuestions?.length ?? 0,
+      rejectedQuestionCount:
+        await this.failedQuestionService.countByUpload(uploadId),
       createdAt: upload.createdAt ?? new Date(),
       updatedAt: upload.updatedAt ?? new Date(),
     };
@@ -1129,10 +1705,9 @@ export class ImportService {
   async listUploads(
     page: number = 1,
     limit: number = 10,
-  ): Promise<CategorizedUploadsResponseDto> {
+  ): Promise<UploadsListResponseDto> {
     const skip = (page - 1) * limit;
 
-    // Fetch all uploads (we'll categorize them in memory)
     const [allUploads, total] = await Promise.all([
       this.questionUploadModel
         .find()
@@ -1143,20 +1718,7 @@ export class ImportService {
       this.questionUploadModel.countDocuments(),
     ]);
 
-    // Count parsed and unparsed for pagination
-    const [parsedCount, unparsedCount] = await Promise.all([
-      this.questionUploadModel.countDocuments({
-        status: { $in: ['parsed', 'processing', 'completed'] },
-      }),
-      this.questionUploadModel.countDocuments({
-        status: { $in: ['uploaded', 'parsing', 'failed'] },
-      }),
-    ]);
-
-    // Helper function to map upload to metadata DTO
-    const mapToMetadata = (
-      upload: QuestionUploadDocument,
-    ): UploadMetadataDto => {
+    const uploads: UploadMetadataDto[] = allUploads.map(upload => {
       const uploadObj = upload.toObject();
       return {
         id: uploadObj.id,
@@ -1167,41 +1729,21 @@ export class ImportService {
         subjectId: upload.subject?.toString(),
         topicId: upload.topic?.toString(),
         examIds: upload.exams?.map(id => id.toString()),
-        difficultyLevel: upload.difficultyLevel,
         s3Key: upload.s3Key,
         markdownS3Key: upload.markdownS3Key,
         errorMessage: upload.errorMessage,
         createdAt: upload.createdAt ?? new Date(),
         updatedAt: upload.updatedAt ?? new Date(),
       };
-    };
-
-    // Categorize uploads
-    const parsed: UploadMetadataDto[] = [];
-    const unparsed: UploadMetadataDto[] = [];
-
-    for (const upload of allUploads) {
-      const metadata = mapToMetadata(upload);
-
-      // PDFs with status 'parsed', 'processing', or 'completed' have markdown
-      if (['parsed', 'processing', 'completed'].includes(upload.status)) {
-        parsed.push(metadata);
-      } else {
-        // 'uploaded', 'parsing', 'failed' are unparsed
-        unparsed.push(metadata);
-      }
-    }
+    });
 
     return {
-      parsed,
-      unparsed,
+      uploads,
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
-        parsedCount,
-        unparsedCount,
       },
     };
   }

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ZodError } from 'zod';
@@ -14,10 +9,7 @@ import {
 import { Topic, TopicDocument } from '../../topics/schemas/topic.schema';
 import { Exam, ExamDocument } from '../../exams/schemas/exam.schema';
 import { ImportQuestion, ImportQuestionInput } from '../types/import-question';
-import {
-  ImportQuestionSchema,
-  PersistQuestionsBodySchema,
-} from './import-question.schema';
+import { ImportQuestionSchema } from './import-question.schema';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from '../config/business-validator.config';
 import type { z } from 'zod';
 
@@ -45,27 +37,6 @@ export class PersistQuestionValidator {
     @InjectModel(Exam.name)
     private readonly examModel: Model<ExamDocument>,
   ) {}
-
-  validateQuestionsPayload(payload: unknown): ImportQuestion[] {
-    try {
-      const parsed = PersistQuestionsBodySchema.parse(payload);
-      this.logger.log(
-        `[persist] Payload schema validated for ${parsed.questions.length} question(s)`,
-      );
-      return parsed.questions as ImportQuestion[];
-    } catch (error) {
-      if (error instanceof ZodError) {
-        throw new BadRequestException({
-          message: 'Invalid questions payload.',
-          details: error.issues.map(
-            issue => `${issue.path.join('.') || 'root'}: ${issue.message}`,
-          ),
-        });
-      }
-
-      throw error;
-    }
-  }
 
   async validateQuestion(
     question: ImportQuestionInput,

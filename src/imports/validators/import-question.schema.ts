@@ -98,9 +98,3 @@ export const ImportQuestionSchema = z
       });
     }
   });
-
-export const PersistQuestionsBodySchema = z.object({
-  questions: z.array(ImportQuestionSchema).min(1),
-  errors: z.array(z.unknown()).optional(),
-  stats: z.record(z.string(), z.unknown()).optional(),
-});

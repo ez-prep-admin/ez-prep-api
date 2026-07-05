@@ -120,6 +120,7 @@ export class GetUploadDetailsResponseDto {
       'parsing',
       'parsed',
       'processing',
+      'enriched',
       'completed',
       'failed',
     ],
@@ -143,11 +144,6 @@ export class GetUploadDetailsResponseDto {
   examIds?: string[];
 
   @ApiPropertyOptional({
-    description: 'Difficulty level',
-  })
-  difficultyLevel?: string;
-
-  @ApiPropertyOptional({
     description:
       'S3 key for markdown file (if parsed). To retrieve markdown content, download from S3 using this key.',
   })
@@ -157,6 +153,36 @@ export class GetUploadDetailsResponseDto {
     description: 'Error message (if failed)',
   })
   errorMessage?: string;
+
+  @ApiPropertyOptional({
+    description: 'When LLM enrichment last completed',
+  })
+  enrichedAt?: Date;
+
+  @ApiPropertyOptional({
+    description: 'Stats from the last enrichment run',
+    type: 'object',
+    additionalProperties: true,
+  })
+  enrichmentStats?: {
+    total: number;
+    success: number;
+    failed: number;
+    durationMs: number;
+  };
+
+  @ApiPropertyOptional({
+    description: 'Count of cached enriched questions awaiting persistence',
+    example: 23,
+  })
+  enrichedQuestionCount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Count of questions stored in failed_questions for this upload',
+    example: 2,
+  })
+  rejectedQuestionCount?: number;
 
   @ApiProperty({
     description: 'Upload timestamp',
@@ -204,6 +230,7 @@ export class UploadMetadataDto {
       'parsing',
       'parsed',
       'processing',
+      'enriched',
       'completed',
       'failed',
     ],
@@ -225,11 +252,6 @@ export class UploadMetadataDto {
     type: [String],
   })
   examIds?: string[];
-
-  @ApiPropertyOptional({
-    description: 'Difficulty level',
-  })
-  difficultyLevel?: string;
 
   @ApiPropertyOptional({
     description: 'S3 key for PDF',
@@ -258,30 +280,36 @@ export class UploadMetadataDto {
 }
 
 /**
- * Categorized list response DTO
+ * Pagination metadata for the uploads list
  */
-export class CategorizedUploadsResponseDto {
-  @ApiProperty({
-    description: 'PDFs that have been converted to markdown',
-    type: [UploadMetadataDto],
-  })
-  parsed: UploadMetadataDto[];
+export class UploadsPaginationDto {
+  @ApiProperty({ description: 'Current page number (1-based)', example: 1 })
+  page: number;
 
+  @ApiProperty({ description: 'Items per page', example: 10 })
+  limit: number;
+
+  @ApiProperty({ description: 'Total number of uploads', example: 42 })
+  total: number;
+
+  @ApiProperty({ description: 'Total number of pages', example: 5 })
+  totalPages: number;
+}
+
+/**
+ * Paginated list response DTO for uploads.
+ * Frontend can categorize items client-side using each item's `status`.
+ */
+export class UploadsListResponseDto {
   @ApiProperty({
-    description: 'PDFs that have not been converted yet',
+    description: 'Uploaded question paper PDFs for the requested page',
     type: [UploadMetadataDto],
   })
-  unparsed: UploadMetadataDto[];
+  uploads: UploadMetadataDto[];
 
   @ApiProperty({
     description: 'Pagination metadata',
+    type: UploadsPaginationDto,
   })
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    parsedCount: number;
-    unparsedCount: number;
-  };
+  pagination: UploadsPaginationDto;
 }

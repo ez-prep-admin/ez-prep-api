@@ -8,6 +8,7 @@ export const UPLOAD_STATUSES = [
   'parsing',
   'parsed',
   'processing',
+  'enriched',
   'completed',
   'failed',
 ] as const;
@@ -177,6 +178,29 @@ export class QuestionUpload {
    */
   @Prop({ type: Object })
   documentStructureCache?: Record<string, unknown>;
+
+  /**
+   * Mongo-ready questions that passed LLM + validation during enrichment
+   */
+  @Prop({ type: Object })
+  enrichedQuestions?: Record<string, unknown>[];
+
+  /**
+   * Summary stats from the last successful enrichment run
+   */
+  @Prop({ type: Object })
+  enrichmentStats?: {
+    total: number;
+    success: number;
+    failed: number;
+    durationMs: number;
+  };
+
+  /**
+   * When enrichment last completed successfully
+   */
+  @Prop({ type: Date })
+  enrichedAt?: Date;
 
   /**
    * User who uploaded the file

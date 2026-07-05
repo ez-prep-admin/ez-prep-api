@@ -8,6 +8,7 @@ import { QuestionMatcherService } from '../question-matcher.service';
 import { AdaptiveBoundaryStrategy } from '../boundaries/adaptive-boundary.strategy';
 import { QuestionBoundaryStrategy } from '../boundaries/question-boundary.strategy';
 import { StructureDetectorService } from '../structure-detector.service';
+import { normalizeDocumentStructure } from '../document-structure.normalizer';
 import { DocumentStructure } from '../../types/document-structure';
 import { MatchedQuestion } from '../../types/matched-question';
 import {
@@ -24,6 +25,7 @@ import {
 export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
   private readonly logger = new Logger(AdaptiveParserStrategy.name);
   private cachedStructure: DocumentStructure | null = null;
+  private structureWasSeeded = false;
 
   readonly configuration: ParserConfiguration = {
     parserName: 'adaptive',
@@ -70,18 +72,56 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
     markdown: string,
   ): Promise<ParserResult<MatchedQuestion[]>> {
     try {
-      // Step 1: Detect document structure (if not cached)
-      const structure = await this.getOrDetectStructure(markdown);
+      let result = await this.executeParse(markdown);
+
+      if (result.data.length === 0 && this.structureWasSeeded) {
+        this.logger.warn(
+          '[adaptive-parser] Seeded structure matched 0 questions; re-detecting with LLM',
+        );
+        this.clearCache();
+        result = await this.executeParse(markdown);
+      }
+
+      return result;
+    } catch (error) {
+      this.logger.error(
+        '[adaptive-parser] Parsing failed',
+        error instanceof Error ? error.stack : String(error),
+      );
+
+      const parseError: ParserError = {
+        code: 'ADAPTIVE_PARSE_FAILED',
+        message: `Adaptive parsing failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+
+      return {
+        data: [],
+        warnings: [],
+        errors: [parseError],
+      };
+    }
+  }
+
+  private async executeParse(
+    markdown: string,
+  ): Promise<ParserResult<MatchedQuestion[]>> {
+    try {
+      // Step 1: Detect document structure (if not cached), then normalize against full markdown
+      const rawStructure = await this.getOrDetectStructure(markdown);
+      const structure = normalizeDocumentStructure(markdown, rawStructure);
+      this.cachedStructure = structure;
 
       // Step 2: Initialize adaptive boundary strategy with detected structure
       this.boundaryStrategy.initialize(structure);
 
       // Step 3: Update configuration with detected markers
       this.configuration.markers.solutionsHeader =
-        structure.solutionPattern.marker ?? '';
+        structure.solutionPattern.location === 'separate'
+          ? (structure.solutionPattern.marker ?? '')
+          : '';
 
       this.logger.log(
-        `[adaptive-parser] Using detected format: ${structure.detectedFormat} (confidence=${structure.confidence})`,
+        `[adaptive-parser] Using detected format: ${structure.detectedFormat} (confidence=${structure.confidence}, solutions=${structure.solutionPattern.location})`,
       );
 
       // Step 4: Parse using base implementation with adaptive strategy
@@ -89,15 +129,19 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
         markdown,
         this.configuration.markers,
       );
-      const boundary = this.getBoundaryStrategy();
+      const questionBoundary = this.getBoundaryStrategy();
+      const solutionBoundary =
+        structure.solutionPattern.location === 'separate'
+          ? this.boundaryStrategy.createSolutionBoundary(structure)
+          : questionBoundary;
 
       const questions = this.questionParser.parse(
         document.questionsSection,
-        boundary,
+        questionBoundary,
       );
       const solutions = this.solutionParser.parse(
         document.solutionsSection,
-        boundary,
+        solutionBoundary,
       );
       const { matched, warnings } = this.matcher.matchWithWarnings(
         questions,
@@ -126,21 +170,7 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
         errors: [],
       };
     } catch (error) {
-      this.logger.error(
-        '[adaptive-parser] Parsing failed',
-        error instanceof Error ? error.stack : String(error),
-      );
-
-      const parseError: ParserError = {
-        code: 'ADAPTIVE_PARSE_FAILED',
-        message: `Adaptive parsing failed: ${error instanceof Error ? error.message : String(error)}`,
-      };
-
-      return {
-        data: [],
-        warnings: [],
-        errors: [parseError],
-      };
+      throw error;
     }
   }
 
@@ -161,8 +191,10 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
     // Detect structure using AI
     this.logger.log('[adaptive-parser] Detecting document structure...');
     const structure = await this.structureDetector.detectStructure(markdown, {
-      maxChars: 5000,
-      targetQuestions: 5,
+      maxChars: 8000,
+      maxLines: 300,
+      targetQuestions: 8,
+      solutionSampleChars: 2000,
     });
 
     // Cache for this parsing session
@@ -176,6 +208,7 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
    */
   clearCache(): void {
     this.cachedStructure = null;
+    this.structureWasSeeded = false;
     this.logger.debug('[adaptive-parser] Cleared structure cache');
   }
 
@@ -184,6 +217,7 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
    */
   seedStructure(structure: DocumentStructure): void {
     this.cachedStructure = structure;
+    this.structureWasSeeded = true;
     this.logger.debug(
       `[adaptive-parser] Seeded cached structure (${structure.detectedFormat})`,
     );
