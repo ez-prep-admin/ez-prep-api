@@ -1,20 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/parser/inline-duplicate-split.util.spec.ts">
-    <testCase name="splitRepeatedInlineNumbering splits a repeated 1..N cycle into questions and solutions" duration="7"/>
-    <testCase name="splitRepeatedInlineNumbering does not split non-repeated numbering" duration="4"/>
-    <testCase name="splitRepeatedInlineNumbering does not split when repeated numbers are not a full matching cycle" duration="1"/>
-  </file>
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/prompt/structure-detection.prompt.spec.ts">
-    <testCase name="extractMarkdownSample includes a symmetric tail sample when no solution marker exists" duration="3"/>
-    <testCase name="extractMarkdownSample prefers a known solutions marker snippet over the tail sample" duration="0"/>
-    <testCase name="extractMarkdownSample skips the tail sample when the document is too short to avoid overlap" duration="1"/>
-  </file>
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/parser/document-structure.normalizer.spec.ts">
-    <testCase name="normalizeDocumentStructure corrects misdetected inline solutions when a separate answers section exists" duration="2"/>
-    <testCase name="normalizeDocumentStructure parses 9 MathonGo questions and 9 solutions after normalization" duration="1"/>
-    <testCase name="normalizeDocumentStructure reconciles stale ## Q regex when Mathpix outputs LaTeX section headings" duration="0"/>
-    <testCase name="normalizeDocumentStructure rejects horizontal-rule markers hallucinated from structure-detection samples" duration="1"/>
-    <testCase name="normalizeDocumentStructure parses headerless flip-test style documents via repeated numbering split" duration="2"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/dto/import-failed-question.dto.spec.ts">
+    <testCase name="ImportFailedQuestionDto accepts a nested question payload from the admin import form" duration="4"/>
   </file>
 </testExecutions>

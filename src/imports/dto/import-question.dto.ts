@@ -1,30 +1,57 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { Allow, IsOptional, ValidateNested } from 'class-validator';
 
 export class ImportImageMetadataDto {
+  @Allow()
   @ApiProperty({ example: 'imports/507f1f77bcf86cd799439015/q1/stem.png' })
   key: string;
 
+  @Allow()
   @ApiProperty({ example: 'ez-prep-assets' })
   bucket: string;
 
+  @Allow()
   @ApiProperty({ example: 'ap-south-1' })
   region: string;
 
+  @Allow()
   @ApiPropertyOptional({ example: 'image/png' })
   contentType?: string;
 
+  @Allow()
   @ApiPropertyOptional({ example: 48291 })
   size?: number;
 
+  @Allow()
   @ApiPropertyOptional()
   lastModified?: Date;
 
+  @Allow()
   @ApiPropertyOptional({ example: 'https://example.com/presigned-url' })
   url?: string;
 }
 
+export class ImportQuestionOptionDto {
+  @Allow()
+  id: string;
+
+  @Allow()
+  type: 'text' | 'image';
+
+  @Allow()
+  en?: string | null;
+
+  @Allow()
+  ml?: null;
+
+  @Allow()
+  image?: ImportImageMetadataDto | null;
+}
+
 /** Mongo-ready question payload for import / failed-question correction. */
 export class ImportQuestionPayloadDto {
+  @Allow()
   @ApiProperty({
     type: 'object',
     description: 'Question stem. `ml` is always empty for PDF imports.',
@@ -39,9 +66,12 @@ export class ImportQuestionPayloadDto {
     ml: { text: null; image: null };
   };
 
+  @Allow()
   @ApiProperty({ enum: ['text', 'image'] })
   optionType: 'text' | 'image';
 
+  @ValidateNested({ each: true })
+  @Type(() => ImportQuestionOptionDto)
   @ApiProperty({
     type: 'array',
     description: 'Exactly 4 options for NEET imports',
@@ -56,14 +86,9 @@ export class ImportQuestionPayloadDto {
       },
     },
   })
-  options: Array<{
-    id: string;
-    type: 'text' | 'image';
-    en?: string | null;
-    ml?: null;
-    image?: ImportImageMetadataDto | null;
-  }>;
+  options: ImportQuestionOptionDto[];
 
+  @Allow()
   @ApiProperty({
     type: 'object',
     example: { en: 'Explanation text', ml: null, image: null },
@@ -75,24 +100,28 @@ export class ImportQuestionPayloadDto {
     image?: ImportImageMetadataDto | null;
   };
 
+  @Allow()
   @ApiProperty({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
     description: 'Must match one of the option ids',
   })
   correctAnswer: string;
 
+  @Allow()
   @ApiProperty({
     example: '507f1f77bcf86cd799439011',
     description: 'Subject ObjectId from the upload metadata',
   })
   subject: string;
 
+  @Allow()
   @ApiProperty({
     example: '507f1f77bcf86cd799439012',
     description: 'Topic ObjectId from the upload metadata',
   })
   topic: string;
 
+  @Allow()
   @ApiProperty({
     type: [String],
     example: ['507f1f77bcf86cd799439013'],
@@ -100,15 +129,28 @@ export class ImportQuestionPayloadDto {
   })
   exams: string[];
 
+  @Allow()
   @ApiProperty({ enum: ['easy', 'medium', 'hard'] })
   difficultyLevel: 'easy' | 'medium' | 'hard';
 
+  @Allow()
   @ApiProperty({ example: true })
   isActive: boolean;
 
+  @Allow()
   @ApiProperty({ example: false })
   isDeleted: boolean;
 
+  @Allow()
+  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Ignored for PDF imports; accepted for admin form compatibility',
+    nullable: true,
+  })
+  tag?: string | null;
+
+  @Allow()
+  @IsOptional()
   @ApiProperty({
     example: 'PDF_UPLOAD',
     enum: ['PDF_UPLOAD'],
