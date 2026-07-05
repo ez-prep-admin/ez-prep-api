@@ -24,6 +24,12 @@ describe('json-salvage.util', () => {
     expect(result.parsed).toEqual({ questions: [] });
   });
 
+  it('removes trailing commas before closing braces', () => {
+    const result = salvageJson('{"questions":[{"number":1},]}');
+
+    expect(result.parsed).toEqual({ questions: [{ number: 1 }] });
+  });
+
   it('truncates previews for logging', () => {
     const preview = jsonPreview('a'.repeat(400), 100);
 

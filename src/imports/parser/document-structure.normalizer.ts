@@ -5,6 +5,15 @@ import {
 } from './infer-question-numbering';
 import { inferSolutionNumberingRegex } from './infer-solution-numbering';
 
+/** Delimiter between head/tail snippets in structure-detection prompts — not a document marker. */
+export const STRUCTURE_SAMPLE_BOUNDARY = '<<<STRUCTURE_DETECTION_SAMPLE>>>';
+
+export const STRUCTURE_SAMPLE_LABELS = [
+  STRUCTURE_SAMPLE_BOUNDARY,
+  '[Document tail sample]',
+  '[Solutions section sample]',
+] as const;
+
 export const KNOWN_SOLUTION_MARKERS = [
   '\\section*{ANSWERS AND SOLUTIONS}',
   '\\section*{Answers and Solutions}',
@@ -30,8 +39,59 @@ export function normalizeDocumentStructure(
   let next = enrichSolutionPatternFromDocument(markdown, structure);
   next = reconcileQuestionPatternFromMarkdown(markdown, next);
   next = normalizeQuestionPattern(next);
+  next = sanitizeSolutionMarker(markdown, next);
   next = attachSolutionNumberingPattern(markdown, next);
   return next;
+}
+
+function sanitizeSolutionMarker(
+  markdown: string,
+  structure: DocumentStructure,
+): DocumentStructure {
+  const marker = structure.solutionPattern.marker?.trim();
+  if (!marker) {
+    return structure;
+  }
+
+  const warnings = [...(structure.warnings ?? [])];
+
+  if (isInvalidSolutionMarker(marker)) {
+    warnings.push(
+      `Rejected invalid solution marker "${marker}" from structure detection.`,
+    );
+    return {
+      ...structure,
+      solutionPattern: {
+        ...structure.solutionPattern,
+        marker: undefined,
+      },
+      warnings,
+    };
+  }
+
+  if (!markdown.includes(marker)) {
+    warnings.push(
+      `Solution marker "${marker}" not found in document; using headerless fallback.`,
+    );
+    return {
+      ...structure,
+      solutionPattern: {
+        ...structure.solutionPattern,
+        marker: undefined,
+      },
+      warnings,
+    };
+  }
+
+  return structure;
+}
+
+export function isInvalidSolutionMarker(marker: string): boolean {
+  if (STRUCTURE_SAMPLE_LABELS.some(label => marker.includes(label))) {
+    return true;
+  }
+
+  return /^-{3,}$|^\*{3,}$|^_{3,}$/.test(marker);
 }
 
 function reconcileQuestionPatternFromMarkdown(

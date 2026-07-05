@@ -40,6 +40,10 @@ export class FailedQuestion {
   @Prop({ type: Number, required: true, index: true })
   questionNumber: number;
 
+  /** Stable 0-based position in the parsed question list for this upload. */
+  @Prop({ type: Number, required: true, index: true })
+  parseIndex: number;
+
   @Prop({ type: FailedQuestionSourceSchema, required: true })
   matchedQuestion: FailedQuestionSource;
 
@@ -90,6 +94,6 @@ FailedQuestionSchema.set('toObject', {
 });
 
 FailedQuestionSchema.index(
-  { uploadId: 1, questionNumber: 1 },
+  { uploadId: 1, parseIndex: 1 },
   { unique: true },
 );

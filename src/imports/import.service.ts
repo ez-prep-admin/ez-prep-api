@@ -69,6 +69,11 @@ import {
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 import { EnrichQuestionsDto } from './dto/enrich-questions.dto';
 import { randomUUID } from 'crypto';
+import {
+  aggregateChunkEnrichResults,
+  ChunkEnrichResult,
+  ensureMatchedQuestionIndices,
+} from './utils/enrich-result.util';
 
 /** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
 const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
@@ -165,8 +170,9 @@ export class ImportService {
         `[parse] Using cached matched questions for upload_id=${uploadId} (${upload.matchedQuestionsCache.length} items, parsed_at=${upload.markdownParsedAt?.toISOString() ?? 'unknown'})`,
       );
 
-      const matchedQuestions =
-        upload.matchedQuestionsCache as MatchedQuestion[];
+      const matchedQuestions = ensureMatchedQuestionIndices(
+        upload.matchedQuestionsCache as MatchedQuestion[],
+      );
 
       return {
         parserName: upload.parserName ?? 'adaptive',
@@ -204,7 +210,12 @@ export class ImportService {
     parsed: ParseMarkdownResult,
   ): Promise<void> {
     upload.parserName = parsed.parserName;
-    upload.matchedQuestionsCache = parsed.matchedQuestions;
+    upload.matchedQuestionsCache = parsed.matchedQuestions.map(
+      (question, index) => ({
+        ...question,
+        index,
+      }),
+    );
     upload.documentStructureCache = this.adaptiveParser.getCachedStructure() as
       | unknown
       | null as Record<string, unknown> | undefined;
@@ -374,6 +385,12 @@ export class ImportService {
         result.rejected,
       );
 
+      if (result.rejected.length > 0) {
+        this.logger.log(
+          `[enrich] Final rejection pass complete for upload_id=${uploadId} — ${result.rejected.length} question(s) written to failed_questions after all chunk retries finished`,
+        );
+      }
+
       upload.enrichedQuestions = result.questions as unknown as Record<
         string,
         unknown
@@ -420,7 +437,9 @@ export class ImportService {
       );
     }
 
-    return this.enrichMatchedQuestions(dto.matchedQuestions, {
+    return this.enrichMatchedQuestions(
+      ensureMatchedQuestionIndices(dto.matchedQuestions),
+      {
       adaptiveChunking: dto.adaptiveChunking ?? true,
       useParallel: dto.useParallel ?? false,
       maxRetries: dto.maxRetries ?? 3,
@@ -477,6 +496,7 @@ export class ImportService {
     const maxRetries = options?.maxRetries ?? 3;
     const adaptiveChunking = options?.adaptiveChunking ?? true;
     const maxConcurrentChunks = options?.maxConcurrentChunks ?? 2;
+    const indexedQuestions = ensureMatchedQuestionIndices(matchedQuestions);
 
     this.importImageStorage.clearSessionCache();
 
@@ -488,13 +508,13 @@ export class ImportService {
 
     const chunks = adaptiveChunking
       ? this.questionChunker.chunkByTokenLimit(
-          matchedQuestions,
+          indexedQuestions,
           chunkingOptions,
         )
-      : this.questionChunker.chunk(matchedQuestions);
+      : this.questionChunker.chunk(indexedQuestions);
 
     const chunkingStats = {
-      totalTokens: this.questionChunker.estimateTotalTokens(matchedQuestions),
+      totalTokens: this.questionChunker.estimateTotalTokens(indexedQuestions),
       chunks: chunks.map(chunk => ({
         chunkIndex: chunk.chunkIndex,
         questionCount: chunk.questions.length,
@@ -504,7 +524,7 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${ENRICH_MAX_QUESTIONS_PER_CHUNK})`,
+      `[enrich] Starting batch enrichment: ${indexedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${ENRICH_MAX_QUESTIONS_PER_CHUNK})`,
     );
 
     this.logger.log(
@@ -526,26 +546,20 @@ export class ImportService {
           options.uploadId,
         );
 
-    const questions: ImportQuestion[] = [];
-    const errors: EnrichError[] = [];
+    const { questions, errors } = aggregateChunkEnrichResults(chunkResults);
 
-    for (const result of chunkResults) {
-      questions.push(...result.questions);
-      errors.push(...result.errors);
-    }
+    errors.sort((left, right) => (left.index ?? left.number) - (right.index ?? right.number));
 
-    errors.sort((left, right) => left.number - right.number);
-
-    const matchedByNumber = new Map(
-      matchedQuestions.map(question => [question.number, question]),
+    const matchedByIndex = new Map(
+      indexedQuestions.map(question => [question.index!, question]),
     );
 
     const rejected: RejectedQuestion[] = errors.map(error =>
-      this.toRejectedQuestion(error, matchedByNumber),
+      this.toRejectedQuestion(error, matchedByIndex),
     );
 
     const summary = {
-      total: matchedQuestions.length,
+      total: indexedQuestions.length,
       success: questions.length,
       failed: rejected.length,
       durationMs: Date.now() - startedAt,
@@ -577,11 +591,8 @@ export class ImportService {
     maxRetries: number,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
-  ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
-    const results: Array<{
-      questions: ImportQuestion[];
-      errors: EnrichError[];
-    }> = [];
+  ): Promise<ChunkEnrichResult[]> {
+    const results: ChunkEnrichResult[] = [];
 
     for (const chunk of chunks) {
       const result = await this.processChunkWithRetry(
@@ -605,15 +616,12 @@ export class ImportService {
     maxConcurrentChunks: number,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
-  ): Promise<Array<{ questions: ImportQuestion[]; errors: EnrichError[] }>> {
+  ): Promise<ChunkEnrichResult[]> {
     this.logger.log(
       `[enrich] Processing ${chunks.length} chunk(s) in parallel (concurrency=${maxConcurrentChunks})`,
     );
 
-    const results: Array<{
-      questions: ImportQuestion[];
-      errors: EnrichError[];
-    }> = [];
+    const results: ChunkEnrichResult[] = [];
 
     for (let index = 0; index < chunks.length; index += maxConcurrentChunks) {
       const batch = chunks.slice(index, index + maxConcurrentChunks);
@@ -642,8 +650,11 @@ export class ImportService {
 
         results.push({
           questions: [],
+          enrichedIndices: [],
           errors: chunk.questions.map(q => ({
+            index: q.index!,
             number: q.number,
+            matchedQuestion: q,
             stage: 'llm' as const,
             message: `Chunk processing failed: ${result.reason}`,
             questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
@@ -667,7 +678,7 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
     currentAttempt = 1,
-  ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
+  ): Promise<ChunkEnrichResult> {
     const chunkStartedAt = Date.now();
     const numbers = chunk.questions.map(question => question.number).join(', ');
 
@@ -731,8 +742,11 @@ export class ImportService {
 
       return {
         questions: [],
+        enrichedIndices: [],
         errors: chunk.questions.map(q => ({
+          index: q.index!,
           number: q.number,
+          matchedQuestion: q,
           stage: 'llm' as const,
           message: `Chunk ${chunk.chunkIndex} failed after ${maxRetries} attempts: ${message}`,
           questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
@@ -752,9 +766,10 @@ export class ImportService {
     llmResult: DeepseekLlmResult,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
-  ): Promise<{ questions: ImportQuestion[]; errors: EnrichError[] }> {
+  ): Promise<ChunkEnrichResult> {
     const questions: ImportQuestion[] = [];
     const errors: EnrichError[] = [];
+    const enrichedIndices: number[] = [];
 
     const batchOutputs = this.aiOutputValidator
       .validateBatch(llmResult.content, {
@@ -772,7 +787,9 @@ export class ImportService {
       if (!returnedNumbers.has(matched.number)) {
         const message = `Question ${matched.number} missing from batch LLM response.`;
         errors.push({
+          index: matched.index!,
           number: matched.number,
+          matchedQuestion: matched,
           stage: 'llm',
           message,
           questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
@@ -804,6 +821,7 @@ export class ImportService {
           uploadId,
         );
         questions.push(question);
+        enrichedIndices.push(matched.index!);
         this.logger.log(
           `[enrich] Question ${output.number} enriched successfully`,
         );
@@ -813,6 +831,8 @@ export class ImportService {
 
         errors.push({
           ...enrichError,
+          index: matched?.index,
+          matchedQuestion: matched,
           questionDraft:
             matched &&
             this.buildQuestionDraftOnFailure(
@@ -828,7 +848,7 @@ export class ImportService {
       }
     }
 
-    return { questions, errors };
+    return { questions, errors, enrichedIndices };
   }
 
   /**
@@ -1339,11 +1359,18 @@ export class ImportService {
 
   private toRejectedQuestion(
     error: EnrichError,
-    matchedByNumber: Map<number, MatchedQuestion>,
+    matchedByIndex: Map<number, MatchedQuestion>,
   ): RejectedQuestion {
+    const matched =
+      error.matchedQuestion ??
+      (error.index !== undefined
+        ? matchedByIndex.get(error.index)
+        : undefined);
+
     return {
       ...error,
-      matchedQuestion: matchedByNumber.get(error.number) ?? {
+      matchedQuestion: matched ?? {
+        index: error.index,
         number: error.number,
         question: '',
       },

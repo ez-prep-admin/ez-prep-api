@@ -42,6 +42,20 @@ export function salvageJson(raw: string): JsonSalvageResult {
     }
   }
 
+  const trailingCommaFixed = removeTrailingCommas(fenceStripped);
+  if (trailingCommaFixed !== fenceStripped) {
+    try {
+      return {
+        parsed: JSON.parse(trailingCommaFixed),
+        strategy: 'object-extracted',
+      };
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        lastError = error;
+      }
+    }
+  }
+
   throw lastError ?? new SyntaxError('Model response is not valid JSON.');
 }
 
@@ -68,4 +82,9 @@ function extractJsonObject(value: string): string | undefined {
   }
 
   return value.slice(start, end + 1);
+}
+
+/** Removes trailing commas before `}` or `]` — a common LLM JSON mistake. */
+function removeTrailingCommas(value: string): string {
+  return value.replace(/,\s*([}\]])/g, '$1');
 }

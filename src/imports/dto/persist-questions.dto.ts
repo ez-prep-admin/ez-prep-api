@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
 import { EnrichStatsDto, MatchedQuestionDto } from './enrich-questions.dto';
 import {
   ImportFailedQuestionResponseDto,
@@ -65,6 +67,8 @@ export class PersistQuestionsResponseDto {
 }
 
 export class ImportFailedQuestionDto {
+  @ValidateNested()
+  @Type(() => ImportQuestionPayloadDto)
   @ApiProperty({
     description:
       'Corrected Mongo-ready question payload from the admin UI. ' +

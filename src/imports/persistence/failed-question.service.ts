@@ -37,6 +37,7 @@ export class FailedQuestionService {
       rejected.map(item => ({
         uploadId: new Types.ObjectId(uploadId),
         questionNumber: item.number,
+        parseIndex: item.index ?? item.matchedQuestion.index ?? item.number,
         matchedQuestion: item.matchedQuestion,
         failureStage: item.stage,
         failureMessage: item.message,

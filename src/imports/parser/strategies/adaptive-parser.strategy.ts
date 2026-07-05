@@ -11,6 +11,7 @@ import { StructureDetectorService } from '../structure-detector.service';
 import { normalizeDocumentStructure } from '../document-structure.normalizer';
 import { DocumentStructure } from '../../types/document-structure';
 import { MatchedQuestion } from '../../types/matched-question';
+import { splitRepeatedInlineNumbering } from '../inline-duplicate-split.util';
 import {
   ParserError,
   ParserResult,
@@ -135,20 +136,42 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
           ? this.boundaryStrategy.createSolutionBoundary(structure)
           : questionBoundary;
 
-      const questions = this.questionParser.parse(
+      let questions = this.questionParser.parse(
         document.questionsSection,
         questionBoundary,
       );
-      const solutions = this.solutionParser.parse(
+      let solutions = this.solutionParser.parse(
         document.solutionsSection,
         solutionBoundary,
       );
+      const allWarnings: ParserWarning[] = [];
+
+      // When the whole document was parsed as questions (inline mode, or separate
+      // mode without a section marker), detect headerless answer blocks that repeat
+      // numbering 1..N at the end of the file.
+      if (document.solutionsSection.length === 0) {
+        const split = splitRepeatedInlineNumbering(questions);
+
+        if (split.split) {
+          questions = split.questions;
+          solutions = split.solutions;
+          allWarnings.push({
+            code: 'STRUCTURE_DETECTION',
+            message:
+              '[Structure Detection] Repeated numbering detected at document end; treated the second cycle as solutions instead of duplicate questions.',
+          });
+          this.logger.warn(
+            `[adaptive-parser] Repeated numbering split: ${questions.length} question(s) + ${solutions.length} solution(s) (was ${questions.length + solutions.length} blocks before split)`,
+          );
+        }
+      }
+
       const { matched, warnings } = this.matcher.matchWithWarnings(
         questions,
         solutions,
       );
 
-      const allWarnings: ParserWarning[] = [...warnings];
+      allWarnings.push(...warnings);
 
       for (const warning of structure.warnings ?? []) {
         allWarnings.push({

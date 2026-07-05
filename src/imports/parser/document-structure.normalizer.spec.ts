@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { normalizeDocumentStructure } from './document-structure.normalizer';
+import { normalizeDocumentStructure, isInvalidSolutionMarker } from './document-structure.normalizer';
 import { DocumentStructure } from '../types/document-structure';
 import { AdaptiveBoundaryStrategy } from './boundaries/adaptive-boundary.strategy';
 import { parseNumberedBlocks } from './numbered-block.parser';
+import { splitRepeatedInlineNumbering } from './inline-duplicate-split.util';
 
 describe('normalizeDocumentStructure', () => {
   const mathonGoStructure: DocumentStructure = {
@@ -107,5 +108,71 @@ describe('normalizeDocumentStructure', () => {
     expect(normalized.solutionPattern.marker).toBe(
       '\\section*{ANSWERS AND SOLUTIONS}',
     );
+  });
+
+  it('rejects horizontal-rule markers hallucinated from structure-detection samples', () => {
+    const markdown = [
+      '1. Question one',
+      '2. Question two',
+      '1. Answer one',
+      '2. Answer two',
+    ].join('\n');
+
+    const normalized = normalizeDocumentStructure(markdown, {
+      ...mathonGoStructure,
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: true,
+        marker: '---',
+      },
+    });
+
+    expect(isInvalidSolutionMarker('---')).toBe(true);
+    expect(normalized.solutionPattern.marker).toBeUndefined();
+    expect(normalized.warnings?.some(w => w.includes('Rejected invalid'))).toBe(
+      true,
+    );
+  });
+
+  it('parses headerless flip-test style documents via repeated numbering split', () => {
+    const questions = Array.from({ length: 20 }, (_, index) =>
+      `${index + 1}. Question ${index + 1}`,
+    );
+    const answers = Array.from({ length: 20 }, (_, index) =>
+      `${index + 1}. Answer ${index + 1}`,
+    );
+    const markdown = [...questions, ...answers].join('\n');
+
+    const normalized = normalizeDocumentStructure(markdown, {
+      questionPattern: {
+        type: 'numbered',
+        regex: '^(\\d+)\\.\\s',
+        exampleMatch: '1. Question 1',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: true,
+        marker: '---',
+      },
+      delimiter: { type: 'blank-line', value: '', confidence: 0.8 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'Flip test',
+      confidence: 0.8,
+    });
+
+    expect(normalized.solutionPattern.marker).toBeUndefined();
+
+    const boundary = new AdaptiveBoundaryStrategy();
+    boundary.initialize(normalized);
+    const parsed = parseNumberedBlocks(markdown, boundary);
+    const split = splitRepeatedInlineNumbering(parsed);
+
+    expect(split.split).toBe(true);
+    expect(split.questions).toHaveLength(20);
+    expect(split.solutions).toHaveLength(20);
   });
 });

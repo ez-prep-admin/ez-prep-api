@@ -67,9 +67,12 @@ export interface PersistQuestionsResult {
 }
 
 export interface EnrichError {
+  /** Stable parse index; used to dedupe failures vs successes across chunks. */
+  index?: number;
   number: number;
   stage: 'llm' | 'zod' | 'business' | 'mapping' | 'image';
   message: string;
+  matchedQuestion?: MatchedQuestion;
   questionDraft?: ImportQuestion;
 }
 
