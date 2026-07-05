@@ -32,6 +32,31 @@ export class ParseQuestionPdfDto {
 }
 
 /**
+ * Immediate response when a PDF parse job is accepted (async Mathpix pipeline).
+ */
+export class StartParsePdfUploadResponseDto {
+  @ApiProperty({
+    description: 'Upload ID for polling parse status',
+    example: '507f1f77bcf86cd799439015',
+  })
+  uploadId: string;
+
+  @ApiProperty({
+    description: 'Upload status while Mathpix conversion runs in the background',
+    enum: ['parsing'],
+    example: 'parsing',
+  })
+  status: 'parsing';
+
+  @ApiProperty({
+    description: 'Instructions for polling until parsing completes',
+    example:
+      'PDF parsing started. Poll GET /imports/uploads/:uploadId until status is parsed or failed.',
+  })
+  message: string;
+}
+
+/**
  * Response DTO for PDF parsing result
  */
 export class ParseQuestionPdfResponseDto {

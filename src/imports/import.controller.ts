@@ -40,9 +40,9 @@ import {
 } from './dto/upload-question-pdf.dto';
 import {
   ParseQuestionPdfDto,
-  ParseQuestionPdfResponseDto,
   GetUploadDetailsResponseDto,
   UploadsListResponseDto,
+  StartParsePdfUploadResponseDto,
 } from './dto/parse-question-pdf.dto';
 import {
   EnrichQuestionsDto,
@@ -190,15 +190,14 @@ export class ImportController {
   }
 
   @Post('parse-pdf/:uploadId')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @SkipTimeout() // Mathpix conversion can take several minutes
   @ApiOperation({
-    summary: 'Parse an uploaded PDF using Mathpix',
+    summary: 'Start PDF parsing using Mathpix (async)',
     description:
-      'Convert a previously uploaded PDF to Markdown format using Mathpix OCR API. ' +
-      'This process can take 1-5 minutes depending on the PDF size and complexity. ' +
-      'The markdown content is saved to S3 and the S3 key is returned in the response. ' +
-      'The full markdown is also returned in the immediate response for convenience.',
+      'Accepts the parse job immediately (202) and runs Mathpix OCR in the background. ' +
+      'Poll GET /imports/uploads/:uploadId until status is `parsed` or `failed`. ' +
+      'This process can take 1-5 minutes depending on the PDF size and complexity.',
   })
   @ApiParam({
     name: 'uploadId',
@@ -210,26 +209,26 @@ export class ImportController {
     required: false,
   })
   @ApiResponse({
-    status: 200,
-    description: 'PDF parsed successfully',
-    type: ParseQuestionPdfResponseDto,
+    status: 202,
+    description: 'Parse job accepted; poll upload status for completion',
+    type: StartParsePdfUploadResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Upload not found',
   })
   @ApiResponse({
-    status: 500,
-    description: 'Mathpix conversion failed',
+    status: 409,
+    description: 'Upload is already being parsed',
   })
   async parseQuestionPdf(
     @Param('uploadId') uploadId: string,
     @Body() dto: ParseQuestionPdfDto,
-  ): Promise<{ message: string; data: ParseQuestionPdfResponseDto }> {
-    const result = await this.importService.parseQuestionPdf(uploadId, dto);
+  ): Promise<{ message: string; data: StartParsePdfUploadResponseDto }> {
+    const result = await this.importService.startParsePdfUpload(uploadId, dto);
 
     return {
-      message: 'PDF parsed successfully',
+      message: result.message,
       data: result,
     };
   }
