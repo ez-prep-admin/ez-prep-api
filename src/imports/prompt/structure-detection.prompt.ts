@@ -1,5 +1,8 @@
 import { StructureDetectionResponse } from '../types/document-structure';
-import { KNOWN_SOLUTION_MARKERS } from '../parser/document-structure.normalizer';
+import {
+  KNOWN_SOLUTION_MARKERS,
+  STRUCTURE_SAMPLE_BOUNDARY,
+} from '../parser/document-structure.normalizer';
 
 /**
  * JSON schema shape for structure detection response
@@ -51,7 +54,7 @@ Rules:
    - "separate" if solutions are in a distinct section
    - "end-of-page" if solutions appear at page bottom
    - "mixed" if there's a combination
-6. If solutions are separate, provide the section marker string (e.g., "## SOLUTIONS", "## ANSWERS AND SOLUTIONS"). Omit marker only for inline solutions.
+6. If solutions are separate, provide the exact section marker string that appears verbatim in the document (e.g., "## SOLUTIONS", "## ANSWERS AND SOLUTIONS"). If there is no explicit heading before the answer block, omit marker entirely. Never use horizontal rules (---), sample labels, or other synthetic delimiters as the marker.
 7. Set matchesQuestionNumbering to false when the answers section uses different line prefixes than questions (common: questions as "## Q1." but answers as "1. (2)"). When false, optionally provide solutionPattern.numberingRegex with a capture group for the answer entry number.
 8. Identify delimiter type between questions:
    - "heading" for markdown headings
@@ -83,8 +86,9 @@ Return the analysis as JSON following the specified format.`;
 }
 
 /**
- * Extract a representative sample from markdown for structure detection
- * Takes first N questions and solutions to minimize token usage
+ * Extract a representative sample from markdown for structure detection.
+ * Captures the document head (first N question starts) and, when no solution
+ * section marker exists, the same number of lines from the document tail.
  */
 export function extractMarkdownSample(
   markdown: string,
@@ -103,37 +107,11 @@ export function extractMarkdownSample(
   } = options;
 
   const lines = markdown.split('\n');
-
-  // Capture first N questions from the document
-  let questionCount = 0;
-  const capturedLines: string[] = [];
-
-  for (const line of lines) {
-    capturedLines.push(line);
-
-    if (
-      /^\s*\d+\.\s/.test(line) ||
-      /^\s*##\s*Q\d+/i.test(line) ||
-      /^\s*Q\d+/i.test(line) ||
-      /^\\section\*\{Q\d+/i.test(line)
-    ) {
-      questionCount++;
-      if (questionCount >= targetQuestions) {
-        break;
-      }
-    }
-
-    if (
-      capturedLines.length >= maxLines ||
-      capturedLines.join('\n').length >= maxChars
-    ) {
-      break;
-    }
-  }
-
-  let sample = capturedLines.join('\n');
+  const headLines = captureHeadLines(lines, targetQuestions, maxLines);
+  let sample = headLines.join('\n');
 
   // Append a solutions-section snippet so the LLM can detect separate answer keys
+  let appendedSolutionsSample = false;
   for (const marker of KNOWN_SOLUTION_MARKERS) {
     const markerIndex = markdown.indexOf(marker);
     if (markerIndex === -1) {
@@ -145,8 +123,20 @@ export function extractMarkdownSample(
       markerIndex + solutionSampleChars,
     );
 
-    sample = `${sample}\n\n---\n\n[Solutions section sample]\n${solutionSnippet}`;
+    sample = `${sample}\n\n${STRUCTURE_SAMPLE_BOUNDARY}\n\n[Solutions section sample]\n${solutionSnippet}`;
+    appendedSolutionsSample = true;
     break;
+  }
+
+  // Headerless answer blocks only appear at the tail — mirror the head line count.
+  if (!appendedSolutionsSample && lines.length > headLines.length) {
+    const tailStartIndex = lines.length - headLines.length;
+    if (tailStartIndex >= headLines.length) {
+      const tail = lines.slice(tailStartIndex).join('\n').trim();
+      if (tail.length > 0) {
+        sample = `${sample}\n\n${STRUCTURE_SAMPLE_BOUNDARY}\n\n[Document tail sample]\n${tail}`;
+      }
+    }
   }
 
   if (sample.length > maxChars) {
@@ -154,4 +144,39 @@ export function extractMarkdownSample(
   }
 
   return sample;
+}
+
+function captureHeadLines(
+  lines: string[],
+  targetQuestions: number,
+  maxLines: number,
+): string[] {
+  let questionCount = 0;
+  const capturedLines: string[] = [];
+
+  for (const line of lines) {
+    capturedLines.push(line);
+
+    if (isQuestionStartLine(line)) {
+      questionCount++;
+      if (questionCount >= targetQuestions) {
+        break;
+      }
+    }
+
+    if (capturedLines.length >= maxLines) {
+      break;
+    }
+  }
+
+  return capturedLines;
+}
+
+function isQuestionStartLine(line: string): boolean {
+  return (
+    /^\s*\d+\.\s/.test(line) ||
+    /^\s*##\s*Q\d+/i.test(line) ||
+    /^\s*Q\d+/i.test(line) ||
+    /^\\section\*\{Q\d+/i.test(line)
+  );
 }
