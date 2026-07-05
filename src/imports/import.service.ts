@@ -86,6 +86,12 @@ export interface StartEnrichUploadResult {
   message: string;
 }
 
+export interface StartParsePdfUploadResult {
+  uploadId: string;
+  status: 'parsing';
+  message: string;
+}
+
 export interface ParseMarkdownResult {
   parserName: string;
   matchedQuestions: MatchedQuestion[];
@@ -102,6 +108,8 @@ export interface ParseMarkdownResult {
 export class ImportService {
   /** In-process guard against duplicate enrich jobs before Mongo status is saved */
   private readonly activeEnrichJobs = new Set<string>();
+  /** In-process guard against duplicate parse jobs before Mongo status is saved */
+  private readonly activeParseJobs = new Set<string>();
   private readonly logger = new Logger(ImportService.name);
 
   constructor(
@@ -1530,24 +1538,17 @@ export class ImportService {
   }
 
   /**
-   * Parse a question paper PDF using Mathpix API
-   * @param uploadId Upload ID from database
-   * @param dto Parse options
-   * @returns Parse response with markdown content
+   * Starts PDF parsing asynchronously. Returns immediately with status `parsing`.
+   * Poll GET /imports/uploads/:uploadId until status is `parsed` or `failed`.
    */
-  async parseQuestionPdf(
+  async startParsePdfUpload(
     uploadId: string,
     dto: ParseQuestionPdfDto = {},
-  ): Promise<ParseQuestionPdfResponseDto> {
-    const startedAt = Date.now();
-
-    this.logger.log(`[parse-pdf] Starting parse for upload_id=${uploadId}`);
-
+  ): Promise<StartParsePdfUploadResult> {
     if (!Types.ObjectId.isValid(uploadId)) {
       throw new BadRequestException(`Invalid upload ID: ${uploadId}`);
     }
 
-    // Find upload record
     const upload = await this.questionUploadModel.findById(
       new Types.ObjectId(uploadId),
     );
@@ -1556,7 +1557,7 @@ export class ImportService {
       throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
     }
 
-    if (upload.status === 'parsing') {
+    if (upload.status === 'parsing' || this.activeParseJobs.has(uploadId)) {
       throw new ConflictException('This PDF is already being parsed');
     }
 
@@ -1566,13 +1567,81 @@ export class ImportService {
       );
     }
 
-    try {
-      // Update status to parsing
-      upload.status = 'parsing';
-      upload.parsingStartedAt = new Date();
-      upload.errorMessage = undefined;
-      await upload.save();
+    upload.status = 'parsing';
+    upload.parsingStartedAt = new Date();
+    upload.errorMessage = undefined;
+    await upload.save();
 
+    this.activeParseJobs.add(uploadId);
+    void this.runParsePdfInBackground(uploadId, dto).finally(() => {
+      this.activeParseJobs.delete(uploadId);
+    });
+
+    this.logger.log(
+      `[parse-pdf] Accepted background parse job for upload_id=${uploadId}`,
+    );
+
+    return {
+      uploadId,
+      status: 'parsing',
+      message:
+        'PDF parsing started. Poll GET /imports/uploads/:uploadId until status is parsed or failed.',
+    };
+  }
+
+  private async runParsePdfInBackground(
+    uploadId: string,
+    dto: ParseQuestionPdfDto,
+  ): Promise<void> {
+    try {
+      await this.executeParseQuestionPdf(uploadId, dto);
+    } catch (error) {
+      this.logger.error(
+        `[parse-pdf] Background parse failed for upload_id=${uploadId}: ${
+          error instanceof Error ? error.message : error
+        }`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      try {
+        const upload = await this.questionUploadModel.findById(
+          new Types.ObjectId(uploadId),
+        );
+        if (upload?.status === 'parsing') {
+          upload.status = 'failed';
+          upload.errorMessage =
+            error instanceof Error ? error.message : 'Unknown error';
+          await upload.save();
+        }
+      } catch (saveError) {
+        this.logger.error(
+          `[parse-pdf] Failed to persist failure status for upload_id=${uploadId}`,
+          saveError instanceof Error ? saveError.stack : saveError,
+        );
+      }
+    }
+  }
+
+  /**
+   * Run Mathpix conversion and persist markdown for an upload already in `parsing` status.
+   */
+  private async executeParseQuestionPdf(
+    uploadId: string,
+    dto: ParseQuestionPdfDto = {},
+  ): Promise<ParseQuestionPdfResponseDto> {
+    const startedAt = Date.now();
+
+    this.logger.log(`[parse-pdf] Starting parse for upload_id=${uploadId}`);
+
+    const upload = await this.questionUploadModel.findById(
+      new Types.ObjectId(uploadId),
+    );
+
+    if (!upload) {
+      throw new NotFoundException(`Upload not found with ID: ${uploadId}`);
+    }
+
+    try {
       this.logger.log(
         `[parse-pdf] Generating presigned URL for S3 object: ${upload.s3Key} (bucket=${upload.s3Bucket})`,
       );
@@ -1664,7 +1733,6 @@ export class ImportService {
 
       return response;
     } catch (error) {
-      // Update status to failed
       upload.status = 'failed';
       upload.errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
