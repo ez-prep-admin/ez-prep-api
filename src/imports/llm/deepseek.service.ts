@@ -14,6 +14,7 @@ export class DeepseekService {
   private readonly logger = new Logger(DeepseekService.name);
   private readonly client: OpenAI;
   private readonly model: string;
+  private readonly maxOutputTokens: number;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('DEEPSEEK_API_KEY');
@@ -31,10 +32,20 @@ export class DeepseekService {
     });
     this.model =
       this.configService.get<string>('DEEPSEEK_MODEL') ?? 'deepseek-chat';
+    this.maxOutputTokens = this.resolveMaxOutputTokens();
 
     this.logger.log(
-      `[deepseek] Client ready (model=${this.model}, timeout=300s)`,
+      `[deepseek] Client ready (model=${this.model}, timeout=300s, max_output_tokens=${this.maxOutputTokens})`,
     );
+  }
+
+  private resolveMaxOutputTokens(): number {
+    const configured = this.configService.get<string | number>(
+      'DEEPSEEK_MAX_OUTPUT_TOKENS',
+    );
+    const parsed = Number(configured ?? 8192);
+
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 8192;
   }
 
   async extractQuestion(matched: MatchedQuestion): Promise<string> {
@@ -44,6 +55,7 @@ export class DeepseekService {
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0.1,
+      max_tokens: this.maxOutputTokens,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -87,6 +99,7 @@ export class DeepseekService {
     const response = await this.client.chat.completions.create({
       model: this.model,
       temperature: 0.1,
+      max_tokens: this.maxOutputTokens,
       response_format: { type: 'json_object' },
       messages: [
         {

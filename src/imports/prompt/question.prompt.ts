@@ -19,7 +19,7 @@ Rules:
 8. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
 9. Use the provided solution to determine the correct answer and to write a clear explanation.
 10. correctAnswer must be the lowercase label of the correct option.
-11. difficultyLevel must be one of: easy, medium, hard.
+11. difficultyLevel must be exactly one of: easy, medium, hard. Assess each question independently based on concept depth, reasoning steps, and typical NEET exam difficulty — do not default every question to the same level.
 12. Do not invent options, facts, or images that are not supported by the input.
 13. If Malayalam text appears, ignore it and produce English output only.
 
@@ -43,7 +43,7 @@ Rules:
 10. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
 11. Use each provided solution to determine the correct answer and write the explanation.
 12. correctAnswer must be the lowercase label of the correct option.
-13. difficultyLevel must be one of: easy, medium, hard.
+13. difficultyLevel must be exactly one of: easy, medium, hard. Assess each question independently based on concept depth, reasoning steps, and typical NEET exam difficulty — do not default every question to the same level.
 14. Do not invent options, facts, or images that are not supported by the input.
 15. If Malayalam text appears, ignore it and produce English output only.
 

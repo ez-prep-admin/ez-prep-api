@@ -35,7 +35,7 @@ import {
   ParseQuestionPdfDto,
   ParseQuestionPdfResponseDto,
   GetUploadDetailsResponseDto,
-  CategorizedUploadsResponseDto,
+  UploadsListResponseDto,
 } from './dto/parse-question-pdf.dto';
 import {
   EnrichQuestionsDto,
@@ -76,7 +76,7 @@ export class ImportController {
   @ApiOperation({
     summary: 'Upload a question paper PDF',
     description:
-      'Upload a PDF file containing question paper along with metadata (subject, topic, exams, difficulty). ' +
+      'Upload a PDF file containing question paper along with metadata (subject, topic, exams). ' +
       'The PDF is stored in AWS S3 and tracked in the database for later processing.',
   })
   @ApiBody({
@@ -110,11 +110,6 @@ export class ImportController {
           items: { type: 'string' },
           description: 'Array of Exam IDs',
           example: ['507f1f77bcf86cd799439013'],
-        },
-        difficultyLevel: {
-          type: 'string',
-          enum: ['easy', 'medium', 'hard'],
-          description: 'Difficulty level',
         },
         metadata: {
           type: 'object',
@@ -320,11 +315,11 @@ export class ImportController {
 
   @Get('uploads')
   @ApiOperation({
-    summary: 'List uploaded PDFs (categorized)',
+    summary: 'List uploaded PDFs',
     description:
-      'Get a categorized list of uploaded question paper PDFs. ' +
-      'Returns two arrays: one with PDFs already converted to markdown (parsed), ' +
-      'and another with PDFs not yet converted (unparsed).',
+      'Get a paginated list of uploaded question paper PDFs. ' +
+      'Each item includes its `status`, so the frontend can categorize ' +
+      '(e.g. parsed vs unparsed) client-side without separate arrays.',
   })
   @ApiQuery({
     name: 'page',
@@ -342,15 +337,15 @@ export class ImportController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Categorized list of uploads retrieved successfully',
-    type: CategorizedUploadsResponseDto,
+    description: 'Paginated list of uploads retrieved successfully',
+    type: UploadsListResponseDto,
   })
   async listUploads(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ): Promise<{
     message: string;
-    data: CategorizedUploadsResponseDto;
+    data: UploadsListResponseDto;
   }> {
     const result = await this.importService.listUploads(page ?? 1, limit ?? 10);
 

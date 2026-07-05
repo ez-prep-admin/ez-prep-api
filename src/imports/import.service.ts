@@ -55,12 +55,17 @@ import {
   ParseQuestionPdfDto,
   ParseQuestionPdfResponseDto,
   GetUploadDetailsResponseDto,
-  CategorizedUploadsResponseDto,
+  UploadsListResponseDto,
   UploadMetadataDto,
 } from './dto/parse-question-pdf.dto';
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 import { EnrichQuestionsDto } from './dto/enrich-questions.dto';
 import { randomUUID } from 'crypto';
+
+/** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
+const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
+const ENRICH_PROMPT_OVERHEAD_TOKENS = 8000;
+const ENRICH_MAX_QUESTIONS_PER_CHUNK = 20;
 
 export interface ParseMarkdownResult {
   parserName: string;
@@ -271,6 +276,15 @@ export class ImportService {
         },
       );
 
+      if (result.questions.length === 0 && parsed.matchedQuestions.length > 0) {
+        const firstError = result.errors[0]?.message;
+        throw new BadRequestException(
+          firstError
+            ? `Enrichment failed for all questions. First error: ${firstError}`
+            : 'Enrichment failed for all questions.',
+        );
+      }
+
       upload.questionCount = result.questions.length;
       upload.status = 'completed';
       await upload.save();
@@ -360,8 +374,9 @@ export class ImportService {
     this.importImageStorage.clearSessionCache();
 
     const chunkingOptions = {
-      maxTokensPerChunk: 20000,
-      promptOverheadTokens: 4000,
+      maxTokensPerChunk: ENRICH_MAX_TOKENS_PER_CHUNK,
+      promptOverheadTokens: ENRICH_PROMPT_OVERHEAD_TOKENS,
+      maxQuestionsPerChunk: ENRICH_MAX_QUESTIONS_PER_CHUNK,
     };
 
     const chunks = adaptiveChunking
@@ -382,7 +397,7 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking})`,
+      `[enrich] Starting batch enrichment: ${matchedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${ENRICH_MAX_QUESTIONS_PER_CHUNK})`,
     );
 
     this.logger.log(
@@ -898,7 +913,6 @@ export class ImportService {
         subject: dto.subjectId ? new Types.ObjectId(dto.subjectId) : undefined,
         topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
         exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
-        difficultyLevel: dto.difficultyLevel,
         metadata: dto.metadata
           ? new Map(Object.entries(dto.metadata))
           : undefined,
@@ -1112,7 +1126,6 @@ export class ImportService {
       subjectId: upload.subject?.toString(),
       topicId: upload.topic?.toString(),
       examIds: upload.exams?.map(id => id.toString()),
-      difficultyLevel: upload.difficultyLevel,
       markdownS3Key: upload.markdownS3Key,
       errorMessage: upload.errorMessage,
       createdAt: upload.createdAt ?? new Date(),
@@ -1129,10 +1142,9 @@ export class ImportService {
   async listUploads(
     page: number = 1,
     limit: number = 10,
-  ): Promise<CategorizedUploadsResponseDto> {
+  ): Promise<UploadsListResponseDto> {
     const skip = (page - 1) * limit;
 
-    // Fetch all uploads (we'll categorize them in memory)
     const [allUploads, total] = await Promise.all([
       this.questionUploadModel
         .find()
@@ -1143,20 +1155,7 @@ export class ImportService {
       this.questionUploadModel.countDocuments(),
     ]);
 
-    // Count parsed and unparsed for pagination
-    const [parsedCount, unparsedCount] = await Promise.all([
-      this.questionUploadModel.countDocuments({
-        status: { $in: ['parsed', 'processing', 'completed'] },
-      }),
-      this.questionUploadModel.countDocuments({
-        status: { $in: ['uploaded', 'parsing', 'failed'] },
-      }),
-    ]);
-
-    // Helper function to map upload to metadata DTO
-    const mapToMetadata = (
-      upload: QuestionUploadDocument,
-    ): UploadMetadataDto => {
+    const uploads: UploadMetadataDto[] = allUploads.map(upload => {
       const uploadObj = upload.toObject();
       return {
         id: uploadObj.id,
@@ -1167,41 +1166,21 @@ export class ImportService {
         subjectId: upload.subject?.toString(),
         topicId: upload.topic?.toString(),
         examIds: upload.exams?.map(id => id.toString()),
-        difficultyLevel: upload.difficultyLevel,
         s3Key: upload.s3Key,
         markdownS3Key: upload.markdownS3Key,
         errorMessage: upload.errorMessage,
         createdAt: upload.createdAt ?? new Date(),
         updatedAt: upload.updatedAt ?? new Date(),
       };
-    };
-
-    // Categorize uploads
-    const parsed: UploadMetadataDto[] = [];
-    const unparsed: UploadMetadataDto[] = [];
-
-    for (const upload of allUploads) {
-      const metadata = mapToMetadata(upload);
-
-      // PDFs with status 'parsed', 'processing', or 'completed' have markdown
-      if (['parsed', 'processing', 'completed'].includes(upload.status)) {
-        parsed.push(metadata);
-      } else {
-        // 'uploaded', 'parsing', 'failed' are unparsed
-        unparsed.push(metadata);
-      }
-    }
+    });
 
     return {
-      parsed,
-      unparsed,
+      uploads,
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
-        parsedCount,
-        unparsedCount,
       },
     };
   }

@@ -27,6 +27,8 @@ export const securityConfig = {
             'https://ezprep.in',
             'https://www.ezprep.in',
             'https://ezprep-app.vercel.app',
+            'https://mock-app-admin.vercel.app/admin/questions',
+            'http://localhost:3001',
           ] // Replace with your actual domains
         : ['http://localhost:3000'], // Allow localhost:3000 in development
     credentials: true,

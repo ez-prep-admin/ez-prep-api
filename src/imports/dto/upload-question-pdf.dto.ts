@@ -2,7 +2,6 @@ import {
   IsString,
   IsOptional,
   IsMongoId,
-  IsEnum,
   IsArray,
   ArrayMinSize,
   IsObject,
@@ -93,17 +92,6 @@ export class UploadQuestionPdfDto {
     message: 'Each exam ID must be a valid MongoDB ObjectId',
   })
   examIds?: string[];
-
-  @ApiPropertyOptional({
-    description: 'Difficulty level of the questions',
-    enum: ['easy', 'medium', 'hard'],
-    example: 'medium',
-  })
-  @IsOptional()
-  @IsEnum(['easy', 'medium', 'hard'], {
-    message: 'Difficulty level must be one of: easy, medium, hard',
-  })
-  difficultyLevel?: 'easy' | 'medium' | 'hard';
 
   @ApiPropertyOptional({
     description: 'Additional metadata as key-value pairs',
