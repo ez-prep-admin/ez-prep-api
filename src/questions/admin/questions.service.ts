@@ -281,38 +281,33 @@ export class AdminQuestionsService {
 
   private toPopulatedRef(
     ref:
-      | { _id?: Types.ObjectId; id?: string; name: string }
+      | { _id: Types.ObjectId; name: string }
       | Types.ObjectId
       | undefined,
-  ): PopulatedRefDto | string | undefined {
+  ): PopulatedRefDto | Types.ObjectId | undefined {
     if (!ref) {
       return undefined;
     }
 
     if (ref instanceof Types.ObjectId) {
-      return ref.toString();
-    }
-
-    const id = ref._id?.toString() ?? ref.id;
-    if (!id) {
-      return undefined;
+      return ref;
     }
 
     return {
-      id,
+      _id: ref._id,
       name: ref.name,
     };
   }
 
   private toResponseDto(question: PopulatedQuestion): QuestionResponseDto {
-    const obj = question.toObject();
+    const obj = question.toObject({ transform: false, virtuals: false });
 
     const exams = Array.isArray(obj.exams)
       ? obj.exams.map(exam => this.toPopulatedRef(exam as never))
       : undefined;
 
     return new QuestionResponseDto({
-      id: question._id.toString(),
+      _id: obj._id,
       questionText: obj.questionText,
       optionType: obj.optionType,
       options: obj.options,
@@ -320,8 +315,8 @@ export class AdminQuestionsService {
       correctAnswer: obj.correctAnswer,
       subject: this.toPopulatedRef(obj.subject as never),
       topic: this.toPopulatedRef(obj.topic as never),
-      exams: exams as PopulatedRefDto[] | string[] | undefined,
-      tag: obj.tag?.toString(),
+      exams: exams as PopulatedRefDto[] | Types.ObjectId[] | undefined,
+      tag: obj.tag,
       difficultyLevel: obj.difficultyLevel,
       isActive: obj.isActive,
       createdAt: obj.createdAt,

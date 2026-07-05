@@ -1,11 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
+import { Types } from 'mongoose';
 import { ImageMetadataDto } from './image-metadata.dto';
 
 export class PopulatedRefDto {
   @ApiProperty({ example: '64f123456789abcdef123456' })
   @Expose()
-  id: string;
+  _id: Types.ObjectId;
 
   @ApiProperty({ example: 'Physics' })
   @Expose()
@@ -71,7 +72,7 @@ export class ExplanationResponseDto {
 export class QuestionResponseDto {
   @ApiProperty({ example: '64f123456789abcdef123456' })
   @Expose()
-  id: string;
+  _id: Types.ObjectId;
 
   @ApiProperty({ type: QuestionTextResponseDto })
   @Expose()
@@ -95,19 +96,19 @@ export class QuestionResponseDto {
 
   @ApiPropertyOptional({ type: PopulatedRefDto })
   @Expose()
-  subject?: PopulatedRefDto | string;
+  subject?: PopulatedRefDto | Types.ObjectId;
 
   @ApiPropertyOptional({ type: PopulatedRefDto })
   @Expose()
-  topic?: PopulatedRefDto | string;
+  topic?: PopulatedRefDto | Types.ObjectId;
 
   @ApiPropertyOptional({ type: [PopulatedRefDto] })
   @Expose()
-  exams?: PopulatedRefDto[] | string[];
+  exams?: PopulatedRefDto[] | Types.ObjectId[];
 
   @ApiPropertyOptional()
   @Expose()
-  tag?: string;
+  tag?: Types.ObjectId;
 
   @ApiPropertyOptional({ enum: ['easy', 'medium', 'hard'] })
   @Expose()

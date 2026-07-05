@@ -1,3 +1,53 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
+  <file path="E:\ez-prep-api\src\auth\auth.service.spec.ts">
+    <testCase name="AuthService should be defined" duration="55"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate existing user login should authenticate existing user successfully" duration="24"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate existing user login should throw UnauthorizedException for inactive user" duration="63"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate new user registration should register new user successfully" duration="6"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate new user registration should handle user creation failure" duration="11"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate OTP verification failures should throw UnauthorizedException for invalid OTP" duration="9"/>
+    <testCase name="AuthService verifyOtpAndAuthenticate OTP verification failures should handle MSG91 service errors during verification" duration="18"/>
+    <testCase name="AuthService validateJwtPayload should validate JWT payload successfully" duration="3"/>
+    <testCase name="AuthService validateJwtPayload should throw UnauthorizedException for invalid user ID" duration="20"/>
+    <testCase name="AuthService validateJwtPayload should throw UnauthorizedException for inactive user" duration="8"/>
+    <testCase name="AuthService edge cases and error handling should handle database errors gracefully" duration="12"/>
+    <testCase name="AuthService edge cases and error handling should handle JWT signing errors" duration="5"/>
+    <testCase name="AuthService integration scenarios should handle concurrent authentication requests" duration="9"/>
+    <testCase name="AuthService integration scenarios should maintain phone number format consistency" duration="32"/>
+  </file>
+  <file path="E:\ez-prep-api\src\auth\auth.controller.spec.ts">
+    <testCase name="AuthController should be defined" duration="74"/>
+    <testCase name="AuthController verifyOtp should verify OTP and authenticate user successfully" duration="14"/>
+    <testCase name="AuthController verifyOtp should handle authentication failure" duration="32"/>
+    <testCase name="AuthController verifyOtp should handle service errors" duration="9"/>
+  </file>
+  <file path="E:\ez-prep-api\src\app.controller.spec.ts">
+    <testCase name="AppController root should return welcome message wrapper" duration="48"/>
+  </file>
+  <file path="E:\ez-prep-api\src\auth\guards\auth-guards.spec.ts">
+    <testCase name="Auth Guards and Strategies JwtAuthGuard should be defined" duration="15"/>
+    <testCase name="Auth Guards and Strategies RolesGuard should be defined" duration="9"/>
+    <testCase name="Auth Guards and Strategies RolesGuard should allow access when no roles are required" duration="5"/>
+    <testCase name="Auth Guards and Strategies RolesGuard should allow access when user has required role" duration="6"/>
+    <testCase name="Auth Guards and Strategies RolesGuard should deny access when user does not have required role" duration="5"/>
+    <testCase name="Auth Guards and Strategies JwtStrategy should be defined" duration="5"/>
+    <testCase name="Auth Guards and Strategies JwtStrategy should validate JWT payload successfully" duration="11"/>
+    <testCase name="Auth Guards and Strategies JwtStrategy should throw UnauthorizedException for invalid payload" duration="31"/>
+  </file>
+  <file path="E:\ez-prep-api\src\auth\services\msg91.service.spec.ts">
+    <testCase name="Msg91Service Service with valid config should be defined" duration="14"/>
+  </file>
+  <file path="E:\ez-prep-api\src\users\users.service.spec.ts">
+    <testCase name="UsersService should be defined" duration="61"/>
+    <testCase name="UsersService create should create a user successfully" duration="19"/>
+    <testCase name="UsersService create should throw ConflictException when user already exists" duration="68"/>
+    <testCase name="UsersService findOne should find user by ID successfully" duration="7"/>
+    <testCase name="UsersService findOne should throw NotFoundException when user not found" duration="17"/>
+    <testCase name="UsersService findByPhone should find user by phone successfully" duration="10"/>
+    <testCase name="UsersService findByPhone should return null when user not found" duration="11"/>
+    <testCase name="UsersService update should update user successfully" duration="23"/>
+    <testCase name="UsersService update should throw NotFoundException when user not found" duration="10"/>
+    <testCase name="UsersService findAll should return all users" duration="28"/>
+  </file>
 </testExecutions>

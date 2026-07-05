@@ -6,15 +6,19 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Topic, TopicDocument } from './schemas/topic.schema';
+import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 import { CreateTopicDto } from './dto/create-topic.dto';
 import { UpdateTopicDto } from './dto/update-topic.dto';
 import { TopicResponseDto } from './dto/topic-response.dto';
+import { SubjectTopicDto } from '../subjects/dto/subject-response.dto';
 
 @Injectable()
 export class TopicsService {
   constructor(
     @InjectModel(Topic.name)
     private topicModel: Model<TopicDocument>,
+    @InjectModel(Subject.name)
+    private subjectModel: Model<SubjectDocument>,
   ) {}
 
   /**
@@ -40,6 +44,31 @@ export class TopicsService {
   async findAll(): Promise<TopicResponseDto[]> {
     const topics = await this.topicModel.find().sort({ name: 1 }).exec();
     return topics.map(topic => this.toResponseDto(topic));
+  }
+
+  /**
+   * Find topics linked to a subject
+   */
+  async findBySubject(subjectId: string): Promise<SubjectTopicDto[]> {
+    const subject = await this.subjectModel
+      .findById(subjectId)
+      .select('topics')
+      .exec();
+
+    if (!subject) {
+      throw new NotFoundException(`Subject with ID "${subjectId}" not found`);
+    }
+
+    if (!subject.topics?.length) {
+      return [];
+    }
+
+    const topics = await this.topicModel
+      .find({ _id: { $in: subject.topics } })
+      .sort({ name: 1 })
+      .exec();
+
+    return topics.map(topic => this.toSubjectTopicDto(topic));
   }
 
   /**
@@ -107,6 +136,14 @@ export class TopicsService {
     }
 
     return this.toResponseDto(topic);
+  }
+
+  private toSubjectTopicDto(topic: TopicDocument): SubjectTopicDto {
+    const obj = topic.toObject();
+    const dto = new SubjectTopicDto();
+    dto._id = obj._id?.toString() ?? '';
+    dto.name = obj.name;
+    return dto;
   }
 
   /**

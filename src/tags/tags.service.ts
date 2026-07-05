@@ -241,16 +241,12 @@ export class TagsService {
    * @returns TagResponseDto
    */
   private toResponseDto(tag: TagDocument): TagResponseDto {
-    const obj = tag.toObject();
+    const obj = tag.toObject({ transform: false, virtuals: false });
     return new TagResponseDto({
-      id: tag._id?.toString(),
-      name: obj.name,
-      description: obj.description,
-      subject: obj.subject?.toString(),
-      topic: obj.topic?.toString(),
-      isActive: obj.isActive,
-      createdAt: obj.createdAt,
-      updatedAt: obj.updatedAt,
+      ...obj,
+      _id: obj._id,
+      subject: obj.subject,
+      topic: obj.topic,
     });
   }
 }

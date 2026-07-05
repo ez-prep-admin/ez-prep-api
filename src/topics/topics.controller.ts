@@ -25,6 +25,7 @@ import { TopicsService } from './topics.service';
 import { CreateTopicDto } from './dto/create-topic.dto';
 import { UpdateTopicDto } from './dto/update-topic.dto';
 import { TopicResponseDto } from './dto/topic-response.dto';
+import { SubjectTopicDto } from '../subjects/dto/subject-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -80,6 +81,36 @@ export class TopicsController {
     count: number;
   }> {
     const topics = await this.topicsService.findAll();
+    return {
+      message: 'Topics retrieved successfully',
+      data: topics,
+      count: topics.length,
+    };
+  }
+
+  @Get('subject/:subjectId')
+  @ApiOperation({
+    summary: 'Get topics by subject',
+    description:
+      'Retrieves topics linked to the given subject. Public endpoint.',
+  })
+  @ApiParam({
+    name: 'subjectId',
+    description: 'Subject ID',
+    example: '64f123456789abcdef123456',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Topics retrieved successfully',
+    type: [SubjectTopicDto],
+  })
+  @ApiNotFoundResponse({ description: 'Subject not found' })
+  async findBySubject(@Param('subjectId') subjectId: string): Promise<{
+    message: string;
+    data: SubjectTopicDto[];
+    count: number;
+  }> {
+    const topics = await this.topicsService.findBySubject(subjectId);
     return {
       message: 'Topics retrieved successfully',
       data: topics,
