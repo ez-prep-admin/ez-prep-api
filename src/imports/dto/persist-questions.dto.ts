@@ -1,5 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EnrichStatsDto, MatchedQuestionDto } from './enrich-questions.dto';
+import {
+  ImportFailedQuestionResponseDto,
+  ImportQuestionPayloadDto,
+} from './import-question.dto';
 
 export class PersistQuestionErrorDto {
   @ApiProperty({ example: 0 })
@@ -62,12 +66,17 @@ export class PersistQuestionsResponseDto {
 
 export class ImportFailedQuestionDto {
   @ApiProperty({
-    description: 'Corrected Mongo-ready question payload from the admin UI',
-    type: 'object',
-    additionalProperties: true,
+    description:
+      'Corrected Mongo-ready question payload from the admin UI. ' +
+      'Must pass the same validation as bulk import (Zod schema, 4 NEET options, ' +
+      'difficultyLevel, subject/topic/exam references, correctAnswer matching an option id). ' +
+      'The failed question id is taken from the URL path; on success that failed_questions entry is deleted.',
+    type: ImportQuestionPayloadDto,
   })
-  question: Record<string, unknown>;
+  question: ImportQuestionPayloadDto;
 }
+
+export { ImportFailedQuestionResponseDto };
 
 export class FailedQuestionListItemDto {
   @ApiProperty({ example: '507f1f77bcf86cd799439020' })
@@ -88,14 +97,48 @@ export class FailedQuestionListItemDto {
   @ApiProperty({ type: MatchedQuestionDto })
   matchedQuestion: MatchedQuestionDto;
 
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
-  questionDraft?: Record<string, unknown>;
+  @ApiPropertyOptional({
+    type: ImportQuestionPayloadDto,
+    description:
+      'Partial LLM-mapped payload stored at enrichment time when failure happened after LLM output',
+  })
+  questionDraft?: ImportQuestionPayloadDto;
+
+  @ApiProperty({
+    type: ImportQuestionPayloadDto,
+    description:
+      'Form-ready question payload for the admin edit UI. Uses questionDraft when available, ' +
+      'otherwise a shell built from upload metadata (subject, topic, exams) and source markdown.',
+  })
+  question: ImportQuestionPayloadDto;
 
   @ApiProperty()
   createdAt: Date;
 
   @ApiProperty()
   updatedAt: Date;
+}
+
+export class FailedQuestionsPaginationDto {
+  @ApiProperty({ example: 1 })
+  page: number;
+
+  @ApiProperty({ example: 10 })
+  limit: number;
+
+  @ApiProperty({ example: 42 })
+  total: number;
+
+  @ApiProperty({ example: 5 })
+  totalPages: number;
+}
+
+export class FailedQuestionsListResponseDto {
+  @ApiProperty({ type: [FailedQuestionListItemDto] })
+  items: FailedQuestionListItemDto[];
+
+  @ApiProperty({ type: FailedQuestionsPaginationDto })
+  pagination: FailedQuestionsPaginationDto;
 }
 
 export class CachedEnrichmentResponseDto {

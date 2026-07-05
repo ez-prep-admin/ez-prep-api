@@ -96,7 +96,10 @@ describe('normalizeDocumentStructure', () => {
       return;
     }
 
-    const normalized = normalizeDocumentStructure(mmdMarkdown, mathonGoStructure);
+    const normalized = normalizeDocumentStructure(
+      mmdMarkdown,
+      mathonGoStructure,
+    );
 
     expect(normalized.questionPattern.regex).toBe(
       '^\\\\section\\*\\{Q(\\d+)\\.',

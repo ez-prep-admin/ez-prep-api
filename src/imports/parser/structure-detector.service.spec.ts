@@ -1,5 +1,4 @@
 import { normalizeDocumentStructure } from './document-structure.normalizer';
-import { DocumentStructure } from '../types/document-structure';
 
 describe('normalizeDocumentStructure', () => {
   it('adds a capture group to Q-heading regex patterns', () => {

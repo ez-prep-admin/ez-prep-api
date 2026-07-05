@@ -56,7 +56,9 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
   /**
    * Build a dedicated boundary strategy for the solutions section.
    */
-  createSolutionBoundary(structure: DocumentStructure): AdaptiveBoundaryStrategy {
+  createSolutionBoundary(
+    structure: DocumentStructure,
+  ): AdaptiveBoundaryStrategy {
     const boundary = new AdaptiveBoundaryStrategy();
     boundary.initializeForSolutions(structure);
     return boundary;

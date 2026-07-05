@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -44,6 +49,25 @@ export class FailedQuestionService {
     );
   }
 
+  async listPaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ docs: FailedQuestionDocument[]; total: number }> {
+    const skip = (page - 1) * limit;
+
+    const [docs, total] = await Promise.all([
+      this.failedQuestionModel
+        .find()
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.failedQuestionModel.countDocuments(),
+    ]);
+
+    return { docs, total };
+  }
+
   async listByUpload(uploadId: string): Promise<FailedQuestionDocument[]> {
     return this.failedQuestionModel
       .find({ uploadId: new Types.ObjectId(uploadId) })
@@ -55,7 +79,9 @@ export class FailedQuestionService {
     failedQuestionId: string,
   ): Promise<FailedQuestionDocument> {
     if (!Types.ObjectId.isValid(failedQuestionId)) {
-      throw new BadRequestException(`Invalid failed question ID: ${failedQuestionId}`);
+      throw new BadRequestException(
+        `Invalid failed question ID: ${failedQuestionId}`,
+      );
     }
 
     const doc = await this.failedQuestionModel.findById(

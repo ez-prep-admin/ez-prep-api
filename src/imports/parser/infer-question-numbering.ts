@@ -48,7 +48,10 @@ export function inferQuestionNumberingPattern(
   let best: InferredQuestionPattern | null = null;
 
   for (const candidate of CANDIDATE_PATTERNS) {
-    const regex = new RegExp(candidate.lineRegex.source, candidate.lineRegex.flags);
+    const regex = new RegExp(
+      candidate.lineRegex.source,
+      candidate.lineRegex.flags,
+    );
     let matchCount = 0;
     let exampleLine = '';
 

@@ -29,7 +29,9 @@ import { ImportService } from './import.service';
 import {
   CachedEnrichmentResponseDto,
   FailedQuestionListItemDto,
+  FailedQuestionsListResponseDto,
   ImportFailedQuestionDto,
+  ImportFailedQuestionResponseDto,
   PersistQuestionsResponseDto,
 } from './dto/persist-questions.dto';
 import {
@@ -340,27 +342,73 @@ export class ImportController {
     };
   }
 
-  @Get('uploads/:uploadId/failed-questions')
+  @Get('failed-questions')
   @ApiOperation({
-    summary: 'List failed questions for an upload',
+    summary: 'List all failed questions (paginated)',
     description:
-      'Returns one document per rejected question from enrichment, including failure stage, message, and source markdown.',
+      'Returns paginated documents from the failed_questions collection. Each item includes ' +
+      'failure metadata, source markdown (`matchedQuestion`), a stored partial payload (`questionDraft` when available), ' +
+      'and a form-ready `question` object with subject/topic/exam ids for the admin edit UI.',
   })
-  @ApiParam({ name: 'uploadId', description: 'Upload ID' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    example: 1,
+    description: 'Page number (1-based)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    example: 10,
+    description: 'Items per page',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Failed questions for the upload',
-    type: [FailedQuestionListItemDto],
+    description: 'Paginated failed questions',
+    type: FailedQuestionsListResponseDto,
   })
-  async listFailedQuestions(@Param('uploadId') uploadId: string): Promise<{
-    message: string;
-    data: FailedQuestionListItemDto[];
-  }> {
-    const result =
-      await this.importService.listFailedQuestionsForUpload(uploadId);
+  async listFailedQuestions(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ): Promise<{ message: string; data: FailedQuestionsListResponseDto }> {
+    const result = await this.importService.listFailedQuestions(
+      page ?? 1,
+      limit ?? 10,
+    );
 
     return {
       message: 'Failed questions retrieved successfully',
+      data: result,
+    };
+  }
+
+  @Get('failed-questions/:failedQuestionId')
+  @ApiOperation({
+    summary: 'Get a single failed question for editing',
+    description:
+      'Loads one failed_questions document with the same shape as the list endpoint, ' +
+      'including the form-ready `question` payload for the admin edit screen.',
+  })
+  @ApiParam({
+    name: 'failedQuestionId',
+    description: 'Failed question document ID',
+    example: '507f1f77bcf86cd799439020',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Failed question retrieved successfully',
+    type: FailedQuestionListItemDto,
+  })
+  @ApiResponse({ status: 404, description: 'Failed question not found' })
+  async getFailedQuestion(
+    @Param('failedQuestionId') failedQuestionId: string,
+  ): Promise<{ message: string; data: FailedQuestionListItemDto }> {
+    const result = await this.importService.getFailedQuestion(failedQuestionId);
+
+    return {
+      message: 'Failed question retrieved successfully',
       data: result,
     };
   }
@@ -371,23 +419,34 @@ export class ImportController {
   @ApiOperation({
     summary: 'Import a corrected failed question',
     description:
-      'Validates and saves a fixed question to the questions collection, then deletes the failed_questions entry.',
+      'Validates the corrected question payload (same rules as POST /imports/questions/:uploadId), ' +
+      'inserts it into the questions collection, then deletes the failed_questions entry. ' +
+      'Send the full corrected question in the request body; identify the failed record via the URL path parameter.',
   })
   @ApiParam({
     name: 'failedQuestionId',
-    description: 'Failed question document ID',
+    description:
+      'Failed question document ID to delete after successful import',
+    example: '507f1f77bcf86cd799439020',
   })
   @ApiBody({ type: ImportFailedQuestionDto })
   @ApiResponse({
     status: 201,
     description: 'Corrected question saved and failed entry removed',
+    type: ImportFailedQuestionResponseDto,
   })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Validation failed (schema, difficulty, options, subject/topic/exam references, etc.)',
+  })
+  @ApiResponse({ status: 404, description: 'Failed question not found' })
   async importFailedQuestion(
     @Param('failedQuestionId') failedQuestionId: string,
     @Body() body: ImportFailedQuestionDto,
   ): Promise<{
     message: string;
-    data: { questionId: string; failedQuestionId: string };
+    data: ImportFailedQuestionResponseDto;
   }> {
     const result = await this.importService.importFailedQuestion(
       failedQuestionId,

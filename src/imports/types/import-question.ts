@@ -70,11 +70,11 @@ export interface EnrichError {
   number: number;
   stage: 'llm' | 'zod' | 'business' | 'mapping' | 'image';
   message: string;
+  questionDraft?: ImportQuestion;
 }
 
 export interface RejectedQuestion extends EnrichError {
   matchedQuestion: MatchedQuestion;
-  questionDraft?: Record<string, unknown>;
 }
 
 export interface EnrichDebugResult {

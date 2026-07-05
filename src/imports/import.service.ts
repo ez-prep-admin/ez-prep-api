@@ -20,6 +20,7 @@ import {
   QuestionMapperMetadata,
 } from './mapper/question.mapper';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from './config/business-validator.config';
+import type { DifficultyLevel } from './config/business-validator.config';
 import {
   EnrichDebugResult,
   EnrichError,
@@ -33,7 +34,10 @@ import {
   QuestionChunk,
 } from './chunking/question-chunker.service';
 import { AiQuestionBatchItem } from './types/ai-question-output';
-import { ImportQuestion } from './types/import-question';
+import {
+  ImportQuestion,
+  PDF_IMPORT_QUESTION_SOURCE,
+} from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
@@ -568,6 +572,10 @@ export class ImportService {
             number: q.number,
             stage: 'llm' as const,
             message: `Chunk processing failed: ${result.reason}`,
+            questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+              questionMarkdown: q.question,
+              solutionMarkdown: q.solution,
+            }),
           })),
         });
       });
@@ -647,6 +655,10 @@ export class ImportService {
           number: q.number,
           stage: 'llm' as const,
           message: `Chunk ${chunk.chunkIndex} failed after ${maxRetries} attempts: ${message}`,
+          questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+            questionMarkdown: q.question,
+            solutionMarkdown: q.solution,
+          }),
         })),
       };
     }
@@ -673,7 +685,15 @@ export class ImportService {
     for (const matched of chunk.questions) {
       if (!returnedNumbers.has(matched.number)) {
         const message = `Question ${matched.number} missing from batch LLM response.`;
-        errors.push({ number: matched.number, stage: 'llm', message });
+        errors.push({
+          number: matched.number,
+          stage: 'llm',
+          message,
+          questionDraft: this.buildMetadataQuestionShell(mapperMetadata, {
+            questionMarkdown: matched.question,
+            solutionMarkdown: matched.solution,
+          }),
+        });
         this.logger.error(`[enrich] ${message}`);
       }
     }
@@ -703,7 +723,19 @@ export class ImportService {
         );
       } catch (error) {
         const enrichError = this.toEnrichError(output.number, error);
-        errors.push(enrichError);
+        const matched = matchedByNumber.get(output.number);
+
+        errors.push({
+          ...enrichError,
+          questionDraft:
+            matched &&
+            this.buildQuestionDraftOnFailure(
+              output,
+              matched,
+              mapperMetadata,
+              error,
+            ),
+        });
         this.logger.error(
           `[enrich] Question ${output.number} failed at stage=${enrichError.stage}: ${enrichError.message}`,
         );
@@ -864,12 +896,15 @@ export class ImportService {
     }
 
     const rejected = await this.failedQuestionService.listByUpload(uploadId);
+    const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
 
     return {
       uploadId,
       status: upload.status,
       questions: upload.enrichedQuestions ?? [],
-      rejected: rejected.map(doc => this.toFailedQuestionListItem(doc)),
+      rejected: rejected.map(doc =>
+        this.toFailedQuestionListItem(doc, mapperMetadata),
+      ),
       stats: upload.enrichmentStats ?? {
         total: 0,
         success: 0,
@@ -880,10 +915,43 @@ export class ImportService {
     };
   }
 
-  async listFailedQuestionsForUpload(uploadId: string) {
-    await this.findUploadOrThrow(uploadId);
-    const docs = await this.failedQuestionService.listByUpload(uploadId);
-    return docs.map(doc => this.toFailedQuestionListItem(doc));
+  async listFailedQuestions(page = 1, limit = 10) {
+    const { docs, total } = await this.failedQuestionService.listPaginated(
+      page,
+      limit,
+    );
+    const metadataByUploadId = await this.loadMapperMetadataByUploadIds(docs);
+
+    const items = docs.map(doc => {
+      const mapperMetadata = metadataByUploadId.get(doc.uploadId.toString());
+      return this.toFailedQuestionListItem(
+        doc,
+        mapperMetadata ?? {
+          subjectId: '',
+          topicId: '',
+          examIds: [],
+        },
+      );
+    });
+
+    return {
+      items,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit) || 0,
+      },
+    };
+  }
+
+  async getFailedQuestion(failedQuestionId: string) {
+    const doc =
+      await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
+    const upload = await this.findUploadOrThrow(doc.uploadId.toString());
+    const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
+
+    return this.toFailedQuestionListItem(doc, mapperMetadata);
   }
 
   async importFailedQuestion(
@@ -893,34 +961,53 @@ export class ImportService {
     const failed =
       await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
 
-    const withImages =
-      questionPayload &&
-      typeof questionPayload === 'object' &&
-      this.questionHasPendingImages(questionPayload as ImportQuestion)
-        ? await this.importImageStorage.materializeQuestionImages(
-            questionPayload as ImportQuestion,
-            {
-              uploadId: failed.uploadId.toString(),
-              questionNumber: failed.questionNumber,
-            },
-          )
-        : (questionPayload as ImportQuestion);
+    try {
+      const withImages =
+        questionPayload &&
+        typeof questionPayload === 'object' &&
+        this.questionHasPendingImages(questionPayload as ImportQuestion)
+          ? await this.importImageStorage.materializeQuestionImages(
+              questionPayload as ImportQuestion,
+              {
+                uploadId: failed.uploadId.toString(),
+                questionNumber: failed.questionNumber,
+              },
+            )
+          : (questionPayload as ImportQuestion);
 
-    const validated = await this.persistQuestionValidator.validateQuestion(
-      withImages,
-      0,
-    );
-    const created = await this.questionPersistenceService.saveOne(validated);
-    await this.failedQuestionService.deleteById(failedQuestionId);
+      const validated = await this.persistQuestionValidator.validateQuestion(
+        withImages,
+        0,
+      );
+      const created = await this.questionPersistenceService.saveOne(validated);
+      await this.failedQuestionService.deleteById(failedQuestionId);
 
-    this.logger.log(
-      `[failed-questions] Imported fixed question ${created._id.toString()} and removed failed_question_id=${failedQuestionId}`,
-    );
+      this.logger.log(
+        `[failed-questions] Imported fixed question ${created._id.toString()} and removed failed_question_id=${failedQuestionId}`,
+      );
 
-    return {
-      questionId: created._id.toString(),
-      failedQuestionId,
-    };
+      return {
+        questionId: created._id.toString(),
+        failedQuestionId,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      if (error instanceof PersistQuestionValidationError) {
+        throw new BadRequestException({
+          message: error.message,
+          details: error.details,
+        });
+      }
+
+      throw new BadRequestException(this.toPersistErrorMessage(error));
+    }
   }
 
   private toPersistErrorMessage(error: unknown): string {
@@ -942,18 +1029,155 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
   ): Promise<ImportQuestion> {
-    const { ...aiOutput } = output;
-
-    const validated = this.businessValidator.validate(
-      aiOutput,
-      NEET_BUSINESS_VALIDATOR_CONFIG,
+    const mapped = this.mapBatchItemToImportQuestion(
+      output,
+      matched,
+      mapperMetadata,
     );
-
-    const mapped = this.questionMapper.map(validated, mapperMetadata, matched);
 
     return this.importImageStorage.materializeQuestionImages(mapped, {
       uploadId,
       questionNumber: matched.number,
+    });
+  }
+
+  private mapBatchItemToImportQuestion(
+    output: AiQuestionBatchItem,
+    matched: MatchedQuestion,
+    mapperMetadata: QuestionMapperMetadata,
+    skipBusinessValidation = false,
+  ): ImportQuestion {
+    const { number: _ignoredQuestionNumber, ...aiOutput } = output;
+    void _ignoredQuestionNumber;
+
+    const validated = skipBusinessValidation
+      ? aiOutput
+      : this.businessValidator.validate(
+          aiOutput,
+          NEET_BUSINESS_VALIDATOR_CONFIG,
+        );
+
+    return this.questionMapper.map(validated, mapperMetadata, matched);
+  }
+
+  private buildQuestionDraftOnFailure(
+    output: AiQuestionBatchItem,
+    matched: MatchedQuestion,
+    mapperMetadata: QuestionMapperMetadata,
+    error: unknown,
+  ): ImportQuestion {
+    if (error instanceof ImportImageMaterializeError) {
+      try {
+        return this.mapBatchItemToImportQuestion(
+          output,
+          matched,
+          mapperMetadata,
+        );
+      } catch {
+        // Fall through to best-effort draft below.
+      }
+    }
+
+    try {
+      return this.mapBatchItemToImportQuestion(
+        output,
+        matched,
+        mapperMetadata,
+        true,
+      );
+    } catch {
+      return this.buildMetadataQuestionShell(mapperMetadata, {
+        questionMarkdown: matched.question,
+        solutionMarkdown: matched.solution,
+        difficultyLevel: output.difficultyLevel,
+      });
+    }
+  }
+
+  private buildMetadataQuestionShell(
+    metadata: QuestionMapperMetadata,
+    options?: {
+      questionMarkdown?: string;
+      solutionMarkdown?: string;
+      difficultyLevel?: DifficultyLevel;
+    },
+  ): ImportQuestion {
+    const optionIds = Array.from(
+      { length: NEET_BUSINESS_VALIDATOR_CONFIG.optionCount },
+      () => randomUUID(),
+    );
+
+    return {
+      questionText: {
+        en: {
+          text: options?.questionMarkdown ?? '',
+          image: null,
+        },
+        ml: { text: null, image: null },
+      },
+      optionType: 'text',
+      options: optionIds.map(id => ({
+        id,
+        type: 'text' as const,
+        en: '',
+        ml: null,
+      })),
+      explanation: {
+        en: options?.solutionMarkdown ?? '',
+        ml: null,
+        image: null,
+      },
+      correctAnswer: optionIds[0],
+      subject: metadata.subjectId,
+      topic: metadata.topicId,
+      exams: [...metadata.examIds],
+      difficultyLevel: options?.difficultyLevel ?? 'medium',
+      isActive: true,
+      isDeleted: false,
+      source: PDF_IMPORT_QUESTION_SOURCE,
+    };
+  }
+
+  private async loadMapperMetadataByUploadIds(
+    docs: FailedQuestionDocument[],
+  ): Promise<Map<string, QuestionMapperMetadata>> {
+    const uploadIds = [...new Set(docs.map(doc => doc.uploadId.toString()))];
+
+    if (uploadIds.length === 0) {
+      return new Map();
+    }
+
+    const uploads = await this.questionUploadModel.find({
+      _id: { $in: uploadIds.map(id => new Types.ObjectId(id)) },
+    });
+
+    const metadataByUploadId = new Map<string, QuestionMapperMetadata>();
+
+    for (const upload of uploads) {
+      if (!upload.subject || !upload.topic) {
+        continue;
+      }
+
+      metadataByUploadId.set(
+        upload._id.toString(),
+        this.buildMapperMetadataFromUpload(upload),
+      );
+    }
+
+    return metadataByUploadId;
+  }
+
+  private resolveFailedQuestionEditPayload(
+    doc: FailedQuestionDocument,
+    mapperMetadata: QuestionMapperMetadata,
+  ): ImportQuestion {
+    if (doc.questionDraft && typeof doc.questionDraft === 'object') {
+      return doc.questionDraft as unknown as ImportQuestion;
+    }
+
+    return this.buildMetadataQuestionShell(mapperMetadata, {
+      questionMarkdown: doc.matchedQuestion.question,
+      solutionMarkdown: doc.matchedQuestion.solution,
     });
   }
 
@@ -1040,8 +1264,13 @@ export class ImportService {
     };
   }
 
-  private toFailedQuestionListItem(doc: FailedQuestionDocument) {
+  private toFailedQuestionListItem(
+    doc: FailedQuestionDocument,
+    mapperMetadata: QuestionMapperMetadata,
+  ) {
     const item = doc.toObject();
+    const question = this.resolveFailedQuestionEditPayload(doc, mapperMetadata);
+
     return {
       id: item.id,
       uploadId: doc.uploadId.toString(),
@@ -1049,7 +1278,8 @@ export class ImportService {
       failureStage: doc.failureStage,
       failureMessage: doc.failureMessage,
       matchedQuestion: doc.matchedQuestion,
-      questionDraft: doc.questionDraft,
+      questionDraft: doc.questionDraft as unknown as ImportQuestion | undefined,
+      question,
       createdAt: doc.createdAt ?? new Date(),
       updatedAt: doc.updatedAt ?? new Date(),
     };

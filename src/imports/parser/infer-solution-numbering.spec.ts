@@ -22,6 +22,8 @@ describe('inferSolutionNumberingRegex', () => {
 ## Q3. Final
 `.trim();
 
-    expect(inferSolutionNumberingRegex(section)?.regex).toBe('^## Q(\\d+)\\.\\s');
+    expect(inferSolutionNumberingRegex(section)?.regex).toBe(
+      '^## Q(\\d+)\\.\\s',
+    );
   });
 });

@@ -12,7 +12,11 @@ const CANDIDATE_PATTERNS: Array<{
   { regex: /^(\d+)\s*\.\s/, source: '^(\\d+)\\s*\\.\\s', type: 'numbered' },
   { regex: /^## Q(\d+)\.\s/i, source: '^## Q(\\d+)\\.\\s', type: 'labeled' },
   { regex: /^Q(\d+)\.\s/i, source: '^Q(\\d+)\\.\\s', type: 'labeled' },
-  { regex: /^Question\s+(\d+)[:.]?\s/i, source: '^Question\\s+(\\d+)[:.]?\\s', type: 'labeled' },
+  {
+    regex: /^Question\s+(\d+)[:.]?\s/i,
+    source: '^Question\\s+(\\d+)[:.]?\\s',
+    type: 'labeled',
+  },
   { regex: /^(\d+)\)\s/, source: '^(\\d+)\\)\\s', type: 'numbered' },
 ];
 
@@ -32,8 +36,11 @@ export function inferSolutionNumberingRegex(
     return null;
   }
 
-  let best: { score: number; pattern: (typeof CANDIDATE_PATTERNS)[number]; line: string } | null =
-    null;
+  let best: {
+    score: number;
+    pattern: (typeof CANDIDATE_PATTERNS)[number];
+    line: string;
+  } | null = null;
 
   for (const pattern of CANDIDATE_PATTERNS) {
     let score = 0;

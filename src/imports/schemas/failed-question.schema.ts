@@ -29,7 +29,12 @@ export const FailedQuestionSourceSchema =
   versionKey: false,
 })
 export class FailedQuestion {
-  @Prop({ type: Types.ObjectId, ref: 'QuestionUpload', required: true, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'QuestionUpload',
+    required: true,
+    index: true,
+  })
   uploadId: Types.ObjectId;
 
   @Prop({ type: Number, required: true, index: true })
@@ -84,4 +89,7 @@ FailedQuestionSchema.set('toObject', {
   },
 });
 
-FailedQuestionSchema.index({ uploadId: 1, questionNumber: 1 }, { unique: true });
+FailedQuestionSchema.index(
+  { uploadId: 1, questionNumber: 1 },
+  { unique: true },
+);

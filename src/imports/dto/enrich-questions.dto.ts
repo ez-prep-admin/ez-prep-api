@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { MatchedQuestion } from '../types/matched-question';
+import { ImportQuestionPayloadDto } from './import-question.dto';
 
 export class EnrichQuestionsDto {
   @ApiPropertyOptional({
@@ -139,10 +140,9 @@ export class RejectedQuestionDto {
   @ApiPropertyOptional({
     description:
       'Partial LLM-mapped question payload when failure happened after LLM output',
-    type: 'object',
-    additionalProperties: true,
+    type: ImportQuestionPayloadDto,
   })
-  questionDraft?: Record<string, unknown>;
+  questionDraft?: ImportQuestionPayloadDto;
 }
 
 export class EnrichStatsDto {

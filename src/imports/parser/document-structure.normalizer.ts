@@ -138,7 +138,10 @@ function normalizeQuestionPattern(
   const warnings = [...(structure.warnings ?? [])];
   let { regex, type } = structure.questionPattern;
 
-  if (/Q\\d+|Question\\s*\\d+|section\\*\\{Q/i.test(regex) && type === 'numbered') {
+  if (
+    /Q\\d+|Question\\s*\\d+|section\\*\\{Q/i.test(regex) &&
+    type === 'numbered'
+  ) {
     type = 'labeled';
     warnings.push(
       'Question pattern looks labeled (Q-prefix); normalized type to "labeled".',

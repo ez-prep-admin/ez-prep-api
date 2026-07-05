@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ZodError } from 'zod';
@@ -13,9 +9,7 @@ import {
 import { Topic, TopicDocument } from '../../topics/schemas/topic.schema';
 import { Exam, ExamDocument } from '../../exams/schemas/exam.schema';
 import { ImportQuestion, ImportQuestionInput } from '../types/import-question';
-import {
-  ImportQuestionSchema,
-} from './import-question.schema';
+import { ImportQuestionSchema } from './import-question.schema';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from '../config/business-validator.config';
 import type { z } from 'zod';
 
