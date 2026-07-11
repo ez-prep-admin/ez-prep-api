@@ -98,10 +98,22 @@ export class FailedQuestionService {
     return doc;
   }
 
+  async deleteByIdOrThrow(
+    failedQuestionId: string,
+  ): Promise<FailedQuestionDocument> {
+    const doc = await this.findByIdOrThrow(failedQuestionId);
+
+    await this.failedQuestionModel.deleteOne({ _id: doc._id });
+
+    this.logger.log(
+      `[failed-questions] Deleted failed_question_id=${failedQuestionId} (upload_id=${doc.uploadId.toString()}, question_number=${doc.questionNumber})`,
+    );
+
+    return doc;
+  }
+
   async deleteById(failedQuestionId: string): Promise<void> {
-    await this.failedQuestionModel.deleteOne({
-      _id: new Types.ObjectId(failedQuestionId),
-    });
+    await this.deleteByIdOrThrow(failedQuestionId);
   }
 
   async countByUpload(uploadId: string): Promise<number> {

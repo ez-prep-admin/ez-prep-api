@@ -173,3 +173,23 @@ export class ImportFailedQuestionResponseDto {
   })
   failedQuestionId: string;
 }
+
+export class DeleteFailedQuestionResponseDto {
+  @ApiProperty({
+    example: '507f1f77bcf86cd799439020',
+    description: 'MongoDB id of the deleted failed question document',
+  })
+  failedQuestionId: string;
+
+  @ApiProperty({
+    example: '507f1f77bcf86cd799439015',
+    description: 'Upload ID the failed question belonged to',
+  })
+  uploadId: string;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Question number within the upload',
+  })
+  questionNumber: number;
+}

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -32,6 +33,7 @@ import {
   FailedQuestionsListResponseDto,
   ImportFailedQuestionDto,
   ImportFailedQuestionResponseDto,
+  DeleteFailedQuestionResponseDto,
   PersistQuestionsResponseDto,
 } from './dto/persist-questions.dto';
 import {
@@ -460,6 +462,41 @@ export class ImportController {
 
     return {
       message: 'Failed question imported successfully',
+      data: result,
+    };
+  }
+
+  @Delete('failed-questions/:failedQuestionId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Delete a failed question',
+    description:
+      'Permanently deletes a single document from the failed_questions collection by its MongoDB id. ' +
+      'Use when an admin dismisses a failed question without importing a corrected version.',
+  })
+  @ApiParam({
+    name: 'failedQuestionId',
+    description: 'Failed question document MongoDB id',
+    example: '507f1f77bcf86cd799439020',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Failed question deleted successfully',
+    type: DeleteFailedQuestionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid failed question ID' })
+  @ApiResponse({ status: 404, description: 'Failed question not found' })
+  async deleteFailedQuestion(
+    @Param('failedQuestionId') failedQuestionId: string,
+  ): Promise<{
+    message: string;
+    data: DeleteFailedQuestionResponseDto;
+  }> {
+    const result =
+      await this.importService.deleteFailedQuestion(failedQuestionId);
+
+    return {
+      message: 'Failed question deleted successfully',
       data: result,
     };
   }

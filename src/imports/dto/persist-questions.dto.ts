@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import { ValidateNested } from 'class-validator';
 import { EnrichStatsDto, MatchedQuestionDto } from './enrich-questions.dto';
 import {
+  DeleteFailedQuestionResponseDto,
   ImportFailedQuestionResponseDto,
   ImportQuestionPayloadDto,
 } from './import-question.dto';
@@ -80,7 +81,7 @@ export class ImportFailedQuestionDto {
   question: ImportQuestionPayloadDto;
 }
 
-export { ImportFailedQuestionResponseDto };
+export { ImportFailedQuestionResponseDto, DeleteFailedQuestionResponseDto };
 
 export class FailedQuestionListItemDto {
   @ApiProperty({ example: '507f1f77bcf86cd799439020' })
