@@ -74,6 +74,12 @@ import {
   ChunkEnrichResult,
   ensureMatchedQuestionIndices,
 } from './utils/enrich-result.util';
+import {
+  formatEnrichThinkingLog,
+  resolveEnrichThinking,
+} from './utils/enrich-thinking.util';
+import { DeepseekThinkingOptions } from './llm/deepseek.types';
+import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 
 /** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
 const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
@@ -128,6 +134,8 @@ export class ImportService {
     private readonly mathpixService: MathpixService,
     @InjectModel(QuestionUpload.name)
     private readonly questionUploadModel: Model<QuestionUploadDocument>,
+    @InjectModel(Subject.name)
+    private readonly subjectModel: Model<SubjectDocument>,
   ) {}
 
   async parseMarkdown(
@@ -365,7 +373,14 @@ export class ImportService {
         );
       }
 
+      const uploadForThinking = dto.forceReparse
+        ? await this.findUploadOrThrow(uploadId)
+        : upload;
       const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
+      const thinkingResolution =
+        await this.resolveEnrichThinkingForUpload(uploadForThinking);
+
+      this.logger.log(formatEnrichThinkingLog(thinkingResolution.decision));
 
       const result = await this.enrichMatchedQuestions(
         parsed.matchedQuestions,
@@ -376,6 +391,7 @@ export class ImportService {
           maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
           mapperMetadata,
           uploadId,
+          thinking: thinkingResolution.thinking,
         },
       );
 
@@ -445,15 +461,59 @@ export class ImportService {
       );
     }
 
+    const thinkingResolution = await this.resolveEnrichThinkingForSubjectId(
+      dto.subjectId,
+    );
+
+    this.logger.log(formatEnrichThinkingLog(thinkingResolution.decision));
+
     return this.enrichMatchedQuestions(
       ensureMatchedQuestionIndices(dto.matchedQuestions),
       {
-      adaptiveChunking: dto.adaptiveChunking ?? true,
-      useParallel: dto.useParallel ?? false,
-      maxRetries: dto.maxRetries ?? 3,
-      maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
-      mapperMetadata: this.buildMapperMetadataFromDto(dto),
+        adaptiveChunking: dto.adaptiveChunking ?? true,
+        useParallel: dto.useParallel ?? false,
+        maxRetries: dto.maxRetries ?? 3,
+        maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
+        mapperMetadata: this.buildMapperMetadataFromDto(dto),
+        thinking: thinkingResolution.thinking,
+      },
+    );
+  }
+
+  private async resolveEnrichThinkingForUpload(upload: QuestionUploadDocument) {
+    const subjectName = await this.lookupSubjectName(
+      upload.subject?.toString(),
+    );
+    const documentStructure = upload.documentStructureCache as unknown as
+      | DocumentStructure
+      | undefined;
+
+    return resolveEnrichThinking({
+      documentStructure,
+      subjectName,
     });
+  }
+
+  private async resolveEnrichThinkingForSubjectId(subjectId?: string) {
+    const subjectName = await this.lookupSubjectName(subjectId);
+
+    return resolveEnrichThinking({ subjectName });
+  }
+
+  private async lookupSubjectName(
+    subjectId?: string,
+  ): Promise<string | undefined> {
+    if (!subjectId) {
+      return undefined;
+    }
+
+    const subject = await this.subjectModel
+      .findById(subjectId)
+      .select('name')
+      .lean()
+      .exec();
+
+    return subject?.name;
   }
 
   private buildMapperMetadataFromUpload(
@@ -497,6 +557,7 @@ export class ImportService {
       maxConcurrentChunks?: number;
       mapperMetadata: QuestionMapperMetadata;
       uploadId?: string;
+      thinking?: DeepseekThinkingOptions;
     },
   ): Promise<EnrichDebugResult> {
     const startedAt = Date.now();
@@ -546,17 +607,22 @@ export class ImportService {
           maxConcurrentChunks,
           options.mapperMetadata,
           options.uploadId,
+          options.thinking,
         )
       : await this.processChunksSequential(
           chunks,
           maxRetries,
           options.mapperMetadata,
           options.uploadId,
+          options.thinking,
         );
 
     const { questions, errors } = aggregateChunkEnrichResults(chunkResults);
 
-    errors.sort((left, right) => (left.index ?? left.number) - (right.index ?? right.number));
+    errors.sort(
+      (left, right) =>
+        (left.index ?? left.number) - (right.index ?? right.number),
+    );
 
     const matchedByIndex = new Map(
       indexedQuestions.map(question => [question.index!, question]),
@@ -599,6 +665,7 @@ export class ImportService {
     maxRetries: number,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
+    thinking?: DeepseekThinkingOptions,
   ): Promise<ChunkEnrichResult[]> {
     const results: ChunkEnrichResult[] = [];
 
@@ -608,6 +675,7 @@ export class ImportService {
         maxRetries,
         mapperMetadata,
         uploadId,
+        thinking,
       );
       results.push(result);
     }
@@ -624,6 +692,7 @@ export class ImportService {
     maxConcurrentChunks: number,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
+    thinking?: DeepseekThinkingOptions,
   ): Promise<ChunkEnrichResult[]> {
     this.logger.log(
       `[enrich] Processing ${chunks.length} chunk(s) in parallel (concurrency=${maxConcurrentChunks})`,
@@ -640,6 +709,7 @@ export class ImportService {
             maxRetries,
             mapperMetadata,
             uploadId,
+            thinking,
           ),
         ),
       );
@@ -685,6 +755,7 @@ export class ImportService {
     maxRetries: number,
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
+    thinking?: DeepseekThinkingOptions,
     currentAttempt = 1,
   ): Promise<ChunkEnrichResult> {
     const chunkStartedAt = Date.now();
@@ -697,6 +768,7 @@ export class ImportService {
     try {
       const llmResult = await this.deepseekService.extractQuestionsBatch(
         chunk.questions,
+        { thinking },
       );
 
       this.logger.log(
@@ -739,6 +811,7 @@ export class ImportService {
           maxRetries,
           mapperMetadata,
           uploadId,
+          thinking,
           currentAttempt + 1,
         );
       }
@@ -1371,9 +1444,7 @@ export class ImportService {
   ): RejectedQuestion {
     const matched =
       error.matchedQuestion ??
-      (error.index !== undefined
-        ? matchedByIndex.get(error.index)
-        : undefined);
+      (error.index !== undefined ? matchedByIndex.get(error.index) : undefined);
 
     return {
       ...error,

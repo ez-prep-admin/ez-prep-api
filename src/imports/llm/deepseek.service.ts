@@ -8,7 +8,7 @@ import {
   buildQuestionUserPrompt,
   QUESTION_EXTRACTION_SYSTEM_PROMPT,
 } from '../prompt/question.prompt';
-import { DeepseekLlmResult } from './deepseek.types';
+import { DeepseekLlmResult, DeepseekThinkingOptions } from './deepseek.types';
 
 /** Default output budget for 20-question batch enrichment with LaTeX explanations */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
@@ -61,16 +61,13 @@ export class DeepseekService {
 
   async extractQuestionDetailed(
     matched: MatchedQuestion,
+    options?: { thinking?: DeepseekThinkingOptions },
   ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     this.logger.log(`[deepseek] Single request started for Q${matched.number}`);
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0.1,
-      max_tokens: this.maxOutputTokens,
-      response_format: { type: 'json_object' },
-      messages: [
+    const response = await this.createChatCompletion(
+      [
         {
           role: 'system',
           content: QUESTION_EXTRACTION_SYSTEM_PROMPT,
@@ -80,7 +77,8 @@ export class DeepseekService {
           content: buildQuestionUserPrompt(matched),
         },
       ],
-    });
+      options?.thinking,
+    );
 
     const result = this.toLlmResult(response);
 
@@ -90,13 +88,14 @@ export class DeepseekService {
       );
     }
 
-    this.logCompletion('Single', `Q${matched.number}`, startedAt, result);
+    this.logCompletion('Single', `Q${matched.number}`, startedAt, result, options?.thinking);
 
     return result;
   }
 
   async extractQuestionsBatch(
     matchedQuestions: MatchedQuestion[],
+    options?: { thinking?: DeepseekThinkingOptions },
   ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     const numbers = matchedQuestions
@@ -104,15 +103,12 @@ export class DeepseekService {
       .join(', ');
 
     this.logger.log(
-      `[deepseek] Batch request started for ${matchedQuestions.length} question(s): [${numbers}]`,
+      `[deepseek] Batch request started for ${matchedQuestions.length} question(s): [${numbers}]` +
+        this.formatThinkingSuffix(options?.thinking),
     );
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      temperature: 0.1,
-      max_tokens: this.maxOutputTokens,
-      response_format: { type: 'json_object' },
-      messages: [
+    const response = await this.createChatCompletion(
+      [
         {
           role: 'system',
           content: BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
@@ -122,7 +118,8 @@ export class DeepseekService {
           content: buildBatchQuestionUserPrompt(matchedQuestions),
         },
       ],
-    });
+      options?.thinking,
+    );
 
     const result = this.toLlmResult(response);
 
@@ -132,7 +129,7 @@ export class DeepseekService {
       );
     }
 
-    this.logCompletion('Batch', `[${numbers}]`, startedAt, result);
+    this.logCompletion('Batch', `[${numbers}]`, startedAt, result, options?.thinking);
 
     if (result.finishReason === 'length') {
       this.logger.warn(
@@ -141,6 +138,29 @@ export class DeepseekService {
     }
 
     return result;
+  }
+
+  private async createChatCompletion(
+    messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    thinking?: DeepseekThinkingOptions,
+  ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+    const request = {
+      model: this.model,
+      temperature: 0.1,
+      max_tokens: this.maxOutputTokens,
+      response_format: { type: 'json_object' as const },
+      messages,
+      ...(thinking?.enabled
+        ? {
+            thinking: { type: 'enabled' as const },
+            reasoning_effort: thinking.reasoningEffort ?? 'high',
+          }
+        : {}),
+    };
+
+    return this.client.chat.completions.create(
+      request as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+    );
   }
 
   private toLlmResult(
@@ -162,11 +182,21 @@ export class DeepseekService {
     label: string,
     startedAt: number,
     result: DeepseekLlmResult,
+    thinking?: DeepseekThinkingOptions,
   ): void {
     this.logger.log(
       `[deepseek] ${mode} request finished for ${label} in ${Date.now() - startedAt}ms ` +
         `(tokens=${result.totalTokens ?? 'n/a'}, completion_tokens=${result.completionTokens ?? 'n/a'}, ` +
-        `finish_reason=${result.finishReason ?? 'n/a'}, chars=${result.content.length})`,
+        `finish_reason=${result.finishReason ?? 'n/a'}, chars=${result.content.length}` +
+        `${this.formatThinkingSuffix(thinking)})`,
     );
+  }
+
+  private formatThinkingSuffix(thinking?: DeepseekThinkingOptions): string {
+    if (!thinking?.enabled) {
+      return ', thinking=disabled';
+    }
+
+    return `, thinking=enabled, reasoning_effort=${thinking.reasoningEffort ?? 'high'}`;
   }
 }

@@ -84,6 +84,46 @@ export interface DelimiterPattern {
   confidence: number;
 }
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
+/**
+ * Content nature detected during structure analysis — used to decide whether
+ * enrichment LLM calls should enable DeepSeek thinking/reasoning mode.
+ */
+export interface DocumentContentProfile {
+  /**
+   * Whether questions in this document typically need multi-step reasoning
+   * (calculations, logic chains, reaction mechanisms, etc.) for accurate enrichment.
+   */
+  requiresReasoning: boolean;
+
+  /**
+   * Subject/content domains inferred from the sample (e.g. physics, chemistry,
+   * quantitative aptitude, general intelligence and reasoning, biology).
+   */
+  reasoningDomains: string[];
+
+  /**
+   * Suggested reasoning depth when requiresReasoning is true.
+   */
+  reasoningEffort?: ReasoningEffort;
+
+  /**
+   * Optional subject labels spotted verbatim in the document sample.
+   */
+  detectedSubjects?: string[];
+
+  /**
+   * Confidence in the content profile assessment (0-1).
+   */
+  confidence: number;
+
+  /**
+   * Brief explanation of why reasoning is or is not needed.
+   */
+  rationale?: string;
+}
+
 export interface DocumentMetadata {
   /**
    * Whether document contains difficulty level indicators
@@ -145,6 +185,11 @@ export interface DocumentStructure {
    * Any warnings or notes about the detection
    */
   warnings?: string[];
+
+  /**
+   * Content nature assessment for conditional enrichment reasoning mode.
+   */
+  contentProfile?: DocumentContentProfile;
 }
 
 /**
@@ -178,4 +223,12 @@ export interface StructureDetectionResponse {
   detectedFormat: string;
   confidence: number;
   warnings?: string[];
+  contentProfile?: {
+    requiresReasoning: boolean;
+    reasoningDomains: string[];
+    reasoningEffort?: ReasoningEffort;
+    detectedSubjects?: string[];
+    confidence: number;
+    rationale?: string;
+  };
 }

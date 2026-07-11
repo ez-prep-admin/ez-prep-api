@@ -5,3 +5,8 @@ export interface DeepseekLlmResult {
   promptTokens: number | null;
   totalTokens: number | null;
 }
+
+export interface DeepseekThinkingOptions {
+  enabled: boolean;
+  reasoningEffort?: 'low' | 'medium' | 'high';
+}

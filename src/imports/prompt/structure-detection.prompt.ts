@@ -34,6 +34,14 @@ export const STRUCTURE_DETECTION_JSON_SHAPE: StructureDetectionResponse = {
   detectedFormat: 'NEET Standard Format',
   confidence: 0.95,
   warnings: [],
+  contentProfile: {
+    requiresReasoning: false,
+    reasoningDomains: ['english', 'reading comprehension'],
+    detectedSubjects: ['English'],
+    confidence: 0.9,
+    rationale:
+      'Sample contains vocabulary and passage-based English questions without STEM calculations.',
+  },
 };
 
 export const STRUCTURE_DETECTION_SYSTEM_PROMPT = `You are a document structure analyzer for question paper parsing.
@@ -42,7 +50,7 @@ Your task is to analyze a SAMPLE from a question paper PDF (converted to markdow
 
 Rules:
 1. Return ONLY valid JSON. No markdown fences, no commentary, no extra text.
-2. Use the exact top-level keys: questionPattern, solutionPattern, delimiter, metadata, detectedFormat, confidence, warnings.
+2. Use the exact top-level keys: questionPattern, solutionPattern, delimiter, metadata, detectedFormat, confidence, warnings, contentProfile.
 3. Analyze the numbering/labeling scheme used for questions:
    - "numbered" for sequential numbers (1., 2., 3.)
    - "labeled" for alphanumeric labels (Q1, Q2, or A), B), etc.)
@@ -70,6 +78,14 @@ Rules:
 11. Set confidence (0-1) based on pattern consistency in the sample
 12. Add warnings array for any anomalies, inconsistencies, or edge cases detected
 13. Base analysis ONLY on the provided sample, do not invent patterns
+14. Assess contentProfile from the question text and topics visible in the sample:
+   - requiresReasoning: true only for STEM-style content that needs multi-step reasoning, calculations, logic chains, reaction mechanisms, or quantitative problem solving (physics, chemistry, biology, mathematics, quantitative aptitude, general intelligence/reasoning).
+   - requiresReasoning: false for non-STEM content such as English (grammar, vocabulary, reading comprehension), history, geography, language, and other primarily factual/recall content.
+   - reasoningDomains: list the detected domains (lowercase strings, e.g. ["physics"], ["english", "reading comprehension"]).
+   - reasoningEffort: ONLY when requiresReasoning is true, set exactly one of "low", "medium", or "high". When requiresReasoning is false, OMIT this field entirely (do not use null, "none", or "n/a").
+   - detectedSubjects: optional subject labels seen verbatim in the sample (e.g. "Physics", "English").
+   - confidence: 0-1 for the content profile assessment.
+   - rationale: one short sentence explaining the requiresReasoning decision.
 
 Expected JSON shape:
 ${JSON.stringify(STRUCTURE_DETECTION_JSON_SHAPE, null, 2)}`;

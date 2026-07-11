@@ -9,6 +9,31 @@ import {
   STRUCTURE_DETECTION_SYSTEM_PROMPT,
 } from '../prompt/structure-detection.prompt';
 import { normalizeDocumentStructure } from './document-structure.normalizer';
+import {
+  DEFAULT_CONTENT_PROFILE,
+  normalizeContentProfileFromLlm,
+  normalizeReasoningEffort,
+} from '../utils/content-profile.util';
+
+const ContentProfileSchema = z.object({
+  requiresReasoning: z.coerce.boolean(),
+  reasoningDomains: z.array(z.string()).default([]),
+  reasoningEffort: z.preprocess(
+    normalizeReasoningEffort,
+    z.enum(['low', 'medium', 'high']).optional(),
+  ),
+  detectedSubjects: z.array(z.string()).optional(),
+  confidence: z.coerce.number().min(0).max(1),
+  rationale: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform(value => value ?? undefined),
+});
+
+const ContentProfileInputSchema = z.preprocess(
+  normalizeContentProfileFromLlm,
+  ContentProfileSchema,
+);
 
 /**
  * Zod schema for validating structure detection response.
@@ -69,6 +94,7 @@ const StructureDetectionSchema = z.object({
   detectedFormat: z.string().min(1),
   confidence: z.coerce.number().min(0).max(1),
   warnings: z.array(z.string()).optional(),
+  contentProfile: ContentProfileInputSchema.catch(DEFAULT_CONTENT_PROFILE),
 });
 
 function normalizeQuestionPatternType(value: unknown): QuestionPatternType {
@@ -208,6 +234,8 @@ export class StructureDetectorService {
         `[structure-detector] Structure detected: ${normalized.detectedFormat} (confidence=${normalized.confidence})`,
       );
 
+      this.logContentProfile(normalized.contentProfile);
+
       if (normalized.warnings && normalized.warnings.length > 0) {
         this.logger.warn(
           `[structure-detector] Warnings: ${normalized.warnings.join('; ')}`,
@@ -264,5 +292,28 @@ export class StructureDetectorService {
     } catch {
       return false;
     }
+  }
+
+  private logContentProfile(
+    profile: DocumentStructure['contentProfile'],
+  ): void {
+    if (!profile) {
+      this.logger.warn(
+        '[structure-detector] Content profile missing from LLM response',
+      );
+      return;
+    }
+
+    const domains =
+      profile.reasoningDomains.length > 0
+        ? profile.reasoningDomains.join(', ')
+        : 'none';
+    const effort = profile.reasoningEffort ?? 'n/a';
+
+    this.logger.log(
+      `[structure-detector] Content profile: requiresReasoning=${profile.requiresReasoning}, ` +
+        `domains=[${domains}], effort=${effort}, confidence=${profile.confidence}` +
+        (profile.rationale ? `, rationale="${profile.rationale}"` : ''),
+    );
   }
 }

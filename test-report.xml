@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/dto/import-failed-question.dto.spec.ts">
-    <testCase name="ImportFailedQuestionDto accepts a nested question payload from the admin import form" duration="4"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/enrich-thinking.util.spec.ts">
+    <testCase name="enrich-thinking.util enables thinking for stem content profiles" duration="5"/>
+    <testCase name="enrich-thinking.util disables thinking for english upload subjects even with mixed profile" duration="1"/>
+    <testCase name="enrich-thinking.util disables thinking for english content domains" duration="0"/>
+    <testCase name="enrich-thinking.util falls back to stem upload subject when profile is missing" duration="1"/>
+    <testCase name="enrich-thinking.util matches known stem subject names" duration="0"/>
+    <testCase name="enrich-thinking.util formats enabled and disabled log lines" duration="1"/>
+  </file>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/content-profile.util.spec.ts">
+    <testCase name="content-profile.util normalizes invalid reasoningEffort values to undefined" duration="4"/>
+    <testCase name="content-profile.util salvages english-style content profiles without reasoning effort" duration="1"/>
+    <testCase name="content-profile.util defaults reasoning effort to high for stem profiles that omit effort" duration="0"/>
+    <testCase name="content-profile.util classifies stem and non-stem upload subjects" duration="1"/>
   </file>
 </testExecutions>
