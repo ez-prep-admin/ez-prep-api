@@ -97,7 +97,11 @@ export function normalizeReasoningEffort(
 
   const normalized = value.toLowerCase().trim();
 
-  if (normalized === 'low' || normalized === 'medium' || normalized === 'high') {
+  if (
+    normalized === 'low' ||
+    normalized === 'medium' ||
+    normalized === 'high'
+  ) {
     return normalized;
   }
 
@@ -164,7 +168,10 @@ export function normalizeContentProfileFromLlm(
   };
 }
 
-function matchesKeywordList(value: string, keywords: readonly string[]): boolean {
+function matchesKeywordList(
+  value: string,
+  keywords: readonly string[],
+): boolean {
   const normalized = value.toLowerCase().trim();
   return keywords.some(keyword => normalized.includes(keyword));
 }

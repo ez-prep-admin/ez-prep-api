@@ -25,7 +25,10 @@ describe('content-profile.util', () => {
 
     expect(profile.requiresReasoning).toBe(false);
     expect(profile.reasoningEffort).toBeUndefined();
-    expect(profile.reasoningDomains).toEqual(['english', 'reading comprehension']);
+    expect(profile.reasoningDomains).toEqual([
+      'english',
+      'reading comprehension',
+    ]);
   });
 
   it('defaults reasoning effort to high for stem profiles that omit effort', () => {

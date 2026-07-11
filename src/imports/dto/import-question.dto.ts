@@ -144,7 +144,8 @@ export class ImportQuestionPayloadDto {
   @Allow()
   @IsOptional()
   @ApiPropertyOptional({
-    description: 'Ignored for PDF imports; accepted for admin form compatibility',
+    description:
+      'Ignored for PDF imports; accepted for admin form compatibility',
     nullable: true,
   })
   tag?: string | null;

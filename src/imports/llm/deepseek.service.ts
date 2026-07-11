@@ -88,7 +88,13 @@ export class DeepseekService {
       );
     }
 
-    this.logCompletion('Single', `Q${matched.number}`, startedAt, result, options?.thinking);
+    this.logCompletion(
+      'Single',
+      `Q${matched.number}`,
+      startedAt,
+      result,
+      options?.thinking,
+    );
 
     return result;
   }
@@ -129,7 +135,13 @@ export class DeepseekService {
       );
     }
 
-    this.logCompletion('Batch', `[${numbers}]`, startedAt, result, options?.thinking);
+    this.logCompletion(
+      'Batch',
+      `[${numbers}]`,
+      startedAt,
+      result,
+      options?.thinking,
+    );
 
     if (result.finishReason === 'length') {
       this.logger.warn(
