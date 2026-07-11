@@ -42,7 +42,8 @@ export class StartParsePdfUploadResponseDto {
   uploadId: string;
 
   @ApiProperty({
-    description: 'Upload status while Mathpix conversion runs in the background',
+    description:
+      'Upload status while Mathpix conversion runs in the background',
     enum: ['parsing'],
     example: 'parsing',
   })

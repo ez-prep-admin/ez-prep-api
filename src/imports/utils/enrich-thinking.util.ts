@@ -55,7 +55,9 @@ export function resolveEnrichThinking(options: {
   documentStructure?: DocumentStructure | null;
   subjectName?: string | null;
 }): ResolvedEnrichThinking {
-  const profile = normalizeContentProfile(options.documentStructure?.contentProfile);
+  const profile = normalizeContentProfile(
+    options.documentStructure?.contentProfile,
+  );
   const subjectName = options.subjectName?.trim() || undefined;
 
   if (subjectName && matchesNonStemSubjectName(subjectName)) {
@@ -151,7 +153,9 @@ function disabledDecision(
   };
 }
 
-export function formatEnrichThinkingLog(decision: EnrichThinkingDecision): string {
+export function formatEnrichThinkingLog(
+  decision: EnrichThinkingDecision,
+): string {
   if (decision.enabled) {
     const domains =
       decision.reasoningDomains && decision.reasoningDomains.length > 0

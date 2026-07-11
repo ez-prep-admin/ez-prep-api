@@ -1,6 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { normalizeDocumentStructure, isInvalidSolutionMarker } from './document-structure.normalizer';
+import {
+  normalizeDocumentStructure,
+  isInvalidSolutionMarker,
+} from './document-structure.normalizer';
 import { DocumentStructure } from '../types/document-structure';
 import { AdaptiveBoundaryStrategy } from './boundaries/adaptive-boundary.strategy';
 import { parseNumberedBlocks } from './numbered-block.parser';
@@ -135,11 +138,13 @@ describe('normalizeDocumentStructure', () => {
   });
 
   it('parses headerless flip-test style documents via repeated numbering split', () => {
-    const questions = Array.from({ length: 20 }, (_, index) =>
-      `${index + 1}. Question ${index + 1}`,
+    const questions = Array.from(
+      { length: 20 },
+      (_, index) => `${index + 1}. Question ${index + 1}`,
     );
-    const answers = Array.from({ length: 20 }, (_, index) =>
-      `${index + 1}. Answer ${index + 1}`,
+    const answers = Array.from(
+      { length: 20 },
+      (_, index) => `${index + 1}. Answer ${index + 1}`,
     );
     const markdown = [...questions, ...answers].join('\n');
 

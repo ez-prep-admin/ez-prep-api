@@ -3,11 +3,15 @@ import { extractMarkdownSample } from './structure-detection.prompt';
 describe('extractMarkdownSample', () => {
   it('includes a symmetric tail sample when no solution marker exists', () => {
     const head = Array.from({ length: 12 }, (_, index) =>
-      index % 3 === 0 ? `${index / 3 + 1}. Question ${index / 3 + 1}` : `line ${index}`,
+      index % 3 === 0
+        ? `${index / 3 + 1}. Question ${index / 3 + 1}`
+        : `line ${index}`,
     );
     const middle = Array.from({ length: 30 }, (_, index) => `middle ${index}`);
     const tail = Array.from({ length: 12 }, (_, index) =>
-      index % 3 === 0 ? `${index / 3 + 1}. Answer ${index / 3 + 1}` : `answer line ${index}`,
+      index % 3 === 0
+        ? `${index / 3 + 1}. Answer ${index / 3 + 1}`
+        : `answer line ${index}`,
     );
     const markdown = [...head, ...middle, ...tail].join('\n');
 
@@ -40,9 +44,11 @@ describe('extractMarkdownSample', () => {
   });
 
   it('skips the tail sample when the document is too short to avoid overlap', () => {
-    const markdown = ['1. Question one', '2. Question two', '3. Question three'].join(
-      '\n',
-    );
+    const markdown = [
+      '1. Question one',
+      '2. Question two',
+      '3. Question three',
+    ].join('\n');
 
     const sample = extractMarkdownSample(markdown, { targetQuestions: 3 });
 

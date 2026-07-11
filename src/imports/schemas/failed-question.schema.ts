@@ -93,7 +93,4 @@ FailedQuestionSchema.set('toObject', {
   },
 });
 
-FailedQuestionSchema.index(
-  { uploadId: 1, parseIndex: 1 },
-  { unique: true },
-);
+FailedQuestionSchema.index({ uploadId: 1, parseIndex: 1 }, { unique: true });
