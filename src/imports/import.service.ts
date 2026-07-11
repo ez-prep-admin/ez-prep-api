@@ -1141,6 +1141,21 @@ export class ImportService {
     return this.toFailedQuestionListItem(doc, mapperMetadata);
   }
 
+  async deleteFailedQuestion(failedQuestionId: string): Promise<{
+    failedQuestionId: string;
+    uploadId: string;
+    questionNumber: number;
+  }> {
+    const doc =
+      await this.failedQuestionService.deleteByIdOrThrow(failedQuestionId);
+
+    return {
+      failedQuestionId,
+      uploadId: doc.uploadId.toString(),
+      questionNumber: doc.questionNumber,
+    };
+  }
+
   async importFailedQuestion(
     failedQuestionId: string,
     questionPayload: unknown,
