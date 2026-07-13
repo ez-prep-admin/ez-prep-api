@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, FilterQuery } from 'mongoose';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
 import { AdaptiveParserStrategy } from './parser/strategies/adaptive-parser.strategy';
 import { MatchedQuestion } from './types/matched-question';
@@ -63,6 +63,7 @@ import {
   ParseQuestionPdfDto,
   ParseQuestionPdfResponseDto,
   GetUploadDetailsResponseDto,
+  ListUploadsQueryDto,
   UploadsListResponseDto,
   UploadMetadataDto,
 } from './dto/parse-question-pdf.dto';
@@ -116,6 +117,8 @@ export class ImportService {
   private readonly activeEnrichJobs = new Set<string>();
   /** In-process guard against duplicate parse jobs before Mongo status is saved */
   private readonly activeParseJobs = new Set<string>();
+  /** In-process guard against concurrent persist runs on the same upload */
+  private readonly activePersistJobs = new Set<string>();
   private readonly logger = new Logger(ImportService.name);
 
   constructor(
@@ -946,6 +949,33 @@ export class ImportService {
       summary: string;
     }
   > {
+    if (this.activePersistJobs.has(uploadId)) {
+      throw new BadRequestException(
+        'Import is already in progress for this upload. Wait for it to finish before retrying.',
+      );
+    }
+
+    this.activePersistJobs.add(uploadId);
+
+    try {
+      return await this.executePersistQuestions(uploadId);
+    } finally {
+      this.activePersistJobs.delete(uploadId);
+    }
+  }
+
+  /**
+   * Imports cached enriched questions one at a time. Each successful insert is
+   * removed from enrichedQuestions immediately so a crash, timeout, or retry
+   * cannot re-insert questions that already landed in the questions collection.
+   */
+  private async executePersistQuestions(uploadId: string): Promise<
+    PersistQuestionsResult & {
+      uploadId: string;
+      uploadStatus?: string;
+      summary: string;
+    }
+  > {
     const startedAt = Date.now();
 
     const upload = await this.findUploadOrThrow(uploadId);
@@ -962,51 +992,60 @@ export class ImportService {
       );
     }
 
-    const questions = upload.enrichedQuestions as unknown as ImportQuestion[];
+    const questions = [
+      ...(upload.enrichedQuestions as unknown as ImportQuestion[]),
+    ];
+    const totalAtStart = questions.length;
 
     this.logger.log(
-      `[persist] Loading ${questions.length} cached question(s) for upload_id=${uploadId}`,
-    );
-
-    this.logger.log(
-      `[persist] Starting import of ${questions.length} question(s)`,
+      `[persist] Loading ${totalAtStart} cached question(s) for upload_id=${uploadId}`,
     );
 
     const saved: PersistQuestionsResult['saved'] = [];
     const errors: PersistQuestionsResult['errors'] = [];
 
-    for (let index = 0; index < questions.length; index++) {
-      const question = questions[index];
+    let queueIndex = 0;
+    let sourceIndex = 0;
+
+    while (queueIndex < questions.length) {
+      const question = questions[queueIndex];
 
       try {
         const withImages = this.questionHasPendingImages(question)
           ? await this.importImageStorage.materializeQuestionImages(question, {
               uploadId,
-              questionNumber: index + 1,
+              questionNumber: sourceIndex + 1,
             })
           : question;
 
         const validated = await this.persistQuestionValidator.validateQuestion(
-          withImages,
-          index,
+          { ...withImages, uploadId },
+          sourceIndex,
         );
         const created =
           await this.questionPersistenceService.saveOne(validated);
 
+        questions.splice(queueIndex, 1);
+        await this.syncEnrichedQuestionsCache(uploadId, questions);
+
         saved.push({
-          index,
+          index: sourceIndex,
           questionId: created._id.toString(),
         });
+
         this.logger.log(
-          `[persist] Question ${index + 1}/${questions.length} saved as ${created._id.toString()}`,
+          `[persist] Question ${sourceIndex + 1}/${totalAtStart} saved as ${created._id.toString()} and removed from upload cache`,
         );
       } catch (error) {
         const message = this.toPersistErrorMessage(error);
-        errors.push({ index, message });
+        errors.push({ index: sourceIndex, message });
+        queueIndex++;
         this.logger.error(
-          `[persist] Question at index ${index} failed: ${message}`,
+          `[persist] Question at index ${sourceIndex} failed: ${message}`,
         );
       }
+
+      sourceIndex++;
     }
 
     let uploadStatus: string | undefined;
@@ -1015,16 +1054,12 @@ export class ImportService {
       await this.finalizeCompletedUpload(uploadId, saved.length);
       uploadStatus = 'completed';
     } else {
-      const savedIndices = new Set(saved.map(item => item.index));
-      upload.enrichedQuestions = questions
-        .filter((_, index) => !savedIndices.has(index))
-        .map(question => question as unknown as Record<string, unknown>);
-      await upload.save();
+      await this.syncEnrichedQuestionsCache(uploadId, questions);
       uploadStatus = 'enriched';
     }
 
     const stats = {
-      total: questions.length,
+      total: totalAtStart,
       saved: saved.length,
       failed: errors.length,
     };
@@ -1039,10 +1074,31 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[persist] Completed in ${Date.now() - startedAt}ms — saved=${result.stats.saved}, failed=${result.stats.failed}`,
+      `[persist] Completed in ${Date.now() - startedAt}ms — saved=${result.stats.saved}, failed=${result.stats.failed}, remaining_in_cache=${questions.length}`,
     );
 
     return result;
+  }
+
+  /**
+   * Writes the in-memory enriched question cache back to the upload document.
+   * The persist job holds an exclusive lock, so the local array is authoritative.
+   */
+  private async syncEnrichedQuestionsCache(
+    uploadId: string,
+    enrichedQuestions: ImportQuestion[],
+  ): Promise<void> {
+    await this.questionUploadModel.updateOne(
+      { _id: new Types.ObjectId(uploadId), status: 'enriched' },
+      {
+        $set: {
+          enrichedQuestions: enrichedQuestions as unknown as Record<
+            string,
+            unknown
+          >[],
+        },
+      },
+    );
   }
 
   /**
@@ -1178,7 +1234,7 @@ export class ImportService {
           : (questionPayload as ImportQuestion);
 
       const validated = await this.persistQuestionValidator.validateQuestion(
-        withImages,
+        { ...withImages, uploadId: failed.uploadId.toString() },
         0,
       );
       const created = await this.questionPersistenceService.saveOne(validated);
@@ -1450,7 +1506,7 @@ export class ImportService {
       return `Import failed: none of the ${stats.total} question(s) could be saved. Fix the errors and retry.`;
     }
 
-    return `Import partially complete: ${stats.saved} of ${stats.total} question(s) saved, ${stats.failed} failed. Upload remains enriched — retry to import the remaining questions.`;
+    return `Import partially complete: ${stats.saved} of ${stats.total} question(s) saved, ${stats.failed} failed. Saved questions were removed from the upload cache — retry to import only the remaining questions without creating duplicates.`;
   }
 
   private toRejectedQuestion(
@@ -1878,25 +1934,24 @@ export class ImportService {
   }
 
   /**
-   * List uploaded question papers with categorization (parsed vs unparsed)
-   * @param page Page number (1-based)
-   * @param limit Items per page
-   * @returns Categorized list of uploads (parsed and unparsed)
+   * List uploaded question papers with optional filters and filename search.
    */
   async listUploads(
-    page: number = 1,
-    limit: number = 10,
+    query: ListUploadsQueryDto,
   ): Promise<UploadsListResponseDto> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
     const skip = (page - 1) * limit;
+    const filter = this.buildUploadListFilter(query);
 
     const [allUploads, total] = await Promise.all([
       this.questionUploadModel
-        .find()
+        .find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .exec(),
-      this.questionUploadModel.countDocuments(),
+      this.questionUploadModel.countDocuments(filter),
     ]);
 
     const uploads: UploadMetadataDto[] = allUploads.map(upload => {
@@ -1924,9 +1979,34 @@ export class ImportService {
         page,
         limit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / limit) || 0,
       },
     };
+  }
+
+  private buildUploadListFilter(
+    query: ListUploadsQueryDto,
+  ): FilterQuery<QuestionUploadDocument> {
+    const filter: FilterQuery<QuestionUploadDocument> = {};
+
+    if (query.subjectId) {
+      filter.subject = new Types.ObjectId(query.subjectId);
+    }
+
+    if (query.topicId) {
+      filter.topic = new Types.ObjectId(query.topicId);
+    }
+
+    if (query.status) {
+      filter.status = query.status;
+    }
+
+    const search = query.search?.trim();
+    if (search) {
+      filter.filename = { $regex: search, $options: 'i' };
+    }
+
+    return filter;
   }
 
   /**

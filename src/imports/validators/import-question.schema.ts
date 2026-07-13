@@ -53,6 +53,7 @@ export const ImportQuestionSchema = z
     source: z
       .literal(PDF_IMPORT_QUESTION_SOURCE)
       .default(PDF_IMPORT_QUESTION_SOURCE),
+    uploadId: objectIdSchema.optional(),
   })
   .superRefine((question, ctx) => {
     const hasQuestionText = Boolean(question.questionText.en.text?.trim());

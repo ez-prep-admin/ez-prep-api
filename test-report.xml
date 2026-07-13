@@ -1,17 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/enrich-thinking.util.spec.ts">
-    <testCase name="enrich-thinking.util enables thinking for stem content profiles" duration="5"/>
-    <testCase name="enrich-thinking.util disables thinking for english upload subjects even with mixed profile" duration="1"/>
-    <testCase name="enrich-thinking.util disables thinking for english content domains" duration="0"/>
-    <testCase name="enrich-thinking.util falls back to stem upload subject when profile is missing" duration="1"/>
-    <testCase name="enrich-thinking.util matches known stem subject names" duration="0"/>
-    <testCase name="enrich-thinking.util formats enabled and disabled log lines" duration="1"/>
-  </file>
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/content-profile.util.spec.ts">
-    <testCase name="content-profile.util normalizes invalid reasoningEffort values to undefined" duration="4"/>
-    <testCase name="content-profile.util salvages english-style content profiles without reasoning effort" duration="1"/>
-    <testCase name="content-profile.util defaults reasoning effort to high for stem profiles that omit effort" duration="0"/>
-    <testCase name="content-profile.util classifies stem and non-stem upload subjects" duration="1"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/persist-question.validator.spec.ts">
+    <testCase name="Persist question validation accepts a valid import question payload" duration="3"/>
+    <testCase name="Persist question validation defaults source to PDF_UPLOAD when omitted" duration="0"/>
+    <testCase name="Persist question validation rejects non-PDF_UPLOAD source values" duration="4"/>
+    <testCase name="Persist question validation rejects when correctAnswer does not match an option id" duration="0"/>
+    <testCase name="Persist question validation rejects questions without text or image" duration="1"/>
+    <testCase name="Persist question validation accepts an optional uploadId linking to the source PDF upload" duration="0"/>
+    <testCase name="Persist question validation omits uploadId when not provided" duration="1"/>
   </file>
 </testExecutions>

@@ -63,6 +63,9 @@ export class QuestionPersistenceService {
       isActive: question.isActive,
       isDeleted: question.isDeleted,
       source: question.source,
+      ...(question.uploadId
+        ? { uploadId: new Types.ObjectId(question.uploadId) }
+        : {}),
     };
   }
 }

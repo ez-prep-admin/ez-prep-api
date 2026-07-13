@@ -43,6 +43,7 @@ import {
 import {
   ParseQuestionPdfDto,
   GetUploadDetailsResponseDto,
+  ListUploadsQueryDto,
   UploadsListResponseDto,
   StartParsePdfUploadResponseDto,
 } from './dto/parse-question-pdf.dto';
@@ -66,7 +67,8 @@ export class ImportController {
     description:
       'Loads successful questions cached on the upload document (from POST /imports/enrich/:uploadId) ' +
       'and inserts them into the questions collection one by one. ' +
-      'On full success, sets upload status to `completed` and clears cached enrichment/parse data from the upload document.',
+      'Each successfully saved question is removed from the upload cache immediately so retries are safe. ' +
+      'On full success, sets upload status to `completed` and clears remaining cached enrichment/parse data.',
   })
   @ApiParam({
     name: 'uploadId',
@@ -536,36 +538,24 @@ export class ImportController {
     summary: 'List uploaded PDFs',
     description:
       'Get a paginated list of uploaded question paper PDFs. ' +
+      'Supports filtering by subjectId, topicId, and status, plus case-insensitive filename search. ' +
       'Each item includes its `status`, so the frontend can categorize ' +
       '(e.g. parsed vs unparsed) client-side without separate arrays.',
-  })
-  @ApiQuery({
-    name: 'page',
-    required: false,
-    type: Number,
-    example: 1,
-    description: 'Page number (1-based)',
-  })
-  @ApiQuery({
-    name: 'limit',
-    required: false,
-    type: Number,
-    example: 10,
-    description: 'Items per page',
   })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of uploads retrieved successfully',
     type: UploadsListResponseDto,
   })
-  async listUploads(
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
-  ): Promise<{
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid query parameters',
+  })
+  async listUploads(@Query() query: ListUploadsQueryDto): Promise<{
     message: string;
     data: UploadsListResponseDto;
   }> {
-    const result = await this.importService.listUploads(page ?? 1, limit ?? 10);
+    const result = await this.importService.listUploads(query);
 
     return {
       message: 'Uploads retrieved successfully',

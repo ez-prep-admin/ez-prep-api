@@ -39,6 +39,8 @@ export interface ImportQuestion {
   isActive: boolean;
   isDeleted: boolean;
   source: typeof PDF_IMPORT_QUESTION_SOURCE;
+  /** Reference to the question_uploads document this question was imported from. */
+  uploadId?: string;
 }
 
 /** Payload shape before persist validation; source is applied by Zod default. */

@@ -86,4 +86,19 @@ describe('Persist question validation', () => {
       }),
     ).toThrow();
   });
+
+  it('accepts an optional uploadId linking to the source PDF upload', () => {
+    const parsed = ImportQuestionSchema.parse({
+      ...validQuestion,
+      uploadId: '507f1f77bcf86cd799439015',
+    });
+
+    expect(parsed.uploadId).toBe('507f1f77bcf86cd799439015');
+  });
+
+  it('omits uploadId when not provided', () => {
+    const parsed = ImportQuestionSchema.parse(validQuestion);
+
+    expect(parsed.uploadId).toBeUndefined();
+  });
 });
