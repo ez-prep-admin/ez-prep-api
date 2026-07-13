@@ -151,6 +151,13 @@ export class Question {
   })
   source?: QuestionSource;
 
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'QuestionUpload',
+    index: true,
+  })
+  uploadId?: Types.ObjectId;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

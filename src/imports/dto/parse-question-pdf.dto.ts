@@ -1,6 +1,19 @@
-import { IsOptional, IsNumber, Min, Max } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsMongoId,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  UPLOAD_STATUSES,
+  UploadStatus,
+} from '../schemas/question-upload.schema';
 
 /**
  * DTO for parsing a question paper PDF using Mathpix
@@ -303,6 +316,69 @@ export class UploadMetadataDto {
     description: 'Last update timestamp',
   })
   updatedAt: Date;
+}
+
+/**
+ * Query parameters for GET /imports/uploads
+ */
+export class ListUploadsQueryDto {
+  @ApiPropertyOptional({
+    description: 'Page number (1-based)',
+    example: 1,
+    default: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({
+    description: 'Items per page',
+    example: 10,
+    default: 10,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    description: 'Filter by subject ObjectId',
+    example: '507f1f77bcf86cd799439011',
+  })
+  @IsOptional()
+  @IsMongoId({ message: 'subjectId must be a valid MongoDB ObjectId' })
+  subjectId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by topic ObjectId',
+    example: '507f1f77bcf86cd799439012',
+  })
+  @IsOptional()
+  @IsMongoId({ message: 'topicId must be a valid MongoDB ObjectId' })
+  topicId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by upload processing status',
+    enum: UPLOAD_STATUSES,
+    example: 'enriched',
+  })
+  @IsOptional()
+  @IsEnum(UPLOAD_STATUSES, {
+    message: `status must be one of: ${UPLOAD_STATUSES.join(', ')}`,
+  })
+  status?: UploadStatus;
+
+  @ApiPropertyOptional({
+    description: 'Case-insensitive search on the original PDF filename',
+    example: 'neet-physics',
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 }
 
 /**

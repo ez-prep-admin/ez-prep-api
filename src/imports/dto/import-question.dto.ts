@@ -158,6 +158,15 @@ export class ImportQuestionPayloadDto {
     description: 'Applied automatically when omitted',
   })
   source?: 'PDF_UPLOAD';
+
+  @Allow()
+  @IsOptional()
+  @ApiPropertyOptional({
+    example: '507f1f77bcf86cd799439015',
+    description:
+      'Question upload ID this question was imported from. Set automatically during PDF import persist.',
+  })
+  uploadId?: string;
 }
 
 export class ImportFailedQuestionResponseDto {
