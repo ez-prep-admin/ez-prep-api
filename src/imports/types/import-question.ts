@@ -17,6 +17,8 @@ export interface ImportQuestionOption {
 export interface ImportQuestionTextLanguage {
   text?: string | null;
   image?: ImportImageMetadata | null;
+  /** Extra stem images beyond the primary `image` (no duplicates of `image`). */
+  images?: ImportImageMetadata[];
 }
 
 export interface ImportQuestion {
@@ -30,6 +32,8 @@ export interface ImportQuestion {
     en: string;
     ml: null;
     image: ImportImageMetadata | null;
+    /** Extra explanation images beyond the primary `image` (no duplicates of `image`). */
+    images?: ImportImageMetadata[];
   };
   correctAnswer: string;
   subject: string;

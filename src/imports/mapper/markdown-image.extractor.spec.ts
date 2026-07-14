@@ -13,7 +13,24 @@ describe('MarkdownImageExtractorService', () => {
     expect(result.text).not.toContain('![](');    expect(result.image?.url).toBe(
       'https://cdn.mathpix.com/cropped/example.jpg?height=100',
     );
+    expect(result.images).toHaveLength(1);
     expect(result.image?.contentType).toBe('image/jpeg');
+  });
+
+  it('extracts multiple explanation diagrams in order', () => {
+    const result = extractor.buildExplanationContent(
+      'AI explanation',
+      `Perimeter of diameter:
+![](https://cdn.mathpix.com/cropped/one.jpg)
+Perimeter of circumference:
+![](https://cdn.mathpix.com/cropped/two.jpg)
+length = 36+12π`,
+    );
+
+    // Extractor keeps full ordered list; mapper/persist split primary vs extras.
+    expect(result.images).toHaveLength(2);
+    expect(result.image?.url).toContain('one.jpg');
+    expect(result.images[1].url).toContain('two.jpg');
   });
 
   it('prefers images from the source markdown block over AI output', () => {
@@ -59,6 +76,7 @@ Fig. 19.1`;
     expect(extractor.extractOptionContent(source, 'd')).toEqual({
       text: '4',
       image: null,
+      images: [],
     });
   });
 

@@ -22,3 +22,23 @@ export function isPendingImportImage(image: ImportImageMetadata): boolean {
     image.region === EXTERNAL_IMAGE_REGION
   );
 }
+
+/**
+ * Primary `image` is the first entry; `images` holds only the remaining
+ * extras (never re-includes the primary).
+ */
+export function splitPrimaryAndExtraImages(
+  allImages: ImportImageMetadata[],
+): {
+  image: ImportImageMetadata | null;
+  images: ImportImageMetadata[];
+} {
+  if (!allImages.length) {
+    return { image: null, images: [] };
+  }
+
+  return {
+    image: allImages[0],
+    images: allImages.slice(1),
+  };
+}

@@ -7,6 +7,7 @@ import { ImportQuestion } from '../types/import-question';
 import {
   ImportImageMetadata,
   isPendingImportImage,
+  splitPrimaryAndExtraImages,
 } from '../types/import-image-metadata';
 
 export interface ImageMaterializeContext {
@@ -54,19 +55,42 @@ export class ImportImageStorageService {
     question: ImportQuestion,
     context: ImageMaterializeContext,
   ): Promise<ImportQuestion> {
-    const questionTextImage = question.questionText.en.image;
-    const explanationImage = question.explanation.image;
+    const questionTextImages = this.collectFieldImages(
+      question.questionText.en.image,
+      question.questionText.en.images,
+    );
+    const explanationImages = this.collectFieldImages(
+      question.explanation.image,
+      question.explanation.images,
+    );
 
-    const [resolvedQuestionImage, resolvedExplanationImage, resolvedOptions] =
+    const [resolvedQuestionImages, resolvedExplanationImages, resolvedOptions] =
       await Promise.all([
-        questionTextImage
-          ? this.materializeImage(questionTextImage, context, 'question-stem')
-          : Promise.resolve(null),
-        explanationImage
-          ? this.materializeImage(explanationImage, context, 'explanation')
-          : Promise.resolve(null),
+        Promise.all(
+          questionTextImages.map((image, index) =>
+            this.materializeImage(
+              image,
+              context,
+              index === 0 ? 'question-stem' : `question-stem-${index}`,
+            ),
+          ),
+        ),
+        Promise.all(
+          explanationImages.map((image, index) =>
+            this.materializeImage(
+              image,
+              context,
+              index === 0 ? 'explanation' : `explanation-${index}`,
+            ),
+          ),
+        ),
         this.materializeOptionImages(question.options, context),
       ]);
+
+    const questionSplit = splitPrimaryAndExtraImages(resolvedQuestionImages);
+    const explanationSplit = splitPrimaryAndExtraImages(
+      resolvedExplanationImages,
+    );
 
     return {
       ...question,
@@ -74,15 +98,43 @@ export class ImportImageStorageService {
         ...question.questionText,
         en: {
           ...question.questionText.en,
-          image: resolvedQuestionImage,
+          image: questionSplit.image,
+          ...(questionSplit.images.length
+            ? { images: questionSplit.images }
+            : { images: undefined }),
         },
       },
       options: resolvedOptions,
       explanation: {
         ...question.explanation,
-        image: resolvedExplanationImage,
+        image: explanationSplit.image,
+        ...(explanationSplit.images.length
+          ? { images: explanationSplit.images }
+          : { images: undefined }),
       },
     };
+  }
+
+  private collectFieldImages(
+    primary: ImportImageMetadata | null | undefined,
+    extras: ImportImageMetadata[] | undefined,
+  ): ImportImageMetadata[] {
+    const images: ImportImageMetadata[] = [];
+    const seen = new Set<string>();
+
+    for (const image of [primary, ...(extras ?? [])]) {
+      if (!image) {
+        continue;
+      }
+      const key = image.url ?? `${image.bucket}/${image.key}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      images.push(image);
+    }
+
+    return images;
   }
 
   private async materializeOptionImages(

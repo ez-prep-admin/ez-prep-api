@@ -30,6 +30,7 @@ export const ImportQuestionSchema = z
       en: z.object({
         text: z.string().nullable().optional(),
         image: ImportImageMetadataSchema.nullable().optional(),
+        images: z.array(ImportImageMetadataSchema).optional(),
       }),
       ml: z.object({
         text: z.null(),
@@ -42,6 +43,7 @@ export const ImportQuestionSchema = z
       en: z.string().trim().min(1),
       ml: z.null().optional(),
       image: ImportImageMetadataSchema.nullable().optional(),
+      images: z.array(ImportImageMetadataSchema).optional(),
     }),
     correctAnswer: z.string().uuid(),
     subject: objectIdSchema,

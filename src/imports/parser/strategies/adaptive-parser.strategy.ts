@@ -13,6 +13,7 @@ import { DocumentStructure } from '../../types/document-structure';
 import { MatchedQuestion } from '../../types/matched-question';
 import { splitRepeatedInlineNumbering } from '../inline-duplicate-split.util';
 import { splitHeaderlessAlternateSolutions } from '../headerless-solution-split.util';
+import { reattachOrphanSolutionFragments } from '../orphan-solution-reattach.util';
 import {
   ParserError,
   ParserResult,
@@ -206,6 +207,17 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
             );
           }
         }
+      }
+
+      const reattached = reattachOrphanSolutionFragments(questions, solutions);
+      questions = reattached.questions;
+      solutions = reattached.solutions;
+      for (const note of reattached.notes) {
+        allWarnings.push({
+          code: 'STRUCTURE_DETECTION',
+          message: `[Structure Detection] ${note}`,
+        });
+        this.logger.warn(`[adaptive-parser] ${note}`);
       }
 
       const { matched, warnings } = this.matcher.matchWithWarnings(

@@ -1,4 +1,8 @@
-import { jsonPreview, salvageJson } from './json-salvage.util';
+import {
+  fixInvalidJsonStringEscapes,
+  jsonPreview,
+  salvageJson,
+} from './json-salvage.util';
 
 describe('json-salvage.util', () => {
   it('parses valid JSON directly', () => {
@@ -28,6 +32,30 @@ describe('json-salvage.util', () => {
     const result = salvageJson('{"questions":[{"number":1},]}');
 
     expect(result.parsed).toEqual({ questions: [{ number: 1 }] });
+  });
+
+  it('fixes invalid LaTeX backslash escapes inside JSON strings', () => {
+    // Model often emits raw \( / \pi inside JSON strings (invalid JSON).
+    const broken =
+      '{ "questions": [ { "number": 65, "options": [ { "label": "a", "text": "\\(36+12 \\pi \\mathrm{~cm}\\)" } ] } ] }';
+
+    const result = salvageJson(broken);
+    expect(result.strategy).toBe('invalid-escapes-fixed');
+
+    const parsed = result.parsed as {
+      questions: Array<{ options: Array<{ text: string }> }>;
+    };
+    expect(parsed.questions[0].options[0].text).toContain('\\(');
+    expect(parsed.questions[0].options[0].text).toContain('\\pi');
+    expect(parsed.questions[0].options[0].text).toContain('\\mathrm');
+  });
+
+  it('fixInvalidJsonStringEscapes doubles only illegal escapes', () => {
+    expect(fixInvalidJsonStringEscapes('"\\(x\\)"')).toBe('"\\\\(x\\\\)"');
+    expect(fixInvalidJsonStringEscapes('"line\\nnext"')).toBe('"line\\nnext"');
+    expect(fixInvalidJsonStringEscapes('"say \\"hi\\""')).toBe(
+      '"say \\"hi\\""',
+    );
   });
 
   it('truncates previews for logging', () => {

@@ -8,10 +8,14 @@ import {
   preferMathFaithfulText,
   stripQuestionStemMetadata,
 } from '../utils/latex-fidelity.util';
+import { looksLikeSolutionTrailing } from '../parser/orphan-solution-reattach.util';
 
 export interface ExtractedMarkdownContent {
   text: string;
+  /** Primary image (first). Kept for backward-compatible consumers. */
   image: ImportImageMetadata | null;
+  /** All extracted images in document order. */
+  images: ImportImageMetadata[];
 }
 
 @Injectable()
@@ -30,9 +34,12 @@ export class MarkdownImageExtractorService {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
+    const images = this.uniqueImages(urls.map(url => this.toImageMetadata(url)));
+
     return {
       text: withoutImages,
-      image: urls[0] ? this.toImageMetadata(urls[0]) : null,
+      image: images[0] ?? null,
+      images,
     };
   }
 
@@ -48,13 +55,23 @@ export class MarkdownImageExtractorService {
     const aiContent = this.extractFromText(aiQuestionText);
     const sourceStemContent = sourceQuestionBlock
       ? this.extractFromText(this.stripOptionSections(sourceQuestionBlock))
-      : { text: '', image: null };
+      : { text: '', image: null, images: [] as ImportImageMetadata[] };
     const postOptionContent = sourceQuestionBlock
       ? this.extractPostOptionContent(sourceQuestionBlock)
-      : { text: '', image: null };
+      : { text: '', image: null, images: [] as ImportImageMetadata[] };
 
-    const image =
-      sourceStemContent.image ?? postOptionContent.image ?? aiContent.image;
+    // Do not treat solution-like trailing (Short Trick etc.) as stem diagrams.
+    const postOptionImages = looksLikeSolutionTrailing(
+      this.rawPostOptionTrailing(sourceQuestionBlock ?? ''),
+    )
+      ? []
+      : postOptionContent.images;
+
+    const images = this.uniqueImages([
+      ...sourceStemContent.images,
+      ...postOptionImages,
+      ...aiContent.images,
+    ]);
 
     const sourceStem = stripQuestionStemMetadata(sourceStemContent.text);
     let text = preferMathFaithfulText(aiContent.text, sourceStem);
@@ -62,7 +79,7 @@ export class MarkdownImageExtractorService {
       text = aiContent.text || sourceStem;
     }
 
-    if (image && !text.includes('Fig.')) {
+    if (images.length > 0 && !text.includes('Fig.')) {
       const captionMatch =
         sourceQuestionBlock?.match(/Fig\.\s*[\d.]+/) ??
         postOptionContent.text.match(/Fig\.\s*[\d.]+/);
@@ -71,7 +88,7 @@ export class MarkdownImageExtractorService {
       }
     }
 
-    return { text, image };
+    return { text, image: images[0] ?? null, images };
   }
 
   buildExplanationContent(
@@ -81,12 +98,18 @@ export class MarkdownImageExtractorService {
     const aiContent = this.extractFromText(aiExplanationText);
     const sourceContent = sourceSolutionBlock
       ? this.extractFromText(sourceSolutionBlock)
-      : { text: '', image: null };
+      : { text: '', image: null, images: [] as ImportImageMetadata[] };
+
+    const images = this.uniqueImages([
+      ...sourceContent.images,
+      ...aiContent.images,
+    ]);
 
     // Explanations are intentionally rewritten by the LLM.
     return {
       text: aiContent.text || sourceContent.text,
-      image: sourceContent.image ?? aiContent.image,
+      image: images[0] ?? null,
+      images,
     };
   }
 
@@ -101,7 +124,7 @@ export class MarkdownImageExtractorService {
     const match = sourceQuestionBlock.match(pattern);
 
     if (!match?.[1]) {
-      return { text: '', image: null };
+      return { text: '', image: null, images: [] };
     }
 
     return this.extractFromText(match[1].trim());
@@ -112,24 +135,33 @@ export class MarkdownImageExtractorService {
    * That content belongs on the question stem, not the last option.
    */
   private extractPostOptionContent(markdown: string): ExtractedMarkdownContent {
+    const trailing = this.rawPostOptionTrailing(markdown);
+    if (!trailing) {
+      return { text: '', image: null, images: [] };
+    }
+
+    return this.extractFromText(trailing);
+  }
+
+  private rawPostOptionTrailing(markdown: string): string {
+    if (!markdown) {
+      return '';
+    }
+
     const optionLines = markdown.match(/(?:^|\n)\s*\([a-d]\)\s*[^\n]*/gim);
     if (!optionLines?.length) {
-      return { text: '', image: null };
+      return '';
     }
 
     const lastOptionLine = optionLines[optionLines.length - 1];
     const lastIndex = markdown.lastIndexOf(lastOptionLine);
     if (lastIndex === -1) {
-      return { text: '', image: null };
+      return '';
     }
 
-    const trailing = markdown.slice(lastIndex + lastOptionLine.length).trim();
-    return this.extractFromText(trailing);
+    return markdown.slice(lastIndex + lastOptionLine.length).trim();
   }
 
-  /**
-   * Removes option lines so stem extraction does not pick up option images.
-   */
   private stripOptionSections(markdown: string): string {
     const optionStart = markdown.search(/\n\s*\([a-d]\)\s/i);
     if (optionStart === -1) {
@@ -151,6 +183,22 @@ export class MarkdownImageExtractorService {
       contentType: this.inferContentType(extension),
       url,
     };
+  }
+
+  private uniqueImages(
+    images: ImportImageMetadata[],
+  ): ImportImageMetadata[] {
+    const seen = new Set<string>();
+    const unique: ImportImageMetadata[] = [];
+    for (const image of images) {
+      const key = image.url ?? `${image.bucket}/${image.key}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      unique.push(image);
+    }
+    return unique;
   }
 
   private inferContentType(extension: string): string {

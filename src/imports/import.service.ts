@@ -1440,17 +1440,19 @@ export class ImportService {
   }
 
   private questionHasPendingImages(question: ImportQuestion): boolean {
-    if (
-      question.questionText.en.image &&
-      isPendingImportImage(question.questionText.en.image)
-    ) {
+    const stemImages = [
+      question.questionText.en.image,
+      ...(question.questionText.en.images ?? []),
+    ];
+    if (stemImages.some(image => image && isPendingImportImage(image))) {
       return true;
     }
 
-    if (
-      question.explanation.image &&
-      isPendingImportImage(question.explanation.image)
-    ) {
+    const explanationImages = [
+      question.explanation.image,
+      ...(question.explanation.images ?? []),
+    ];
+    if (explanationImages.some(image => image && isPendingImportImage(image))) {
       return true;
     }
 
