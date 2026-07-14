@@ -29,16 +29,16 @@ export const AiQuestionBatchOutputSchema = z.object({
 
 export const AI_QUESTION_OUTPUT_JSON_SHAPE = {
   questionText:
-    'string — full question stem in English, preserve LaTeX/markdown',
+    'string — full question stem in English; keep Mathpix/LaTeX exactly (\\(...\\), \\[...\\], $...$, \\%, \\frac, etc.)',
   options: [
     {
       label: 'a | b | c | d (lowercase)',
-      text: 'string — option text only, without the label prefix',
+      text: 'string — option text only, without the label prefix; preserve LaTeX as in source',
     },
   ],
   correctAnswer: 'a | b | c | d — must match one option label',
   explanation:
-    'string — step-by-step explanation in English, derived from the provided solution',
+    'string — step-by-step explanation in English from the solution; preserve LaTeX math delimiters from the source',
   difficultyLevel: 'easy | medium | hard',
 } as const;
 

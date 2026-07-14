@@ -12,6 +12,7 @@ import { normalizeDocumentStructure } from '../document-structure.normalizer';
 import { DocumentStructure } from '../../types/document-structure';
 import { MatchedQuestion } from '../../types/matched-question';
 import { splitRepeatedInlineNumbering } from '../inline-duplicate-split.util';
+import { splitHeaderlessAlternateSolutions } from '../headerless-solution-split.util';
 import {
   ParserError,
   ParserResult,
@@ -147,8 +148,9 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
       const allWarnings: ParserWarning[] = [];
 
       // When the whole document was parsed as questions (inline mode, or separate
-      // mode without a section marker), detect headerless answer blocks that repeat
-      // numbering 1..N at the end of the file.
+      // mode without a section marker), recover headerless answer blocks:
+      // 1) same numbering repeated 1..N then 1..N again
+      // 2) alternate prefixes after the last question (e.g. Q.48. … Sol.48.(d))
       if (document.solutionsSection.length === 0) {
         const split = splitRepeatedInlineNumbering(questions);
 
@@ -163,6 +165,46 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
           this.logger.warn(
             `[adaptive-parser] Repeated numbering split: ${questions.length} question(s) + ${solutions.length} solution(s) (was ${questions.length + solutions.length} blocks before split)`,
           );
+        } else {
+          const altSplit = splitHeaderlessAlternateSolutions(
+            document.questionsSection,
+            structure.questionPattern.regex,
+            structure.solutionPattern.numberingRegex,
+          );
+
+          if (altSplit?.split) {
+            const structureWithSolutions: DocumentStructure = {
+              ...structure,
+              solutionPattern: {
+                ...structure.solutionPattern,
+                location: 'separate',
+                matchesQuestionNumbering: false,
+                numberingRegex: altSplit.numberingRegex,
+              },
+            };
+            this.cachedStructure = structureWithSolutions;
+
+            questions = this.questionParser.parse(
+              altSplit.questionsSection,
+              questionBoundary,
+            );
+            const altSolutionBoundary =
+              this.boundaryStrategy.createSolutionBoundary(
+                structureWithSolutions,
+              );
+            solutions = this.solutionParser.parse(
+              altSplit.solutionsSection,
+              altSolutionBoundary,
+            );
+
+            allWarnings.push({
+              code: 'STRUCTURE_DETECTION',
+              message: `[Structure Detection] Headerless alternate solution block detected (${altSplit.numberingRegex}, ${altSplit.matchCount} entries starting at "${altSplit.exampleLine}").`,
+            });
+            this.logger.warn(
+              `[adaptive-parser] Headerless alternate-prefix split: ${questions.length} question(s) + ${solutions.length} solution(s) using ${altSplit.numberingRegex}`,
+            );
+          }
         }
       }
 

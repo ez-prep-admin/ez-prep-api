@@ -197,6 +197,7 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
   private extractQuestionNumberFromText(text: string): number | null {
     const patterns = [
       /\\section\*\{Q(?:uestion)?\s*(\d+)\./i,
+      /\bQ\.(\d+)\b/i,
       /\bQ(?:uestion)?\s*(\d+)\b/i,
       /^#+\s*Q(?:uestion)?\s*(\d+)\b/i,
       /^(\d+)\.\s/,

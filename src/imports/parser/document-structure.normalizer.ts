@@ -4,6 +4,7 @@ import {
   inferQuestionNumberingPattern,
 } from './infer-question-numbering';
 import { inferSolutionNumberingRegex } from './infer-solution-numbering';
+import { splitHeaderlessAlternateSolutions } from './headerless-solution-split.util';
 
 /** Delimiter between head/tail snippets in structure-detection prompts — not a document marker. */
 export const STRUCTURE_SAMPLE_BOUNDARY = '<<<STRUCTURE_DETECTION_SAMPLE>>>';
@@ -233,10 +234,16 @@ function attachSolutionNumberingPattern(
   markdown: string,
   structure: DocumentStructure,
 ): DocumentStructure {
-  if (structure.solutionPattern.location === 'inline') {
+  if (structure.solutionPattern.numberingRegex) {
     return structure;
   }
 
+  // Misclassified "inline" SSC-style trails (Q.N … Sol.N) still need numbering.
+  if (structure.solutionPattern.location === 'inline') {
+    return attachHeaderlessSolutionNumbering(markdown, structure);
+  }
+
+  // Same numbering without a marker is recovered by splitRepeatedInlineNumbering.
   if (structure.solutionPattern.matchesQuestionNumbering) {
     return structure;
   }
@@ -245,25 +252,56 @@ function attachSolutionNumberingPattern(
     markdown,
     structure.solutionPattern.marker,
   );
-  if (!solutionsSection) {
+  if (solutionsSection) {
+    const inferred = inferSolutionNumberingRegex(solutionsSection);
+    if (inferred) {
+      const warnings = [...(structure.warnings ?? [])];
+      warnings.push(
+        `Solution numbering inferred from answers section: ${inferred.regex}`,
+      );
+
+      return {
+        ...structure,
+        solutionPattern: {
+          ...structure.solutionPattern,
+          numberingRegex: inferred.regex,
+        },
+        warnings,
+      };
+    }
+  }
+
+  return attachHeaderlessSolutionNumbering(markdown, structure);
+}
+
+function attachHeaderlessSolutionNumbering(
+  markdown: string,
+  structure: DocumentStructure,
+): DocumentStructure {
+  if (structure.solutionPattern.numberingRegex) {
     return structure;
   }
 
-  const inferred = inferSolutionNumberingRegex(solutionsSection);
-  if (!inferred) {
+  const altSplit = splitHeaderlessAlternateSolutions(
+    markdown,
+    structure.questionPattern.regex,
+  );
+  if (!altSplit?.split) {
     return structure;
   }
 
   const warnings = [...(structure.warnings ?? [])];
   warnings.push(
-    `Solution numbering inferred from answers section: ${inferred.regex}`,
+    `Headerless solution numbering inferred from document trail: ${altSplit.numberingRegex}`,
   );
 
   return {
     ...structure,
     solutionPattern: {
       ...structure.solutionPattern,
-      numberingRegex: inferred.regex,
+      location: 'separate',
+      matchesQuestionNumbering: false,
+      numberingRegex: altSplit.numberingRegex,
     },
     warnings,
   };

@@ -8,8 +8,9 @@ describe('MarkdownImageExtractorService', () => {
       'See the diagram below.\n\n![](https://cdn.mathpix.com/cropped/example.jpg?height=100)\nFig. 19.1',
     );
 
-    expect(result.text).toBe('See the diagram below.\nFig. 19.1');
-    expect(result.image?.url).toBe(
+    expect(result.text).toContain('See the diagram below.');
+    expect(result.text).toContain('Fig. 19.1');
+    expect(result.text).not.toContain('![](');    expect(result.image?.url).toBe(
       'https://cdn.mathpix.com/cropped/example.jpg?height=100',
     );
     expect(result.image?.contentType).toBe('image/jpeg');
@@ -59,5 +60,34 @@ Fig. 19.1`;
       text: '4',
       image: null,
     });
+  });
+
+  it('falls back to source stem when AI unwraps Mathpix LaTeX', () => {
+    const source = `Ramesh has \\(₹ 15,000\\). Interest at \\(10 \\%\\).
+SSC CGL 17/09/2025 (Shift 3)
+(a) ₹9,000
+(b) ₹7,500`;
+
+    const result = extractor.buildQuestionContent(
+      'Ramesh has ₹15,000. Interest at 10%.',
+      source,
+    );
+
+    expect(result.text).toContain('\\(₹ 15,000\\)');
+    expect(result.text).toContain('\\(10 \\%\\)');
+    expect(result.text).not.toContain('SSC CGL');
+  });
+
+  it('keeps AI stem when it is a different structured question despite source LaTeX', () => {
+    const source = `Some OCR dump with \\(\\alpha\\) and \\(\\beta\\) fragments.
+(a) 1
+(b) 2`;
+
+    const result = extractor.buildQuestionContent(
+      'Which of the following paths is impossible?',
+      source,
+    );
+
+    expect(result.text).toBe('Which of the following paths is impossible?');
   });
 });

@@ -26,4 +26,18 @@ describe('inferSolutionNumberingRegex', () => {
       '^## Q(\\d+)\\.\\s',
     );
   });
+
+  it('detects Sol.N answer lines', () => {
+    const section = `
+Sol.48.(d) First
+Sol.49.(c) Second
+Sol.50.(a) Third
+`.trim();
+
+    expect(inferSolutionNumberingRegex(section)).toEqual({
+      regex: '^Sol\\.(\\d+)\\.',
+      type: 'labeled',
+      exampleLine: 'Sol.48.(d) First',
+    });
+  });
 });

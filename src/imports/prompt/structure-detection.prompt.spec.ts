@@ -27,6 +27,31 @@ describe('extractMarkdownSample', () => {
     expect(sample).not.toContain('middle 15');
   });
 
+  it('treats Q.N lines as question starts for head sampling', () => {
+    const markdown = [
+      'Q.48. First question',
+      '(a) 1',
+      'Q.49. Second question',
+      '(a) 1',
+      'Q.50. Third question',
+      '(a) 1',
+      ...'filler'.repeat(40).split(''),
+      'Sol.48.(d) answer',
+      'Sol.49.(c) answer',
+    ].join('\n');
+
+    const sample = extractMarkdownSample(markdown, {
+      targetQuestions: 2,
+      maxLines: 200,
+      maxChars: 10000,
+    });
+
+    expect(sample).toContain('Q.48.');
+    expect(sample).toContain('Q.49.');
+    expect(sample).toContain('[Document tail sample]');
+    expect(sample).toContain('Sol.48.(d)');
+  });
+
   it('prefers a known solutions marker snippet over the tail sample', () => {
     const markdown = [
       '1. Question one',

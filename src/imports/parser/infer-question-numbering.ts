@@ -21,6 +21,12 @@ const CANDIDATE_PATTERNS: Array<{
     type: 'labeled',
   },
   {
+    // "Q.48." (period after Q) — common in SSC / banking PDFs
+    lineRegex: /^Q\.(\d+)\./gm,
+    source: '^Q\\.(\\d+)\\.\\s',
+    type: 'labeled',
+  },
+  {
     lineRegex: /^Q(\d+)\./gm,
     source: '^Q(\\d+)\\.\\s',
     type: 'labeled',
