@@ -107,7 +107,8 @@ export class QuestionMapper {
       );
 
     const hasImageOption = options.some(option => option.type === 'image');
-    const stemImages = splitPrimaryAndExtraImages(questionContent.images);
+    // Stem keeps a single primary image (existing behavior). Multi-image
+    // extras (`images[]`) are solution/explanation only.
     const explanationImages = splitPrimaryAndExtraImages(
       explanationContent.images,
     );
@@ -116,10 +117,7 @@ export class QuestionMapper {
       questionText: {
         en: {
           text: questionContent.text,
-          image: stemImages.image,
-          ...(stemImages.images.length
-            ? { images: stemImages.images }
-            : {}),
+          image: questionContent.image,
         },
         ml: { text: null, image: null },
       },

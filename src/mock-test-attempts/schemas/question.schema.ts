@@ -48,10 +48,6 @@ export class QuestionTextLanguage {
 
   @Prop({ type: ImageMetadataSchema })
   image?: ImageMetadata;
-
-  /** Extra stem images beyond the primary `image` (excludes the primary). */
-  @Prop({ type: [ImageMetadataSchema], default: undefined })
-  images?: ImageMetadata[];
 }
 
 export const QuestionTextLanguageSchema =

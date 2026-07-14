@@ -20,7 +20,7 @@ export function reattachOrphanSolutionFragments(
   solutions: ParsedSolution[],
 ): OrphanReattachResult {
   const notes: string[] = [];
-  let nextQuestions = questions.map(q => ({ ...q }));
+  const nextQuestions = questions.map(q => ({ ...q }));
   let nextSolutions = solutions.map(s => ({ ...s }));
 
   // 1) Peel solution-like trailing from question blocks (esp. last Q).
@@ -150,7 +150,10 @@ function splitAbsorbedSiblingSolutions(
   let next = solutions.map(s => ({ ...s }));
 
   for (const solution of [...next]) {
-    if (countImages(solution.content) < 2 && !/short\s*trick/i.test(solution.content)) {
+    if (
+      countImages(solution.content) < 2 &&
+      !/short\s*trick/i.test(solution.content)
+    ) {
       continue;
     }
 
@@ -165,7 +168,8 @@ function splitAbsorbedSiblingSolutions(
     }
 
     const thin = next.find(
-      item => item.number === split.siblingNumber && isThinSolution(item.content),
+      item =>
+        item.number === split.siblingNumber && isThinSolution(item.content),
     );
     if (!thin) {
       continue;
@@ -333,7 +337,9 @@ function distinctiveTokens(text: string): Set<string> {
 }
 
 function countImages(text: string): number {
-  return (text.match(/!\[/g) ?? []).length;
+  const markdown = (text.match(/!\[/g) ?? []).length;
+  const includegraphics = (text.match(/\\includegraphics/g) ?? []).length;
+  return markdown + includegraphics;
 }
 
 const STOP_TOKENS = new Set([

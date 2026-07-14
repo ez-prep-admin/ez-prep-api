@@ -23,18 +23,39 @@ export class MarkdownImageExtractorService {
   private static readonly MARKDOWN_IMAGE_REGEX =
     /!\[[^\]]*]\((https?:\/\/[^)\s]+)\)/g;
 
+  /** Mathpix MMD often embeds figures as LaTeX includegraphics, not ![](). */
+  private static readonly INCLUDEGRAPHICS_REGEX =
+    /\\includegraphics(?:\[[^\]]*\])?\{(https?:\/\/[^}\s]+)\}/g;
+
   extractFromText(text: string): ExtractedMarkdownContent {
     const urls: string[] = [];
 
     const withoutImages = text
-      .replace(MarkdownImageExtractorService.MARKDOWN_IMAGE_REGEX, (_, url) => {
-        urls.push(url);
-        return '';
-      })
+      .replace(
+        MarkdownImageExtractorService.INCLUDEGRAPHICS_REGEX,
+        (_, url: string) => {
+          urls.push(url);
+          return '';
+        },
+      )
+      .replace(
+        MarkdownImageExtractorService.MARKDOWN_IMAGE_REGEX,
+        (_, url: string) => {
+          urls.push(url);
+          return '';
+        },
+      )
+      // Keep human-readable captions; drop LaTeX figure wrappers/noise.
+      .replace(/\\caption(?:\[[^\]]*\])?\{([^}]*)\}/g, '$1')
+      .replace(/\\captionsetup\{[^}]*\}/g, '')
+      .replace(/\\begin\{figure\}/g, '')
+      .replace(/\\end\{figure\}/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
-    const images = this.uniqueImages(urls.map(url => this.toImageMetadata(url)));
+    const images = this.uniqueImages(
+      urls.map(url => this.toImageMetadata(url)),
+    );
 
     return {
       text: withoutImages,
@@ -118,7 +139,7 @@ export class MarkdownImageExtractorService {
     label: string,
   ): ExtractedMarkdownContent {
     const pattern = new RegExp(
-      `\\(${label}\\)\\s*([\\s\\S]*?)(?=\\n\\s*\\([a-d]\\)\\s|\\n\\s*\\n\\s*!\\[|\\n\\s*\\n\\s*Fig\\.|$)`,
+      `\\(${label}\\)\\s*([\\s\\S]*?)(?=\\n\\s*\\([a-d]\\)\\s|\\n\\s*\\n\\s*!\\[|\\n\\s*\\\\begin\\{figure\\}|\\n\\s*\\n\\s*Fig\\.|$)`,
       'i',
     );
     const match = sourceQuestionBlock.match(pattern);
@@ -185,9 +206,7 @@ export class MarkdownImageExtractorService {
     };
   }
 
-  private uniqueImages(
-    images: ImportImageMetadata[],
-  ): ImportImageMetadata[] {
+  private uniqueImages(images: ImportImageMetadata[]): ImportImageMetadata[] {
     const seen = new Set<string>();
     const unique: ImportImageMetadata[] = [];
     for (const image of images) {

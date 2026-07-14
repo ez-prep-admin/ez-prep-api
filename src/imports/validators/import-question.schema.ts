@@ -30,7 +30,6 @@ export const ImportQuestionSchema = z
       en: z.object({
         text: z.string().nullable().optional(),
         image: ImportImageMetadataSchema.nullable().optional(),
-        images: z.array(ImportImageMetadataSchema).optional(),
       }),
       ml: z.object({
         text: z.null(),

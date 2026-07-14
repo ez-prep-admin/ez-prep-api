@@ -1440,11 +1440,10 @@ export class ImportService {
   }
 
   private questionHasPendingImages(question: ImportQuestion): boolean {
-    const stemImages = [
-      question.questionText.en.image,
-      ...(question.questionText.en.images ?? []),
-    ];
-    if (stemImages.some(image => image && isPendingImportImage(image))) {
+    if (
+      question.questionText.en.image &&
+      isPendingImportImage(question.questionText.en.image)
+    ) {
       return true;
     }
 

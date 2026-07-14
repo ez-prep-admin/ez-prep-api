@@ -15,11 +15,22 @@ export class ExplanationDto {
   ml?: string | null;
 
   @ApiPropertyOptional({
-    description: 'Explanation image URL (pre-signed S3 URL)',
+    description:
+      'Primary explanation image URL (pre-signed S3 URL). First solution diagram when multiple exist.',
     example:
       'https://ez-prep-images.s3.ap-south-1.amazonaws.com/explanations/def456.jpg?X-Amz-...',
   })
   imageUrl?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Additional explanation image URLs beyond the primary `imageUrl` (empty when there is at most one image)',
+    type: [String],
+    example: [
+      'https://ez-prep-images.s3.ap-south-1.amazonaws.com/explanations/def457.jpg?X-Amz-...',
+    ],
+  })
+  imageUrls?: string[];
 }
 
 export class QuestionResultDto {

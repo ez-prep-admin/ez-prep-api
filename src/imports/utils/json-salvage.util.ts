@@ -31,7 +31,10 @@ export function salvageJson(raw: string): JsonSalvageResult {
 
   const trailingCommaFixed = removeTrailingCommas(extracted);
   if (trailingCommaFixed !== extracted) {
-    candidates.push({ strategy: 'object-extracted', value: trailingCommaFixed });
+    candidates.push({
+      strategy: 'object-extracted',
+      value: trailingCommaFixed,
+    });
   }
 
   // LaTeX in JSON strings often uses raw \( \pi \mathrm — invalid JSON escapes.
@@ -117,10 +120,7 @@ export function fixInvalidJsonStringEscapes(value: string): string {
       continue;
     }
 
-    if (
-      next === 'u' &&
-      /^[0-9a-fA-F]{4}/.test(value.slice(i + 2, i + 6))
-    ) {
+    if (next === 'u' && /^[0-9a-fA-F]{4}/.test(value.slice(i + 2, i + 6))) {
       result += value.slice(i, i + 6);
       i += 6;
       continue;

@@ -10,7 +10,8 @@ describe('MarkdownImageExtractorService', () => {
 
     expect(result.text).toContain('See the diagram below.');
     expect(result.text).toContain('Fig. 19.1');
-    expect(result.text).not.toContain('![](');    expect(result.image?.url).toBe(
+    expect(result.text).not.toContain('![](');
+    expect(result.image?.url).toBe(
       'https://cdn.mathpix.com/cropped/example.jpg?height=100',
     );
     expect(result.images).toHaveLength(1);
@@ -107,5 +108,55 @@ SSC CGL 17/09/2025 (Shift 3)
     );
 
     expect(result.text).toBe('Which of the following paths is impossible?');
+  });
+
+  it('extracts Mathpix LaTeX includegraphics figures between stem and options', () => {
+    const source = `Binding energy per nucleon versus mass number curve for nuclei is shown in Fig. 19.2. \(W, X, Y\) and \(Z\) are four nuclei indicated on the curve. The process that would release energy is
+
+\\begin{figure}
+\\includegraphics[alt={},max width=\\textwidth]{https://cdn.mathpix.com/cropped/c11b6a98-fig.jpg?height=398&width=666}
+\\captionsetup{labelformat=empty}
+\\caption{Fig. 19.2}
+\\end{figure}
+(a) \(Y \\rightarrow 2 Z\)
+(b) \(W \\rightarrow X+Z\)
+(c) \(W \\rightarrow 2 Y\)
+(d) \(X \\rightarrow Y+Z\)`;
+
+    const result = extractor.buildQuestionContent(
+      'Binding energy per nucleon versus mass number curve for nuclei is shown in Fig. 19.2. The process that would release energy is',
+      source,
+    );
+
+    expect(result.image?.url).toContain('c11b6a98-fig.jpg');
+    expect(result.text).toContain('Fig. 19.2');
+    expect(result.text).not.toContain('\\includegraphics');
+    expect(result.text).not.toContain('\\begin{figure}');
+  });
+
+  it('extracts post-option LaTeX figures into the question stem', () => {
+    const source = `Alpha particles are fired at a nucleus. Which of the paths shown in Fig. 19.1 is not possible?
+(a) 1
+(b) 2
+(c) 3
+(d) 4
+
+\\begin{figure}
+\\includegraphics[alt={},max width=\\textwidth]{https://cdn.mathpix.com/cropped/alpha-paths.jpg?height=287&width=458}
+\\captionsetup{labelformat=empty}
+\\caption{Fig. 19.1}
+\\end{figure}`;
+
+    const result = extractor.buildQuestionContent(
+      'Alpha particles are fired at a nucleus. Which of the paths shown in Fig. 19.1 is not possible?',
+      source,
+    );
+
+    expect(result.image?.url).toContain('alpha-paths.jpg');
+    expect(extractor.extractOptionContent(source, 'd')).toEqual({
+      text: '4',
+      image: null,
+      images: [],
+    });
   });
 });

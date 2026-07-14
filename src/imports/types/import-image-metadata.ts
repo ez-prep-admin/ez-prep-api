@@ -27,9 +27,7 @@ export function isPendingImportImage(image: ImportImageMetadata): boolean {
  * Primary `image` is the first entry; `images` holds only the remaining
  * extras (never re-includes the primary).
  */
-export function splitPrimaryAndExtraImages(
-  allImages: ImportImageMetadata[],
-): {
+export function splitPrimaryAndExtraImages(allImages: ImportImageMetadata[]): {
   image: ImportImageMetadata | null;
   images: ImportImageMetadata[];
 } {

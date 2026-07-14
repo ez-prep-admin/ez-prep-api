@@ -91,7 +91,8 @@ export function splitHeaderlessAlternateSolutions(
   }
 
   const questionNumbers = questionStarts.map(item => item.number);
-  const lastQuestionLineIndex = questionStarts[questionStarts.length - 1].lineIndex;
+  const lastQuestionLineIndex =
+    questionStarts[questionStarts.length - 1].lineIndex;
 
   const candidates = buildCandidateList(preferredSolutionRegex);
 
@@ -109,7 +110,11 @@ export function splitHeaderlessAlternateSolutions(
     const matches: Array<{ lineIndex: number; number: number; line: string }> =
       [];
 
-    for (let lineIndex = lastQuestionLineIndex + 1; lineIndex < lines.length; lineIndex++) {
+    for (
+      let lineIndex = lastQuestionLineIndex + 1;
+      lineIndex < lines.length;
+      lineIndex++
+    ) {
       const line = lines[lineIndex].trim();
       if (!line) {
         continue;
@@ -133,7 +138,12 @@ export function splitHeaderlessAlternateSolutions(
       matches.push({ lineIndex, number, line });
     }
 
-    if (!isPlausibleSolutionBlock(questionNumbers, matches.map(m => m.number))) {
+    if (
+      !isPlausibleSolutionBlock(
+        questionNumbers,
+        matches.map(m => m.number),
+      )
+    ) {
       continue;
     }
 
@@ -256,15 +266,22 @@ function isPlausibleSolutionBlock(
   }
 
   const questionSet = new Set(questionNumbers);
-  const overlap = solutionNumbers.filter(number => questionSet.has(number)).length;
+  const overlap = solutionNumbers.filter(number =>
+    questionSet.has(number),
+  ).length;
   if (overlap >= Math.min(2, questionNumbers.length)) {
     return true;
   }
 
   // Answers renumbered from 1 after labeled questions (Q.48… / 1. (a)…)
   const coversMostQuestions =
-    solutionNumbers.length >= Math.max(2, Math.ceil(questionNumbers.length * 0.5));
-  if (coversMostQuestions && solutionNumbers[0] === 1 && isMostlyIncreasing(solutionNumbers)) {
+    solutionNumbers.length >=
+    Math.max(2, Math.ceil(questionNumbers.length * 0.5));
+  if (
+    coversMostQuestions &&
+    solutionNumbers[0] === 1 &&
+    isMostlyIncreasing(solutionNumbers)
+  ) {
     return true;
   }
 
@@ -277,7 +294,9 @@ function scoreSolutionBlock(
   preferred: boolean,
 ): number {
   const questionSet = new Set(questionNumbers);
-  const overlap = solutionNumbers.filter(number => questionSet.has(number)).length;
+  const overlap = solutionNumbers.filter(number =>
+    questionSet.has(number),
+  ).length;
   const countScore = solutionNumbers.length * 10;
   const overlapScore = overlap * 25;
   const coverageScore =
@@ -312,7 +331,8 @@ function hasInterleavedSolutionLines(
     return false;
   }
 
-  const lastQuestionLineIndex = questionStarts[questionStarts.length - 1].lineIndex;
+  const lastQuestionLineIndex =
+    questionStarts[questionStarts.length - 1].lineIndex;
 
   for (let lineIndex = 0; lineIndex < lastQuestionLineIndex; lineIndex++) {
     const line = lines[lineIndex].trim();

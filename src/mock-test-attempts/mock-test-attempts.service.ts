@@ -50,6 +50,22 @@ export class MockTestAttemptsService {
   }
 
   /**
+   * Extra images beyond the primary `image` (schema `images[]`).
+   * Returns pre-signed URLs only; empty when there are no extras.
+   */
+  private extractExtraImageUrls(
+    images: Array<{ url?: string } | undefined | null> | undefined | null,
+  ): string[] {
+    if (!images?.length) {
+      return [];
+    }
+
+    return images
+      .map(image => image?.url)
+      .filter((url): url is string => Boolean(url));
+  }
+
+  /**
    * Helper: Calculate total time elapsed for an attempt
    * Accounts for accumulated timeConsumed from previous pause/resume cycles
    * @param attempt - The attempt document
@@ -1222,6 +1238,9 @@ export class MockTestAttemptsService {
                 en: question.explanation.en || null,
                 ml: question.explanation.ml || null,
                 imageUrl: this.extractImageUrl(question.explanation.image),
+                imageUrls: this.extractExtraImageUrls(
+                  question.explanation.images,
+                ),
               }
             : undefined,
         };

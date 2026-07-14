@@ -36,9 +36,6 @@ export class QuestionPersistenceService {
         en: {
           text: question.questionText.en.text ?? undefined,
           image: question.questionText.en.image ?? undefined,
-          ...(question.questionText.en.images?.length
-            ? { images: question.questionText.en.images }
-            : {}),
         },
         ml: {
           text: null,

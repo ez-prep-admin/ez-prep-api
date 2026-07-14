@@ -91,13 +91,33 @@ export class ImportQuestionPayloadDto {
   @Allow()
   @ApiProperty({
     type: 'object',
-    example: { en: 'Explanation text', ml: null, image: null },
+    description:
+      'Solution/explanation. Primary diagram is `image`; additional diagrams are in `images` (excludes the primary).',
+    example: {
+      en: 'Explanation text',
+      ml: null,
+      image: {
+        key: 'imports/507f1f77bcf86cd799439015/q1/explanation-0.png',
+        bucket: 'ez-prep-assets',
+        region: 'ap-south-1',
+        url: 'https://example.com/presigned-url',
+      },
+      images: [
+        {
+          key: 'imports/507f1f77bcf86cd799439015/q1/explanation-1.png',
+          bucket: 'ez-prep-assets',
+          region: 'ap-south-1',
+          url: 'https://example.com/presigned-url-2',
+        },
+      ],
+    },
     additionalProperties: true,
   })
   explanation: {
     en: string;
     ml?: null;
     image?: ImportImageMetadataDto | null;
+    images?: ImportImageMetadataDto[];
   };
 
   @Allow()

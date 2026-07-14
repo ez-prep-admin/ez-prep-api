@@ -55,26 +55,20 @@ export class ImportImageStorageService {
     question: ImportQuestion,
     context: ImageMaterializeContext,
   ): Promise<ImportQuestion> {
-    const questionTextImages = this.collectFieldImages(
-      question.questionText.en.image,
-      question.questionText.en.images,
-    );
     const explanationImages = this.collectFieldImages(
       question.explanation.image,
       question.explanation.images,
     );
 
-    const [resolvedQuestionImages, resolvedExplanationImages, resolvedOptions] =
+    const [resolvedStemImage, resolvedExplanationImages, resolvedOptions] =
       await Promise.all([
-        Promise.all(
-          questionTextImages.map((image, index) =>
-            this.materializeImage(
-              image,
+        question.questionText.en.image
+          ? this.materializeImage(
+              question.questionText.en.image,
               context,
-              index === 0 ? 'question-stem' : `question-stem-${index}`,
-            ),
-          ),
-        ),
+              'question-stem',
+            )
+          : Promise.resolve(null),
         Promise.all(
           explanationImages.map((image, index) =>
             this.materializeImage(
@@ -87,7 +81,6 @@ export class ImportImageStorageService {
         this.materializeOptionImages(question.options, context),
       ]);
 
-    const questionSplit = splitPrimaryAndExtraImages(resolvedQuestionImages);
     const explanationSplit = splitPrimaryAndExtraImages(
       resolvedExplanationImages,
     );
@@ -98,10 +91,7 @@ export class ImportImageStorageService {
         ...question.questionText,
         en: {
           ...question.questionText.en,
-          image: questionSplit.image,
-          ...(questionSplit.images.length
-            ? { images: questionSplit.images }
-            : { images: undefined }),
+          image: resolvedStemImage,
         },
       },
       options: resolvedOptions,

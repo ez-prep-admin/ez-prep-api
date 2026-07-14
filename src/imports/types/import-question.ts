@@ -16,9 +16,8 @@ export interface ImportQuestionOption {
 
 export interface ImportQuestionTextLanguage {
   text?: string | null;
+  /** Single stem image (first extracted figure). Multi-image is solution-only. */
   image?: ImportImageMetadata | null;
-  /** Extra stem images beyond the primary `image` (no duplicates of `image`). */
-  images?: ImportImageMetadata[];
 }
 
 export interface ImportQuestion {
