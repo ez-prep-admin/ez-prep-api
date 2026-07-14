@@ -54,6 +54,9 @@ export class QuestionPersistenceService {
         en: question.explanation.en,
         ml: question.explanation.ml,
         image: question.explanation.image ?? undefined,
+        ...(question.explanation.images?.length
+          ? { images: question.explanation.images }
+          : {}),
       },
       correctAnswer: question.correctAnswer,
       subject: new Types.ObjectId(question.subject),

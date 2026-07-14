@@ -1,30 +1,37 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/latex-fidelity.util.spec.ts">
-    <testCase name="latex-fidelity.util scores Mathpix delimiters and ignores plain unicode" duration="4"/>
-    <testCase name="latex-fidelity.util restores source when AI unwraps the same stem" duration="1"/>
-    <testCase name="latex-fidelity.util keeps AI when it preserved math" duration="0"/>
-    <testCase name="latex-fidelity.util keeps AI when wording diverges even if source has more math" duration="1"/>
-    <testCase name="latex-fidelity.util strips SSC attribution from stems" duration="0"/>
-    <testCase name="latex-fidelity.util normalizes for plain comparison" duration="0"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/types/import-image-metadata.spec.ts">
+    <testCase name="splitPrimaryAndExtraImages returns null primary and empty extras for no images" duration="6"/>
+    <testCase name="splitPrimaryAndExtraImages puts the first image in image and keeps extras only in images" duration="1"/>
+    <testCase name="splitPrimaryAndExtraImages has empty images when there is only one image" duration="0"/>
   </file>
   <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/mapper/markdown-image.extractor.spec.ts">
     <testCase name="MarkdownImageExtractorService removes markdown image syntax and returns image metadata" duration="3"/>
-    <testCase name="MarkdownImageExtractorService prefers images from the source markdown block over AI output" duration="0"/>
-    <testCase name="MarkdownImageExtractorService extracts diagrams placed after the option list into question content" duration="1"/>
+    <testCase name="MarkdownImageExtractorService extracts multiple explanation diagrams in order" duration="1"/>
+    <testCase name="MarkdownImageExtractorService prefers images from the source markdown block over AI output" duration="1"/>
+    <testCase name="MarkdownImageExtractorService extracts diagrams placed after the option list into question content" duration="0"/>
     <testCase name="MarkdownImageExtractorService does not attach post-option diagrams to the last option label" duration="1"/>
-    <testCase name="MarkdownImageExtractorService falls back to source stem when AI unwraps Mathpix LaTeX" duration="1"/>
+    <testCase name="MarkdownImageExtractorService falls back to source stem when AI unwraps Mathpix LaTeX" duration="0"/>
     <testCase name="MarkdownImageExtractorService keeps AI stem when it is a different structured question despite source LaTeX" duration="0"/>
+    <testCase name="MarkdownImageExtractorService extracts Mathpix LaTeX includegraphics figures between stem and options" duration="1"/>
+    <testCase name="MarkdownImageExtractorService extracts post-option LaTeX figures into the question stem" duration="1"/>
+  </file>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/parser/orphan-solution-reattach.util.spec.ts">
+    <testCase name="orphan-solution-reattach.util detects Short Trick trailing as solution-like" duration="2"/>
+    <testCase name="orphan-solution-reattach.util keeps short Fig. trailing as stem diagram" duration="1"/>
+    <testCase name="orphan-solution-reattach.util peels solution-like trailing from a question block" duration="1"/>
+    <testCase name="orphan-solution-reattach.util reattaches orphan + absorbed sibling on the SSC circle fixture" duration="1"/>
   </file>
   <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/import-phase2.spec.ts">
-    <testCase name="Phase 2 import validators and mapper validates a correct AI JSON payload with Zod" duration="9"/>
-    <testCase name="Phase 2 import validators and mapper rejects malformed AI JSON" duration="9"/>
+    <testCase name="Phase 2 import validators and mapper validates a correct AI JSON payload with Zod" duration="5"/>
+    <testCase name="Phase 2 import validators and mapper rejects malformed AI JSON" duration="8"/>
     <testCase name="Phase 2 import validators and mapper passes NEET business validation" duration="1"/>
     <testCase name="Phase 2 import validators and mapper rejects wrong option count for NEET" duration="1"/>
     <testCase name="Phase 2 import validators and mapper maps validated output to the Question schema shape with option UUIDs" duration="2"/>
-    <testCase name="Phase 2 import validators and mapper extracts question images into image metadata instead of question text" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper extracts question images into image metadata instead of question text" duration="2"/>
+    <testCase name="Phase 2 import validators and mapper stores multiple solution diagrams as explanation.image + explanation.images" duration="1"/>
     <testCase name="Phase 2 import validators and mapper assigns post-option Mathpix diagrams to the question stem, not the last option" duration="1"/>
     <testCase name="Phase 2 import validators and mapper validates batch AI JSON payloads with Zod" duration="1"/>
-    <testCase name="Phase 2 import validators and mapper chunks all questions into a single batch by default" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper chunks all questions into a single batch by default" duration="0"/>
   </file>
 </testExecutions>

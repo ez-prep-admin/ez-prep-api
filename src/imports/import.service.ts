@@ -1447,10 +1447,11 @@ export class ImportService {
       return true;
     }
 
-    if (
-      question.explanation.image &&
-      isPendingImportImage(question.explanation.image)
-    ) {
+    const explanationImages = [
+      question.explanation.image,
+      ...(question.explanation.images ?? []),
+    ];
+    if (explanationImages.some(image => image && isPendingImportImage(image))) {
       return true;
     }
 

@@ -1,7 +1,8 @@
 export type JsonSalvageStrategy =
   | 'direct'
   | 'fences-stripped'
-  | 'object-extracted';
+  | 'object-extracted'
+  | 'invalid-escapes-fixed';
 
 export interface JsonSalvageResult {
   parsed: unknown;
@@ -13,18 +14,36 @@ export interface JsonSalvageResult {
  */
 export function salvageJson(raw: string): JsonSalvageResult {
   const trimmed = raw.trim();
+  const fenceStripped = stripMarkdownFences(trimmed);
+  const extracted = extractJsonObject(fenceStripped) ?? fenceStripped;
+
   const candidates: Array<{ strategy: JsonSalvageStrategy; value: string }> = [
     { strategy: 'direct', value: trimmed },
   ];
 
-  const fenceStripped = stripMarkdownFences(trimmed);
   if (fenceStripped !== trimmed) {
     candidates.push({ strategy: 'fences-stripped', value: fenceStripped });
   }
 
-  const extracted = extractJsonObject(fenceStripped);
-  if (extracted && extracted !== fenceStripped) {
+  if (extracted !== fenceStripped) {
     candidates.push({ strategy: 'object-extracted', value: extracted });
+  }
+
+  const trailingCommaFixed = removeTrailingCommas(extracted);
+  if (trailingCommaFixed !== extracted) {
+    candidates.push({
+      strategy: 'object-extracted',
+      value: trailingCommaFixed,
+    });
+  }
+
+  // LaTeX in JSON strings often uses raw \( \pi \mathrm — invalid JSON escapes.
+  const escapeFixed = fixInvalidJsonStringEscapes(trailingCommaFixed);
+  if (escapeFixed !== trailingCommaFixed) {
+    candidates.push({
+      strategy: 'invalid-escapes-fixed',
+      value: escapeFixed,
+    });
   }
 
   let lastError: SyntaxError | undefined;
@@ -34,20 +53,6 @@ export function salvageJson(raw: string): JsonSalvageResult {
       return {
         parsed: JSON.parse(candidate.value),
         strategy: candidate.strategy,
-      };
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        lastError = error;
-      }
-    }
-  }
-
-  const trailingCommaFixed = removeTrailingCommas(fenceStripped);
-  if (trailingCommaFixed !== fenceStripped) {
-    try {
-      return {
-        parsed: JSON.parse(trailingCommaFixed),
-        strategy: 'object-extracted',
       };
     } catch (error) {
       if (error instanceof SyntaxError) {
@@ -66,6 +71,67 @@ export function jsonPreview(raw: string, maxLength = 300): string {
   }
 
   return `${compact.slice(0, maxLength)}…`;
+}
+
+/**
+ * Within JSON string literals, turn invalid `\` escapes into `\\` so Mathpix
+ * LaTeX like `\(` / `\pi` / `\mathrm` can round-trip through JSON.parse.
+ */
+export function fixInvalidJsonStringEscapes(value: string): string {
+  let result = '';
+  let inString = false;
+  let i = 0;
+
+  while (i < value.length) {
+    const ch = value[i];
+
+    if (!inString) {
+      if (ch === '"') {
+        inString = true;
+      }
+      result += ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = false;
+      result += ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch !== '\\') {
+      result += ch;
+      i += 1;
+      continue;
+    }
+
+    const next = value[i + 1];
+    if (next === undefined) {
+      result += '\\\\';
+      i += 1;
+      continue;
+    }
+
+    if ('"\\/bfnrt'.includes(next)) {
+      result += `\\${next}`;
+      i += 2;
+      continue;
+    }
+
+    if (next === 'u' && /^[0-9a-fA-F]{4}/.test(value.slice(i + 2, i + 6))) {
+      result += value.slice(i, i + 6);
+      i += 6;
+      continue;
+    }
+
+    // Invalid JSON escape (typical LaTeX): keep the char, escape the slash.
+    result += `\\\\${next}`;
+    i += 2;
+  }
+
+  return result;
 }
 
 function stripMarkdownFences(value: string): string {

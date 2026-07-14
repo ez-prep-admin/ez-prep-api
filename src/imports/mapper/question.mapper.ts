@@ -9,6 +9,7 @@ import {
 import { MatchedQuestion } from '../types/matched-question';
 import { MarkdownImageExtractorService } from './markdown-image.extractor';
 import { preferMathFaithfulText } from '../utils/latex-fidelity.util';
+import { splitPrimaryAndExtraImages } from '../types/import-image-metadata';
 
 export interface QuestionMapperMetadata {
   subjectId: string;
@@ -78,11 +79,17 @@ export class QuestionMapper {
       source?.question,
     );
 
-    const stemImageUrl = questionContent.image?.url;
-    if (stemImageUrl) {
+    const stemImageUrls = new Set(
+      questionContent.images.map(image => image.url).filter(Boolean),
+    );
+    if (stemImageUrls.size > 0) {
       for (let index = 0; index < options.length; index++) {
         const option = options[index];
-        if (option.type === 'image' && option.image?.url === stemImageUrl) {
+        if (
+          option.type === 'image' &&
+          option.image?.url &&
+          stemImageUrls.has(option.image.url)
+        ) {
           options[index] = {
             id: option.id,
             type: 'text',
@@ -100,6 +107,11 @@ export class QuestionMapper {
       );
 
     const hasImageOption = options.some(option => option.type === 'image');
+    // Stem keeps a single primary image (existing behavior). Multi-image
+    // extras (`images[]`) are solution/explanation only.
+    const explanationImages = splitPrimaryAndExtraImages(
+      explanationContent.images,
+    );
 
     return {
       questionText: {
@@ -114,7 +126,10 @@ export class QuestionMapper {
       explanation: {
         en: explanationContent.text,
         ml: null,
-        image: explanationContent.image,
+        image: explanationImages.image,
+        ...(explanationImages.images.length
+          ? { images: explanationImages.images }
+          : {}),
       },
       correctAnswer,
       subject: metadata.subjectId,

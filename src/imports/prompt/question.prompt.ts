@@ -15,9 +15,9 @@ Rules:
 4. Extract exactly the options present in the source. For NEET there are 4 options labelled (a), (b), (c), (d).
 5. Each option label must be lowercase: a, b, c, or d.
 6. Each option text must NOT repeat the label prefix like "(a)" or "a)".
-7. Preserve ALL math exactly as in the source. Mathpix often uses \\(...\\) and \\[...\\]; also keep $...$ / $$...$$ when present. Copy delimiters, commands, and escapes verbatim (e.g. \\(, \\), \\%, \\frac, \\mathrm, ₹ inside math). NEVER unwrap math into plain text (wrong: "10%" or "₹15,000"; correct: keep "\\(10 \\%\\)" / "\\(₹ 15,000\\)" if that is what the source has).
+7. Preserve ALL math exactly as in the source. Mathpix often uses \\(...\\) and \\[...\\]; also keep $...$ / $$...$$ when present. Copy delimiters, commands, and escapes verbatim (e.g. \\(, \\), \\%, \\frac, \\mathrm, ₹ inside math). NEVER unwrap math into plain text (wrong: "10%" or "₹15,000"; correct: keep "\\(10 \\%\\)" / "\\(₹ 15,000\\)" if that is what the source has). Because the response is JSON, every backslash in those strings must be written as \\\\ (example JSON fragment: "text": "\\\\(36+12 \\\\pi\\\\)").
 8. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
-9. Use the provided solution to determine the correct answer and to write a clear explanation. Preserve LaTeX in the explanation the same way as in the stem.
+9. Use the provided solution to determine the correct answer and to write a clear explanation. Preserve LaTeX in the explanation the same way as in the stem. If the solution includes a "Short Trick" (or similar alternate method), include that method briefly in the explanation after the main method.
 10. correctAnswer must be the lowercase label of the correct option.
 11. difficultyLevel must be exactly one of: easy, medium, hard. Assess each question independently based on concept depth, reasoning steps, and typical NEET exam difficulty — do not default every question to the same level.
 12. Do not invent options, facts, or images that are not supported by the input.
@@ -39,9 +39,9 @@ Rules:
 6. For NEET there are 4 options labelled (a), (b), (c), (d).
 7. Each option label must be lowercase: a, b, c, or d.
 8. Each option text must NOT repeat the label prefix like "(a)" or "a)".
-9. Preserve ALL math exactly as in the source. Mathpix often uses \\(...\\) and \\[...\\]; also keep $...$ / $$...$$ when present. Copy delimiters, commands, and escapes verbatim (e.g. \\(, \\), \\%, \\frac, \\mathrm, ₹ inside math). NEVER unwrap math into plain text (wrong: "10%" or "₹15,000"; correct: keep "\\(10 \\%\\)" / "\\(₹ 15,000\\)" if that is what the source has).
+9. Preserve ALL math exactly as in the source. Mathpix often uses \\(...\\) and \\[...\\]; also keep $...$ / $$...$$ when present. Copy delimiters, commands, and escapes verbatim (e.g. \\(, \\), \\%, \\frac, \\mathrm, ₹ inside math). NEVER unwrap math into plain text (wrong: "10%" or "₹15,000"; correct: keep "\\(10 \\%\\)" / "\\(₹ 15,000\\)" if that is what the source has). Because the response is JSON, every backslash in those strings must be written as \\\\ (example JSON fragment: "text": "\\\\(36+12 \\\\pi\\\\)").
 10. Do NOT include markdown image syntax like ![](url) in questionText or explanation. Figure captions such as "Fig. 19.1" should remain as plain text only; images are handled separately.
-11. Use each provided solution to determine the correct answer and write the explanation. Preserve LaTeX in explanations the same way as in stems/options.
+11. Use each provided solution to determine the correct answer and write the explanation. Preserve LaTeX in explanations the same way as in stems/options. If a solution includes a "Short Trick" (or similar alternate method), include that method briefly in the explanation after the main method.
 12. correctAnswer must be the lowercase label of the correct option.
 13. difficultyLevel must be exactly one of: easy, medium, hard. Assess each question independently based on concept depth, reasoning steps, and typical NEET exam difficulty — do not default every question to the same level.
 14. Do not invent options, facts, or images that are not supported by the input.

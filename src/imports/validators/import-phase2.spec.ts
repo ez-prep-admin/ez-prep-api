@@ -129,8 +129,36 @@ Fig. 19.1`,
     expect(mapped.questionText.en.image?.key).toContain(
       'cropped/example-1.jpg',
     );
+    expect(mapped.questionText.en).not.toHaveProperty('images');
     expect(mapped.options.every(option => option.type === 'text')).toBe(true);
     expect(mapped.optionType).toBe('text');
+  });
+
+  it('stores multiple solution diagrams as explanation.image + explanation.images', () => {
+    const mapped = mapper.map(
+      {
+        ...validOutput,
+        explanation: 'AI explanation text without markdown images',
+      },
+      {
+        subjectId: '67ba32f8f8ac13a9bd5e5758',
+        topicId: '6a365809474b7019244e0dbb',
+        examIds: ['67bdd043b24c5bec214287c4'],
+      },
+      {
+        number: 1,
+        question: questionWithImageSource.question,
+        solution: `Sol.1.(a)
+![](https://cdn.mathpix.com/cropped/sol-one.jpg)
+Short Trick
+![](https://cdn.mathpix.com/cropped/sol-two.jpg)`,
+      },
+    );
+
+    expect(mapped.explanation.image?.url).toContain('sol-one.jpg');
+    expect(mapped.explanation.images).toHaveLength(1);
+    expect(mapped.explanation.images?.[0].url).toContain('sol-two.jpg');
+    expect(mapped.questionText.en).not.toHaveProperty('images');
   });
 
   it('assigns post-option Mathpix diagrams to the question stem, not the last option', () => {
