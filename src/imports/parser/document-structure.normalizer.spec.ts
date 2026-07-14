@@ -180,4 +180,42 @@ describe('normalizeDocumentStructure', () => {
     expect(split.questions).toHaveLength(20);
     expect(split.solutions).toHaveLength(20);
   });
+
+  it('infers Sol. numbering for headerless Q.N / Sol.N documents', () => {
+    const markdown = [
+      'Q.48. First question',
+      '(a) 1',
+      '(b) 2',
+      'Q.49. Second question',
+      '(a) 1',
+      '(b) 2',
+      'Sol.48.(d) because of allotment image',
+      '![](https://cdn.mathpix.com/cropped/a.jpg)',
+      'Sol.49.(c) because of ratio',
+    ].join('\n');
+
+    const normalized = normalizeDocumentStructure(markdown, {
+      questionPattern: {
+        type: 'labeled',
+        regex: '^Q\\.(\\d+)\\.\\s',
+        exampleMatch: 'Q.48. First question',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: false,
+      },
+      delimiter: { type: 'blank-line', value: '', confidence: 0.9 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'SSC headerless',
+      confidence: 0.9,
+    });
+
+    expect(normalized.solutionPattern.numberingRegex).toBe('^Sol\\.(\\d+)\\.');
+    expect(normalized.solutionPattern.location).toBe('separate');
+    expect(normalized.solutionPattern.matchesQuestionNumbering).toBe(false);
+  });
 });

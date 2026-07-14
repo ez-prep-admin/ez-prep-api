@@ -9,8 +9,25 @@ const CANDIDATE_PATTERNS: Array<{
   source: string;
   type: 'numbered' | 'labeled';
 }> = [
+  { regex: /^Sol\.(\d+)\./i, source: '^Sol\\.(\\d+)\\.', type: 'labeled' },
+  {
+    regex: /^Sol\.?\s*(\d+)[.:)]\s/i,
+    source: '^Sol\\.?\\s*(\\d+)[.:)]\\s',
+    type: 'labeled',
+  },
+  {
+    regex: /^Solution\s+(\d+)[.:)]\s/i,
+    source: '^Solution\\s+(\\d+)[.:)]\\s',
+    type: 'labeled',
+  },
+  {
+    regex: /^Ans(?:wer)?\.?\s*(\d+)[.:)]\s/i,
+    source: '^Ans(?:wer)?\\.?\\s*(\\d+)[.:)]\\s',
+    type: 'labeled',
+  },
   { regex: /^(\d+)\s*\.\s/, source: '^(\\d+)\\s*\\.\\s', type: 'numbered' },
   { regex: /^## Q(\d+)\.\s/i, source: '^## Q(\\d+)\\.\\s', type: 'labeled' },
+  { regex: /^Q\.(\d+)\.\s/i, source: '^Q\\.(\\d+)\\.\\s', type: 'labeled' },
   { regex: /^Q(\d+)\.\s/i, source: '^Q(\\d+)\\.\\s', type: 'labeled' },
   {
     regex: /^Question\s+(\d+)[:.]?\s/i,

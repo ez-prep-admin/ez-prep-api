@@ -62,8 +62,8 @@ Rules:
    - "separate" if solutions are in a distinct section
    - "end-of-page" if solutions appear at page bottom
    - "mixed" if there's a combination
-6. If solutions are separate, provide the exact section marker string that appears verbatim in the document (e.g., "## SOLUTIONS", "## ANSWERS AND SOLUTIONS"). If there is no explicit heading before the answer block, omit marker entirely. Never use horizontal rules (---), sample labels, or other synthetic delimiters as the marker.
-7. Set matchesQuestionNumbering to false when the answers section uses different line prefixes than questions (common: questions as "## Q1." but answers as "1. (2)"). When false, optionally provide solutionPattern.numberingRegex with a capture group for the answer entry number.
+6. If solutions are separate, provide the exact section marker string that appears verbatim in the document (e.g., "## SOLUTIONS", "## ANSWERS AND SOLUTIONS"). If there is no explicit heading before the answer block, omit marker entirely. Never use horizontal rules (---), sample labels, or other synthetic delimiters as the marker. Headerless separate answers (e.g. questions as "Q.48." then a trail of "Sol.48.(d)") are still "separate" with marker omitted.
+7. Set matchesQuestionNumbering to false when the answers section uses different line prefixes than questions (common: questions as "## Q1." / "Q.48." but answers as "1. (2)" / "Sol.48.(d)"). When false, ALWAYS provide solutionPattern.numberingRegex with a capture group for the answer entry number (e.g. "^Sol\\.(\\d+)\\." for "Sol.48.(d)", or "^(\\d+)\\.\\s" for "1. (2)").
 8. Identify delimiter type between questions:
    - "heading" for markdown headings
    - "blank-line" for empty lines
@@ -192,6 +192,7 @@ function isQuestionStartLine(line: string): boolean {
   return (
     /^\s*\d+\.\s/.test(line) ||
     /^\s*##\s*Q\d+/i.test(line) ||
+    /^\s*Q\.\d+/i.test(line) ||
     /^\s*Q\d+/i.test(line) ||
     /^\\section\*\{Q\d+/i.test(line)
   );

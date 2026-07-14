@@ -8,6 +8,7 @@ import {
 } from '../types/import-question';
 import { MatchedQuestion } from '../types/matched-question';
 import { MarkdownImageExtractorService } from './markdown-image.extractor';
+import { preferMathFaithfulText } from '../utils/latex-fidelity.util';
 
 export interface QuestionMapperMetadata {
   subjectId: string;
@@ -40,7 +41,11 @@ export class QuestionMapper {
         : null;
 
       const optionImage = sourceOption?.image ?? null;
-      const optionText = option.text || sourceOption?.text || '';
+      const optionText =
+        preferMathFaithfulText(option.text, sourceOption?.text ?? '') ||
+        option.text ||
+        sourceOption?.text ||
+        '';
 
       if (optionImage) {
         return {

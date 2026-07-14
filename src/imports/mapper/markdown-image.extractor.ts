@@ -4,6 +4,10 @@ import {
   ImportImageMetadata,
   MATHPIX_PENDING_BUCKET,
 } from '../types/import-image-metadata';
+import {
+  preferMathFaithfulText,
+  stripQuestionStemMetadata,
+} from '../utils/latex-fidelity.util';
 
 export interface ExtractedMarkdownContent {
   text: string;
@@ -35,6 +39,7 @@ export class MarkdownImageExtractorService {
   /**
    * Builds question content by cleaning AI text and preferring images
    * found in the original parsed markdown block (authoritative source).
+   * When the LLM strips Mathpix/LaTeX delimiters, prefer the source stem.
    */
   buildQuestionContent(
     aiQuestionText: string,
@@ -50,7 +55,12 @@ export class MarkdownImageExtractorService {
 
     const image =
       sourceStemContent.image ?? postOptionContent.image ?? aiContent.image;
-    let text = aiContent.text || sourceStemContent.text;
+
+    const sourceStem = stripQuestionStemMetadata(sourceStemContent.text);
+    let text = preferMathFaithfulText(aiContent.text, sourceStem);
+    if (!text) {
+      text = aiContent.text || sourceStem;
+    }
 
     if (image && !text.includes('Fig.')) {
       const captionMatch =
@@ -73,6 +83,7 @@ export class MarkdownImageExtractorService {
       ? this.extractFromText(sourceSolutionBlock)
       : { text: '', image: null };
 
+    // Explanations are intentionally rewritten by the LLM.
     return {
       text: aiContent.text || sourceContent.text,
       image: sourceContent.image ?? aiContent.image,

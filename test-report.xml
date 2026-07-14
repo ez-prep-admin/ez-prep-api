@@ -1,12 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <testExecutions version="1">
-  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/persist-question.validator.spec.ts">
-    <testCase name="Persist question validation accepts a valid import question payload" duration="3"/>
-    <testCase name="Persist question validation defaults source to PDF_UPLOAD when omitted" duration="0"/>
-    <testCase name="Persist question validation rejects non-PDF_UPLOAD source values" duration="4"/>
-    <testCase name="Persist question validation rejects when correctAnswer does not match an option id" duration="0"/>
-    <testCase name="Persist question validation rejects questions without text or image" duration="1"/>
-    <testCase name="Persist question validation accepts an optional uploadId linking to the source PDF upload" duration="0"/>
-    <testCase name="Persist question validation omits uploadId when not provided" duration="1"/>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/utils/latex-fidelity.util.spec.ts">
+    <testCase name="latex-fidelity.util scores Mathpix delimiters and ignores plain unicode" duration="4"/>
+    <testCase name="latex-fidelity.util restores source when AI unwraps the same stem" duration="1"/>
+    <testCase name="latex-fidelity.util keeps AI when it preserved math" duration="0"/>
+    <testCase name="latex-fidelity.util keeps AI when wording diverges even if source has more math" duration="1"/>
+    <testCase name="latex-fidelity.util strips SSC attribution from stems" duration="0"/>
+    <testCase name="latex-fidelity.util normalizes for plain comparison" duration="0"/>
+  </file>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/mapper/markdown-image.extractor.spec.ts">
+    <testCase name="MarkdownImageExtractorService removes markdown image syntax and returns image metadata" duration="3"/>
+    <testCase name="MarkdownImageExtractorService prefers images from the source markdown block over AI output" duration="0"/>
+    <testCase name="MarkdownImageExtractorService extracts diagrams placed after the option list into question content" duration="1"/>
+    <testCase name="MarkdownImageExtractorService does not attach post-option diagrams to the last option label" duration="1"/>
+    <testCase name="MarkdownImageExtractorService falls back to source stem when AI unwraps Mathpix LaTeX" duration="1"/>
+    <testCase name="MarkdownImageExtractorService keeps AI stem when it is a different structured question despite source LaTeX" duration="0"/>
+  </file>
+  <file path="/Users/sharun/Documents/Personal Projects/ez-prep-api/src/imports/validators/import-phase2.spec.ts">
+    <testCase name="Phase 2 import validators and mapper validates a correct AI JSON payload with Zod" duration="9"/>
+    <testCase name="Phase 2 import validators and mapper rejects malformed AI JSON" duration="9"/>
+    <testCase name="Phase 2 import validators and mapper passes NEET business validation" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper rejects wrong option count for NEET" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper maps validated output to the Question schema shape with option UUIDs" duration="2"/>
+    <testCase name="Phase 2 import validators and mapper extracts question images into image metadata instead of question text" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper assigns post-option Mathpix diagrams to the question stem, not the last option" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper validates batch AI JSON payloads with Zod" duration="1"/>
+    <testCase name="Phase 2 import validators and mapper chunks all questions into a single batch by default" duration="1"/>
   </file>
 </testExecutions>
