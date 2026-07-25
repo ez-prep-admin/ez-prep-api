@@ -143,4 +143,5 @@ async function bootstrap() {
   }
 }
 
+// Bootstrap the application 🚀
 bootstrap();
