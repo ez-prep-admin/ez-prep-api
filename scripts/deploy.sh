@@ -6,6 +6,16 @@
 
 set -Eeuo pipefail
 
+###############################################################################
+# Load NVM (required for non-interactive SSH sessions)
+###############################################################################
+
+export NVM_DIR="$HOME/.nvm"
+
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    . "$NVM_DIR/nvm.sh"
+fi
+
 echo ""
 echo "======================================================="
 echo "🚀 EZ Prep API Deployment Started"
