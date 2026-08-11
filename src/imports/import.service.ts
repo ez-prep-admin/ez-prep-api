@@ -79,6 +79,7 @@ import {
   formatEnrichThinkingLog,
   resolveEnrichThinking,
 } from './utils/enrich-thinking.util';
+import { isOutputBudgetExhaustionError } from './utils/enrich-output-budget.util';
 import { DeepseekThinkingOptions } from './llm/deepseek.types';
 import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 
@@ -86,6 +87,12 @@ import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
 const ENRICH_PROMPT_OVERHEAD_TOKENS = 8000;
 const ENRICH_MAX_QUESTIONS_PER_CHUNK = 20;
+/**
+ * Thinking mode shares max_tokens between reasoning_content and final JSON.
+ * Large STEM batches (chemistry LaTeX, multi-step solutions) routinely exhaust
+ * the output budget before valid JSON is produced — keep these chunks small.
+ */
+const ENRICH_MAX_QUESTIONS_PER_CHUNK_WITH_THINKING = 5;
 
 export interface StartEnrichUploadResult {
   uploadId: string;
@@ -362,7 +369,7 @@ export class ImportService {
     uploadId: string,
     dto: EnrichQuestionsDto = {},
   ): Promise<EnrichDebugResult> {
-    const upload = await this.findUploadOrThrow(uploadId);
+    let upload = await this.findUploadOrThrow(uploadId);
 
     try {
       const parsed = await this.resolveMatchedQuestionsForUpload(
@@ -376,12 +383,12 @@ export class ImportService {
         );
       }
 
-      const uploadForThinking = dto.forceReparse
-        ? await this.findUploadOrThrow(uploadId)
-        : upload;
+      // Re-load so documentStructureCache (incl. contentProfile) written by parse is visible.
+      // The pre-parse upload instance is stale and would skip contentProfile → subject fallback.
+      upload = await this.findUploadOrThrow(uploadId);
       const mapperMetadata = this.buildMapperMetadataFromUpload(upload);
       const thinkingResolution =
-        await this.resolveEnrichThinkingForUpload(uploadForThinking);
+        await this.resolveEnrichThinkingForUpload(upload);
 
       this.logger.log(formatEnrichThinkingLog(thinkingResolution.decision));
 
@@ -572,10 +579,14 @@ export class ImportService {
 
     this.importImageStorage.clearSessionCache();
 
+    const maxQuestionsPerChunk = options.thinking?.enabled
+      ? ENRICH_MAX_QUESTIONS_PER_CHUNK_WITH_THINKING
+      : ENRICH_MAX_QUESTIONS_PER_CHUNK;
+
     const chunkingOptions = {
       maxTokensPerChunk: ENRICH_MAX_TOKENS_PER_CHUNK,
       promptOverheadTokens: ENRICH_PROMPT_OVERHEAD_TOKENS,
-      maxQuestionsPerChunk: ENRICH_MAX_QUESTIONS_PER_CHUNK,
+      maxQuestionsPerChunk,
     };
 
     const chunks = adaptiveChunking
@@ -583,7 +594,7 @@ export class ImportService {
           indexedQuestions,
           chunkingOptions,
         )
-      : this.questionChunker.chunk(indexedQuestions);
+      : this.questionChunker.chunk(indexedQuestions, maxQuestionsPerChunk);
 
     const chunkingStats = {
       totalTokens: this.questionChunker.estimateTotalTokens(indexedQuestions),
@@ -596,7 +607,7 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[enrich] Starting batch enrichment: ${indexedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${ENRICH_MAX_QUESTIONS_PER_CHUNK})`,
+      `[enrich] Starting batch enrichment: ${indexedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${maxQuestionsPerChunk}, thinking=${options.thinking?.enabled ? 'enabled' : 'disabled'})`,
     );
 
     this.logger.log(
@@ -751,7 +762,9 @@ export class ImportService {
   }
 
   /**
-   * Process a single chunk with retry logic and exponential backoff
+   * Process a single chunk with retry logic and exponential backoff.
+   * When thinking mode exhausts the shared output budget (empty/truncated JSON),
+   * split the chunk and process halves instead of retrying the same oversized batch.
    */
   private async processChunkWithRetry(
     chunk: QuestionChunk,
@@ -799,6 +812,22 @@ export class ImportService {
         `[enrich] Chunk ${chunk.chunkIndex} failed after ${duration}ms (attempt ${currentAttempt}/${maxRetries}): ${message}`,
       );
 
+      if (
+        isOutputBudgetExhaustionError(message) &&
+        chunk.questions.length > 1
+      ) {
+        this.logger.warn(
+          `[enrich] Chunk ${chunk.chunkIndex}: output budget exhausted with ${chunk.questions.length} question(s); splitting and retrying halves`,
+        );
+        return this.processChunkSplitOnBudgetExhaustion(
+          chunk,
+          maxRetries,
+          mapperMetadata,
+          uploadId,
+          thinking,
+        );
+      }
+
       // Retry with exponential backoff if attempts remaining
       if (currentAttempt < maxRetries) {
         const backoffMs = Math.min(
@@ -840,6 +869,60 @@ export class ImportService {
         })),
       };
     }
+  }
+
+  private async processChunkSplitOnBudgetExhaustion(
+    chunk: QuestionChunk,
+    maxRetries: number,
+    mapperMetadata: QuestionMapperMetadata,
+    uploadId?: string,
+    thinking?: DeepseekThinkingOptions,
+  ): Promise<ChunkEnrichResult> {
+    const midpoint = Math.ceil(chunk.questions.length / 2);
+    const left: QuestionChunk = {
+      chunkIndex: chunk.chunkIndex,
+      questions: chunk.questions.slice(0, midpoint),
+      estimatedTokens: this.questionChunker.estimateTotalTokens(
+        chunk.questions.slice(0, midpoint),
+      ),
+      retryCount: chunk.retryCount,
+      status: 'pending',
+    };
+    const right: QuestionChunk = {
+      chunkIndex: chunk.chunkIndex,
+      questions: chunk.questions.slice(midpoint),
+      estimatedTokens: this.questionChunker.estimateTotalTokens(
+        chunk.questions.slice(midpoint),
+      ),
+      retryCount: chunk.retryCount,
+      status: 'pending',
+    };
+
+    const [leftResult, rightResult] = await Promise.all([
+      this.processChunkWithRetry(
+        left,
+        maxRetries,
+        mapperMetadata,
+        uploadId,
+        thinking,
+      ),
+      this.processChunkWithRetry(
+        right,
+        maxRetries,
+        mapperMetadata,
+        uploadId,
+        thinking,
+      ),
+    ]);
+
+    return {
+      questions: [...leftResult.questions, ...rightResult.questions],
+      enrichedIndices: [
+        ...leftResult.enrichedIndices,
+        ...rightResult.enrichedIndices,
+      ],
+      errors: [...leftResult.errors, ...rightResult.errors],
+    };
   }
 
   /**

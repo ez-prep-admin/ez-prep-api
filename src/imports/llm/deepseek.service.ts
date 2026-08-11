@@ -12,6 +12,11 @@ import { DeepseekLlmResult, DeepseekThinkingOptions } from './deepseek.types';
 
 /** Default output budget for 20-question batch enrichment with LaTeX explanations */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+/**
+ * Thinking shares max_tokens with final content. Chemistry/STEM batches need
+ * enough headroom after reasoning or content comes back empty / truncated.
+ */
+const THINKING_MIN_OUTPUT_TOKENS = 32_768;
 
 @Injectable()
 export class DeepseekService {
@@ -144,8 +149,9 @@ export class DeepseekService {
     );
 
     if (result.finishReason === 'length') {
+      const maxTokens = this.resolveRequestMaxTokens(options?.thinking);
       this.logger.warn(
-        `[deepseek] Batch response truncated (finish_reason=length, completion_tokens=${result.completionTokens ?? 'n/a'}, max_output_tokens=${this.maxOutputTokens}, chars=${result.content.length})`,
+        `[deepseek] Batch response truncated (finish_reason=length, completion_tokens=${result.completionTokens ?? 'n/a'}, max_output_tokens=${maxTokens}, chars=${result.content.length})`,
       );
     }
 
@@ -159,7 +165,7 @@ export class DeepseekService {
     const request = {
       model: this.model,
       temperature: 0.1,
-      max_tokens: this.maxOutputTokens,
+      max_tokens: this.resolveRequestMaxTokens(thinking),
       response_format: { type: 'json_object' as const },
       messages,
       ...(thinking?.enabled
@@ -173,6 +179,14 @@ export class DeepseekService {
     return this.client.chat.completions.create(
       request as unknown as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
     );
+  }
+
+  private resolveRequestMaxTokens(thinking?: DeepseekThinkingOptions): number {
+    if (!thinking?.enabled) {
+      return this.maxOutputTokens;
+    }
+
+    return Math.max(this.maxOutputTokens, THINKING_MIN_OUTPUT_TOKENS);
   }
 
   private toLlmResult(

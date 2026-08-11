@@ -81,6 +81,28 @@ describe('enrich-thinking.util', () => {
     expect(resolved.decision.enabled).toBe(false);
   });
 
+  it('prefers chemistry contentProfile over GENERAL SCIENCE subject fallback', () => {
+    const resolved = resolveEnrichThinking({
+      documentStructure: {
+        ...baseStructure(),
+        contentProfile: {
+          requiresReasoning: true,
+          reasoningDomains: ['chemistry'],
+          reasoningEffort: 'medium',
+          confidence: 0.85,
+          rationale: 'Organic chemistry MCQs with calculations.',
+        },
+      },
+      subjectName: 'GENERAL SCIENCE',
+    });
+
+    expect(resolved.thinking).toEqual({
+      enabled: true,
+      reasoningEffort: 'medium',
+    });
+    expect(resolved.decision.source).toBe('contentProfile');
+  });
+
   it('falls back to stem upload subject when profile is missing', () => {
     const resolved = resolveEnrichThinking({
       subjectName: 'Mathematics',
