@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsArray,
   IsMongoId,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateSubjectDto {
@@ -26,6 +27,7 @@ export class CreateSubjectDto {
     example: 'Mathematics and problem solving',
     maxLength: 1000,
   })
+  @IsOptional()
   @IsString()
   @MaxLength(1000)
   description?: string;
@@ -35,6 +37,7 @@ export class CreateSubjectDto {
     example: ['64f123456789abcdef123456', '64f123456789abcdef123457'],
     type: [String],
   })
+  @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
   topics?: string[];

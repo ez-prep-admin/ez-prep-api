@@ -2,6 +2,7 @@
  * Populated document field type with common fields
  */
 export interface PopulatedDocument {
+  id?: string;
   _id?: unknown;
   name?: string;
   description?: string;

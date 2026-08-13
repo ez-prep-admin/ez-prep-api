@@ -1,7 +1,11 @@
 import {
+  Body,
   Controller,
+  Delete,
   Get,
   Param,
+  Patch,
+  Post,
   Query,
   UseGuards,
   ParseIntPipe,
@@ -27,6 +31,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UserResponseDto } from '../users/dto/user-response.dto';
+import { CreateTopicWiseMockTestDto } from './dto/create-topic-wise-mock-test.dto';
 
 @ApiTags('mock-tests')
 @Controller('mock-tests')
@@ -117,6 +122,7 @@ export class MockTestsController {
       limit,
       search,
       user?.id,
+      user?.role === UserRole.ADMIN,
     );
     return {
       message: search
@@ -465,14 +471,63 @@ export class MockTestsController {
   @ApiUnauthorizedResponse({
     description: 'Authentication required',
   })
-  async findOne(@Param('id') id: string): Promise<{
+  async findOne(
+    @Param('id') id: string,
+    @GetUser() user?: UserResponseDto,
+  ): Promise<{
     message: string;
     data: MockTestResponseDto;
   }> {
-    const mockTest = await this.mockTestsService.findOne(id);
+    const mockTest = await this.mockTestsService.findOne(id, user);
     return {
       message: 'Mock test retrieved successfully',
       data: mockTest,
     };
+  }
+
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Create a topic-wise mock test (Admin only)' })
+  async create(
+    @Body() dto: CreateTopicWiseMockTestDto,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string; data: MockTestResponseDto }> {
+    const mockTest = await this.mockTestsService.createTopicWise(dto, user.id);
+    return {
+      message: 'Mock test created successfully',
+      data: mockTest,
+    };
+  }
+
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary:
+      'Update a topic-wise mock test and re-sample questions (Admin only)',
+  })
+  async update(
+    @Param('id') id: string,
+    @Body() dto: CreateTopicWiseMockTestDto,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string; data: MockTestResponseDto }> {
+    const mockTest = await this.mockTestsService.updateTopicWise(
+      id,
+      dto,
+      user.id,
+    );
+    return {
+      message: 'Mock test updated successfully',
+      data: mockTest,
+    };
+  }
+
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({ summary: 'Soft delete a topic-wise mock test (Admin only)' })
+  async remove(@Param('id') id: string): Promise<{ message: string }> {
+    return this.mockTestsService.removeTopicWise(id);
   }
 }

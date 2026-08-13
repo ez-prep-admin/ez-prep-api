@@ -227,8 +227,12 @@ export class SubjectsService {
           const topicDoc = topic as PopulatedDocument;
           return {
             id:
-              topicDoc._id?.toString() ||
-              (typeof topic === 'string' ? topic : ''),
+              typeof topic === 'string'
+                ? topic
+                : topic instanceof Types.ObjectId
+                  ? topic.toString()
+                  : topicDoc._id?.toString?.() ||
+                    (typeof topicDoc.id === 'string' ? topicDoc.id : ''),
             name: topicDoc.name || '',
           };
         }) || [],

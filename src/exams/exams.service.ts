@@ -16,6 +16,10 @@ import {
   Category,
   CategoryDocument,
 } from '../categories/schemas/category.schema';
+import {
+  ExamGroup,
+  ExamGroupDocument,
+} from '../exam-groups/schemas/exam-group.schema';
 
 @Injectable()
 export class ExamsService {
@@ -24,6 +28,8 @@ export class ExamsService {
     private examModel: Model<ExamDocument>,
     @InjectModel(Category.name)
     private categoryModel: Model<CategoryDocument>,
+    @InjectModel(ExamGroup.name)
+    private examGroupModel: Model<ExamGroupDocument>,
   ) {}
 
   /**
@@ -41,6 +47,15 @@ export class ExamsService {
       );
     }
 
+    const examGroup = await this.examGroupModel
+      .findById(createExamDto.examGroup)
+      .exec();
+    if (!examGroup) {
+      throw new BadRequestException(
+        `Exam group with ID "${createExamDto.examGroup}" not found`,
+      );
+    }
+
     // Check for duplicate name within same category
     const existing = await this.examModel
       .findOne({
@@ -55,7 +70,9 @@ export class ExamsService {
       );
     }
 
-    const exam = await this.examModel.create(createExamDto);
+    const exam = await this.examModel.create(
+      this.withComputedTotals(createExamDto),
+    );
     return this.toResponseDto(exam);
   }
 
@@ -73,7 +90,7 @@ export class ExamsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query: FilterQuery<Exam> = {};
+    const query: FilterQuery<Exam> = { isDeleted: { $ne: true } };
 
     if (activeOnly) {
       query.isActive = true;
@@ -119,7 +136,10 @@ export class ExamsService {
    */
   async getExamsByCategory(): Promise<ExamsByCategoryResponseDto> {
     const categoryQuery: FilterQuery<Category> = { isActive: true };
-    const examQuery: FilterQuery<Exam> = { isActive: true };
+    const examQuery: FilterQuery<Exam> = {
+      isActive: true,
+      isDeleted: { $ne: true },
+    };
 
     // Get all active categories
     const categories = await this.categoryModel
@@ -245,6 +265,17 @@ export class ExamsService {
       }
     }
 
+    if (updateExamDto.examGroup) {
+      const examGroup = await this.examGroupModel
+        .findById(updateExamDto.examGroup)
+        .exec();
+      if (!examGroup) {
+        throw new BadRequestException(
+          `Exam group with ID "${updateExamDto.examGroup}" not found`,
+        );
+      }
+    }
+
     // Check for duplicate name if name or category is being updated
     if (updateExamDto.name || updateExamDto.category) {
       const existingExam = await this.examModel.findById(id).exec();
@@ -268,8 +299,11 @@ export class ExamsService {
     }
 
     const exam = await this.examModel
-      .findByIdAndUpdate(id, updateExamDto, { new: true })
+      .findByIdAndUpdate(id, this.withComputedTotals(updateExamDto), {
+        new: true,
+      })
       .populate('category')
+      .populate('examGroup')
       .exec();
 
     if (!exam) {
@@ -299,6 +333,57 @@ export class ExamsService {
     return this.toResponseDto(exam);
   }
 
+  private withComputedTotals<
+    T extends {
+      subjects?: Array<{
+        numberOfQuestions?: number;
+        marksPerQuestion?: number;
+      }>;
+      totalQuestions?: number;
+      totalMarks?: number;
+    },
+  >(payload: T): T {
+    if (!payload.subjects) {
+      return payload;
+    }
+
+    const totalQuestions = payload.subjects.reduce(
+      (sum, subject) => sum + (subject.numberOfQuestions || 0),
+      0,
+    );
+    const totalMarks = payload.subjects.reduce(
+      (sum, subject) =>
+        sum +
+        (subject.numberOfQuestions || 0) * (subject.marksPerQuestion || 0),
+      0,
+    );
+
+    return {
+      ...payload,
+      totalQuestions,
+      totalMarks,
+    };
+  }
+
+  private toRefId(value: unknown): string | undefined {
+    if (value == null) {
+      return undefined;
+    }
+    if (typeof value === 'string') {
+      return value;
+    }
+    if (typeof value === 'object') {
+      const row = value as { id?: unknown; _id?: { toString(): string } };
+      if (typeof row.id === 'string' && row.id) {
+        return row.id;
+      }
+      if (row._id) {
+        return row._id.toString();
+      }
+    }
+    return String(value);
+  }
+
   /**
    * Helper: Format duration from minutes to human-readable string
    */
@@ -318,13 +403,12 @@ export class ExamsService {
     const obj = exam.toObject();
     return new ExamResponseDto({
       ...obj,
-      category:
-        typeof obj.category === 'object' && obj.category._id
-          ? obj.category._id.toString()
-          : obj.category.toString(),
+      id: obj.id || exam._id.toString(),
+      category: this.toRefId(obj.category) || '',
+      examGroup: this.toRefId(obj.examGroup) || '',
       subjects: obj.subjects?.map(s => ({
         ...s,
-        subject: s.subject.toString(),
+        subject: this.toRefId(s.subject) || String(s.subject),
       })),
     });
   }

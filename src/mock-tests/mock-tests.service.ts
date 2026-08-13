@@ -1,8 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { MockTest, MockTestDocument } from './schemas/mock-test.schema';
 import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
+import {
+  Question,
+  QuestionDocument,
+} from '../mock-test-attempts/schemas/question.schema';
+import { CreateTopicWiseMockTestDto } from './dto/create-topic-wise-mock-test.dto';
+import { UserResponseDto } from '../users/dto/user-response.dto';
+import { UserRole } from '../common/enums/user-role.enum';
 import {
   MockTestAttempt,
   MockTestAttemptDocument,
@@ -19,7 +30,12 @@ import { PaperType } from '../common/enums/paper-type.enum';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
   paperType: { $ne: PaperType.FULL_EXAM },
+  isDeleted: { $ne: true },
 };
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
+}
 
 @Injectable()
 export class MockTestsService {
@@ -28,6 +44,7 @@ export class MockTestsService {
     @InjectModel(MockTestAttempt.name)
     private attemptModel: Model<MockTestAttemptDocument>,
     @InjectModel(Topic.name) private topicModel: Model<TopicDocument>,
+    @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
   ) {}
 
   /**
@@ -43,6 +60,7 @@ export class MockTestsService {
     limit: number = 10,
     search?: string,
     userId?: string,
+    isAdmin = false,
   ): Promise<PaginatedMockTestsResponseDto> {
     // Validate and normalize pagination parameters
     const validPage = Math.max(1, page);
@@ -50,24 +68,40 @@ export class MockTestsService {
     const skip = (validPage - 1) * validLimit;
 
     // Build query — never leak full-exam papers into topic-wise lists
-    const query: FilterQuery<MockTestDocument> = { ...TOPIC_WISE_FILTER };
+    const query: FilterQuery<MockTestDocument> = {
+      ...TOPIC_WISE_FILTER,
+      ...(isAdmin ? {} : { isActive: true }),
+    };
 
     // Add search filter if search term is provided
     if (search && search.trim()) {
+      const term = escapeRegex(search.trim());
       query.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } }, // Case-insensitive regex search
-        { description: { $regex: search.trim(), $options: 'i' } },
+        { title: { $regex: term, $options: 'i' } },
+        { description: { $regex: term, $options: 'i' } },
       ];
     }
 
     // Execute queries in parallel for better performance
+    const findQuery = this.mockTestModel
+      .find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(validLimit);
+
+    if (!isAdmin) {
+      findQuery.select('-questionIds');
+    }
+
+    if (isAdmin) {
+      findQuery
+        .populate('exam', 'name description')
+        .populate('subject', 'name description')
+        .populate('topic', 'name');
+    }
+
     const [mockTests, total] = await Promise.all([
-      this.mockTestModel
-        .find(query)
-        .sort({ createdAt: -1 }) // Newest first
-        .skip(skip)
-        .limit(validLimit)
-        .exec(),
+      findQuery.exec(),
       this.mockTestModel.countDocuments(query).exec(),
     ]);
 
@@ -92,7 +126,13 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
-        return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
+        return isAdmin
+          ? (this.toListItemDto(
+              test,
+              entry.action,
+              entry.resumeAttemptId,
+            ) as unknown as MockTestResponseDto)
+          : this.toResponseDto(test, entry.action, entry.resumeAttemptId);
       }),
       pagination: {
         total,
@@ -111,16 +151,259 @@ export class MockTestsService {
    * @returns Mock test details
    * @throws NotFoundException if mock test not found
    */
-  async findOne(id: string): Promise<MockTestResponseDto> {
-    const mockTest = await this.mockTestModel
+  async findOne(
+    id: string,
+    user?: UserResponseDto,
+  ): Promise<MockTestResponseDto> {
+    const isAdmin = user?.role === UserRole.ADMIN;
+    let query = this.mockTestModel.findOne({
+      _id: id,
+      ...TOPIC_WISE_FILTER,
+      ...(isAdmin ? {} : { isActive: true }),
+    });
+
+    if (isAdmin) {
+      query = query
+        .populate('exam', 'name')
+        .populate('subject', 'name')
+        .populate('topic', 'name')
+        .populate({
+          path: 'questionIds',
+          select: 'questionText subject',
+          populate: { path: 'subject', select: 'name' },
+        });
+    } else {
+      query = query.select('-questionIds');
+    }
+
+    const mockTest = await query.exec();
+
+    if (!mockTest) {
+      throw new NotFoundException(`Mock test with ID "${id}" not found`);
+    }
+
+    if (isAdmin) {
+      return this.toAdminDetailDto(mockTest);
+    }
+
+    return this.toResponseDto(mockTest);
+  }
+
+  async createTopicWise(
+    dto: CreateTopicWiseMockTestDto,
+    userId: string,
+  ): Promise<MockTestResponseDto> {
+    this.assertDifficultySum(dto);
+    const questionIds = await this.sampleQuestionIds(dto);
+
+    const mockTest = await this.mockTestModel.create({
+      paperType: PaperType.TOPIC_WISE,
+      totalQuestions: dto.totalQuestions,
+      durationInMinutes: dto.durationInMinutes,
+      exam: new Types.ObjectId(dto.exam),
+      subject: new Types.ObjectId(dto.subject),
+      topic: dto.topic ? new Types.ObjectId(dto.topic) : null,
+      difficultyDistribution: dto.difficultyDistribution,
+      title: dto.title || null,
+      description: dto.description || null,
+      generationMode: dto.generationMode || 'STATIC',
+      questionIds,
+      marksPerQuestion: dto.marksPerQuestion ?? 1,
+      negativeMarking: dto.negativeMarking ?? 0,
+      passingScore: dto.passingScore ?? null,
+      allowRetake: dto.allowRetake ?? true,
+      shuffleOptions: dto.shuffleOptions ?? false,
+      showResultsImmediately: dto.showResultsImmediately ?? true,
+      createdBy: new Types.ObjectId(userId),
+      isActive: true,
+      isDeleted: false,
+    });
+
+    return this.findOne(mockTest.id, {
+      id: userId,
+      role: UserRole.ADMIN,
+    } as UserResponseDto);
+  }
+
+  async updateTopicWise(
+    id: string,
+    dto: CreateTopicWiseMockTestDto,
+    userId: string,
+  ): Promise<MockTestResponseDto> {
+    const existing = await this.mockTestModel
       .findOne({ _id: id, ...TOPIC_WISE_FILTER })
+      .exec();
+
+    if (!existing) {
+      throw new NotFoundException(`Mock test with ID "${id}" not found`);
+    }
+
+    this.assertDifficultySum(dto);
+    const shouldResample = this.shouldResampleTopicWise(existing, dto);
+    const questionIds = shouldResample
+      ? await this.sampleQuestionIds(dto)
+      : existing.questionIds;
+
+    await this.mockTestModel
+      .findOneAndUpdate(
+        { _id: id, ...TOPIC_WISE_FILTER },
+        {
+          $set: {
+            paperType: PaperType.TOPIC_WISE,
+            totalQuestions: dto.totalQuestions,
+            durationInMinutes: dto.durationInMinutes,
+            exam: new Types.ObjectId(dto.exam),
+            subject: new Types.ObjectId(dto.subject),
+            topic: dto.topic ? new Types.ObjectId(dto.topic) : null,
+            difficultyDistribution: dto.difficultyDistribution,
+            title: dto.title,
+            description: dto.description,
+            generationMode: dto.generationMode || existing.generationMode,
+            questionIds,
+            marksPerQuestion: dto.marksPerQuestion ?? existing.marksPerQuestion,
+            negativeMarking: dto.negativeMarking ?? existing.negativeMarking,
+            passingScore: dto.passingScore,
+            allowRetake: dto.allowRetake,
+            shuffleOptions: dto.shuffleOptions,
+            showResultsImmediately: dto.showResultsImmediately,
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    return this.findOne(id, {
+      id: userId,
+      role: UserRole.ADMIN,
+    } as UserResponseDto);
+  }
+
+  async removeTopicWise(id: string): Promise<{ message: string }> {
+    const mockTest = await this.mockTestModel
+      .findOneAndUpdate(
+        { _id: id, ...TOPIC_WISE_FILTER },
+        { isDeleted: true, isActive: false },
+        { new: true },
+      )
       .exec();
 
     if (!mockTest) {
       throw new NotFoundException(`Mock test with ID "${id}" not found`);
     }
 
-    return this.toResponseDto(mockTest);
+    return { message: 'Mock test deleted successfully' };
+  }
+
+  private assertDifficultySum(dto: CreateTopicWiseMockTestDto) {
+    const { easy, medium, hard } = dto.difficultyDistribution;
+    const sum = easy + medium + hard;
+    if (sum !== dto.totalQuestions) {
+      throw new BadRequestException(
+        `Difficulty distribution sum (${sum}) must equal total questions (${dto.totalQuestions})`,
+      );
+    }
+  }
+
+  private shouldResampleTopicWise(
+    existing: MockTestDocument,
+    dto: CreateTopicWiseMockTestDto,
+  ): boolean {
+    const existingTopic = existing.topic?.toString() || '';
+    const nextTopic = dto.topic || '';
+    const existingDist = existing.difficultyDistribution || {
+      easy: 0,
+      medium: 0,
+      hard: 0,
+    };
+
+    return (
+      !existing.questionIds?.length ||
+      existing.totalQuestions !== dto.totalQuestions ||
+      existing.exam?.toString() !== dto.exam ||
+      existing.subject?.toString() !== dto.subject ||
+      existingTopic !== nextTopic ||
+      existingDist.easy !== dto.difficultyDistribution.easy ||
+      existingDist.medium !== dto.difficultyDistribution.medium ||
+      existingDist.hard !== dto.difficultyDistribution.hard
+    );
+  }
+
+  private async sampleQuestionIds(
+    dto: CreateTopicWiseMockTestDto,
+  ): Promise<Types.ObjectId[]> {
+    const baseMatch: Record<string, unknown> = {
+      subject: new Types.ObjectId(dto.subject),
+      exams: new Types.ObjectId(dto.exam),
+      isActive: true,
+      isDeleted: { $ne: true },
+    };
+    if (dto.topic) {
+      baseMatch.topic = new Types.ObjectId(dto.topic);
+    }
+
+    const levels = (['easy', 'medium', 'hard'] as const).filter(
+      level => dto.difficultyDistribution[level] > 0,
+    );
+
+    const sampledGroups = await Promise.all(
+      levels.map(async level => {
+        const count = dto.difficultyDistribution[level];
+        const questions = await this.questionModel.aggregate([
+          { $match: { ...baseMatch, difficultyLevel: level } },
+          { $sample: { size: count } },
+        ]);
+
+        if (questions.length < count) {
+          throw new BadRequestException(
+            `Not enough ${level} questions available. Found ${questions.length}, need ${count}`,
+          );
+        }
+
+        return questions.map(question => question._id as Types.ObjectId);
+      }),
+    );
+
+    return sampledGroups.flat();
+  }
+
+  private toAdminDetailDto(mockTest: MockTestDocument): MockTestResponseDto {
+    const examDoc = mockTest.exam as unknown as PopulatedDocument;
+    const subjectDoc = mockTest.subject as unknown as PopulatedDocument;
+    const topicDoc = mockTest.topic as unknown as PopulatedDocument;
+    const questions = (mockTest.questionIds || []).map(question => {
+      const q = question as unknown as PopulatedDocument & {
+        questionText?: unknown;
+        subject?: PopulatedDocument;
+        id?: string;
+      };
+      return {
+        id: q.id || q._id?.toString(),
+        questionText: q.questionText,
+        subject: q.subject
+          ? {
+              id: q.subject._id?.toString() || q.subject.id,
+              name: q.subject.name,
+            }
+          : null,
+      };
+    });
+
+    return {
+      ...this.toListItemDto(mockTest),
+      exam: examDoc
+        ? { id: examDoc._id?.toString() || examDoc.id, name: examDoc.name }
+        : mockTest.exam?.toString(),
+      subject: subjectDoc
+        ? {
+            id: subjectDoc._id?.toString() || subjectDoc.id,
+            name: subjectDoc.name,
+          }
+        : mockTest.subject?.toString(),
+      topic: topicDoc
+        ? { id: topicDoc._id?.toString() || topicDoc.id, name: topicDoc.name }
+        : undefined,
+      questions,
+    } as unknown as MockTestResponseDto;
   }
 
   /**
@@ -206,6 +489,7 @@ export class MockTestsService {
 
     const query: FilterQuery<MockTestDocument> = {
       ...TOPIC_WISE_FILTER,
+      isActive: true,
       exam: new Types.ObjectId(examId),
     };
 
@@ -217,7 +501,7 @@ export class MockTestsService {
     // Search by topic name if provided
     if (search && search.trim()) {
       const matchingTopics = await this.topicModel
-        .find({ name: { $regex: search.trim(), $options: 'i' } })
+        .find({ name: { $regex: escapeRegex(search.trim()), $options: 'i' } })
         .select('_id')
         .lean()
         .exec();
@@ -241,6 +525,7 @@ export class MockTestsService {
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
         .find(query)
+        .select('-questionIds')
         .populate('exam', '_id name description')
         .populate('subject', '_id name description')
         .populate('topic', '_id name')
@@ -302,12 +587,14 @@ export class MockTestsService {
 
     const query: FilterQuery<MockTestDocument> = {
       ...TOPIC_WISE_FILTER,
+      isActive: true,
       subject: new Types.ObjectId(subjectId),
     };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
         .find(query)
+        .select('-questionIds')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -368,6 +655,7 @@ export class MockTestsService {
 
     const query: FilterQuery<MockTestDocument> = {
       ...TOPIC_WISE_FILTER,
+      isActive: true,
       exam: new Types.ObjectId(examId),
       subject: new Types.ObjectId(subjectId),
     };
@@ -375,6 +663,7 @@ export class MockTestsService {
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
         .find(query)
+        .select('-questionIds')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)

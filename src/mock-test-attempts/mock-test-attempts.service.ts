@@ -29,6 +29,7 @@ import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { UserAttemptSummaryDto } from './dto/user-attempt-summary.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
+import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -41,32 +42,8 @@ export class MockTestAttemptsService {
     private mockTestModel: Model<MockTestDocument>,
     @InjectModel(Question.name)
     private questionModel: Model<QuestionDocument>,
+    private readonly imageUrlResolver: ImageUrlResolver,
   ) {}
-
-  /**
-   * Helper: Extract URL from ImageMetadata (only expose URL, not S3 internals)
-   */
-  private extractImageUrl(
-    imageMetadata: any | undefined | null,
-  ): string | null {
-    return imageMetadata?.url || null;
-  }
-
-  /**
-   * Extra images beyond the primary `image` (schema `images[]`).
-   * Returns pre-signed URLs only; empty when there are no extras.
-   */
-  private extractExtraImageUrls(
-    images: Array<{ url?: string } | undefined | null> | undefined | null,
-  ): string[] {
-    if (!images?.length) {
-      return [];
-    }
-
-    return images
-      .map(image => image?.url)
-      .filter((url): url is string => Boolean(url));
-  }
 
   private getCurrentSession(
     attempt: MockTestAttemptDocument,
@@ -413,31 +390,7 @@ export class MockTestAttemptsService {
         currentSessionIndex: attempt.currentSessionIndex,
         sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
       },
-      questions: questions.map(q => ({
-        _id: q._id.toString(),
-        questionText: {
-          en: {
-            text: q.questionText?.en?.text || null,
-            imageUrl: this.extractImageUrl(q.questionText?.en?.image),
-          },
-          ml: {
-            text: q.questionText?.ml?.text || null,
-            imageUrl: this.extractImageUrl(q.questionText?.ml?.image),
-          },
-        },
-        optionType: q.optionType,
-        options:
-          q.options?.map(opt => ({
-            id: opt.id,
-            type: opt.type,
-            en: opt.en,
-            ml: opt.ml,
-            imageUrl: this.extractImageUrl(opt.image),
-          })) || [],
-        subject: q.subject?.toString(),
-        topic: q.topic?.toString(),
-        difficultyLevel: q.difficultyLevel,
-      })),
+      questions: await this.mapAttemptQuestions(questions),
     };
 
     return response;
@@ -607,41 +560,40 @@ export class MockTestAttemptsService {
       attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED';
     const showResults = isSubmitted && attempt.showResultsImmediately;
 
-    // Step 7: Map questions with appropriate details
-    const mappedQuestions = attempt.questions
-      .map(aq => {
-        const questionId = aq.question.toString();
-        const question = questionMap.get(questionId);
+    // Step 7: Map questions with signed image URLs (never raw S3 metadata)
+    const orderedQuestions = attempt.questions
+      .map(aq => ({
+        aq,
+        question: questionMap.get(aq.question.toString()),
+      }))
+      .filter(row => Boolean(row.question));
 
-        if (!question) {
-          return null; // Skip if question not found
-        }
+    const mappedQuestions = (
+      await this.mapAttemptQuestions(orderedQuestions.map(row => row.question!))
+    ).map((questionDto, index) => {
+      const { aq, question } = orderedQuestions[index];
+      const next: Record<string, unknown> = { ...questionDto };
+      if (aq.selectedOption) {
+        next.selectedOption = aq.selectedOption;
+      }
+      if (showResults && question) {
+        next.correctAnswer = question.correctAnswer;
+        next.isCorrect = aq.isCorrect;
+        next.marksAwarded = aq.marksAwarded;
+      }
+      return next;
+    });
 
-        const questionDto: Record<string, unknown> = {
-          _id: questionId,
-          questionText: question.questionText,
-          options: question.options,
-          subject: question.subject.toString(),
-        };
-
-        // Always include selected answer if user has answered
-        if (aq.selectedOption) {
-          questionDto.selectedOption = aq.selectedOption;
-        }
-
-        // Include evaluation results only if submitted and allowed
-        if (showResults) {
-          questionDto.correctAnswer = question.correctAnswer;
-          questionDto.isCorrect = aq.isCorrect;
-          questionDto.marksAwarded = aq.marksAwarded;
-          if (question.explanation) {
-            questionDto.explanation = question.explanation;
+    if (showResults) {
+      await Promise.all(
+        mappedQuestions.map(async (questionDto, index) => {
+          const explanation = orderedQuestions[index].question?.explanation;
+          if (explanation) {
+            questionDto.explanation = await this.mapExplanation(explanation);
           }
-        }
-
-        return questionDto;
-      })
-      .filter(Boolean); // Remove nulls
+        }),
+      );
+    }
 
     // Step 8: Extract populated exam, subject, and topic data
     const examDoc = attempt.exam as unknown as PopulatedDocument & {
@@ -824,48 +776,19 @@ export class MockTestAttemptsService {
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 7: Map questions with selected options (no answers/explanations)
-    const mappedQuestions = attempt.questions
-      .map(aq => {
-        const questionId = aq.question.toString();
-        const question = questionMap.get(questionId);
+    const orderedQuestions = attempt.questions
+      .map(aq => ({
+        aq,
+        question: questionMap.get(aq.question.toString()),
+      }))
+      .filter(row => Boolean(row.question));
 
-        if (!question) {
-          return null;
-        }
-
-        const questionDto: any = {
-          _id: questionId,
-          questionText: {
-            en: {
-              text: question.questionText?.en?.text || null,
-              imageUrl: this.extractImageUrl(question.questionText?.en?.image),
-            },
-            ml: {
-              text: question.questionText?.ml?.text || null,
-              imageUrl: this.extractImageUrl(question.questionText?.ml?.image),
-            },
-          },
-          optionType: question.optionType,
-          options: question.options.map(opt => ({
-            id: opt.id,
-            type: opt.type,
-            en: opt.en,
-            ml: opt.ml,
-            imageUrl: this.extractImageUrl(opt.image),
-          })),
-          subject: question.subject?.toString(),
-          topic: question.topic?.toString(),
-          difficultyLevel: question.difficultyLevel,
-        };
-
-        // Include selected option if user has answered
-        if (aq.selectedOption) {
-          questionDto.selectedOption = aq.selectedOption;
-        }
-
-        return questionDto;
-      })
-      .filter(Boolean);
+    const mappedQuestions = (
+      await this.mapAttemptQuestions(orderedQuestions.map(row => row.question!))
+    ).map((questionDto, index) => {
+      const selectedOption = orderedQuestions[index].aq.selectedOption;
+      return selectedOption ? { ...questionDto, selectedOption } : questionDto;
+    });
 
     // Step 8: Build response with exam, subject, topic details
     const pauseCount = attempt.pauseResumeHistory.filter(
@@ -909,7 +832,8 @@ export class MockTestAttemptsService {
         currentSessionIndex: attempt.currentSessionIndex,
         sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
       },
-      questions: mappedQuestions,
+      questions:
+        mappedQuestions as unknown as ResumeAttemptResponseDto['questions'],
       timeElapsed,
       timeRemaining,
       pauseCount: pauseCount > 0 ? pauseCount : undefined,
@@ -1403,28 +1327,24 @@ export class MockTestAttemptsService {
 
     // Step 10: Include detailed results if showResultsImmediately is true
     if (attempt.showResultsImmediately) {
-      response.questionResults = attempt.questions.map(aq => {
-        const questionId = aq.question.toString();
-        const question = questionMap.get(questionId);
+      response.questionResults = await Promise.all(
+        attempt.questions.map(async aq => {
+          const questionId = aq.question.toString();
+          const question = questionMap.get(questionId);
+          const explanation = question?.explanation
+            ? await this.mapExplanation(question.explanation)
+            : undefined;
 
-        return {
-          questionId,
-          selectedOption: aq.selectedOption,
-          correctAnswer: question?.correctAnswer || '',
-          isCorrect: aq.isCorrect || false,
-          marksAwarded: aq.marksAwarded,
-          explanation: question?.explanation
-            ? {
-                en: question.explanation.en || null,
-                ml: question.explanation.ml || null,
-                imageUrl: this.extractImageUrl(question.explanation.image),
-                imageUrls: this.extractExtraImageUrls(
-                  question.explanation.images,
-                ),
-              }
-            : undefined,
-        };
-      });
+          return {
+            questionId,
+            selectedOption: aq.selectedOption,
+            correctAnswer: question?.correctAnswer || '',
+            isCorrect: aq.isCorrect || false,
+            marksAwarded: aq.marksAwarded,
+            explanation,
+          };
+        }),
+      );
     }
 
     return response;
@@ -1525,6 +1445,97 @@ export class MockTestAttemptsService {
       sessions: (attempt.sessions || []).map(s => this.mapSessionDto(s)),
       currentSessionIndex: attempt.currentSessionIndex,
       nextSession,
+    };
+  }
+
+  private collectStemImages(question: {
+    questionText?: {
+      en?: { image?: ImageLike };
+      ml?: { image?: ImageLike };
+    };
+    options?: Array<{ image?: ImageLike }>;
+  }): ImageLike[] {
+    return [
+      question.questionText?.en?.image,
+      question.questionText?.ml?.image,
+      ...(question.options || []).map(option => option.image),
+    ];
+  }
+
+  private async mapAttemptQuestions(
+    questions: Array<{
+      _id: { toString(): string };
+      questionText?: {
+        en?: { text?: string | null; image?: ImageLike };
+        ml?: { text?: string | null; image?: ImageLike };
+      };
+      optionType?: string;
+      options?: Array<{
+        id: string;
+        type: string;
+        en?: string | null;
+        ml?: string | null;
+        image?: ImageLike;
+      }>;
+      subject?: { toString(): string };
+      topic?: { toString(): string };
+      difficultyLevel?: string;
+    }>,
+  ) {
+    const urls = await this.imageUrlResolver.resolveMany(
+      questions.flatMap(question => this.collectStemImages(question)),
+    );
+    let cursor = 0;
+
+    return questions.map(question => {
+      const enUrl = urls[cursor++];
+      const mlUrl = urls[cursor++];
+      const options = (question.options || []).map(option => ({
+        id: option.id,
+        type: option.type,
+        en: option.en,
+        ml: option.ml,
+        imageUrl: urls[cursor++],
+      }));
+
+      return {
+        _id: question._id.toString(),
+        questionText: {
+          en: {
+            text: question.questionText?.en?.text || null,
+            imageUrl: enUrl,
+          },
+          ml: {
+            text: question.questionText?.ml?.text || null,
+            imageUrl: mlUrl,
+          },
+        },
+        optionType: question.optionType,
+        options,
+        subject: question.subject?.toString(),
+        topic: question.topic?.toString(),
+        difficultyLevel: question.difficultyLevel,
+      };
+    });
+  }
+
+  private async mapExplanation(explanation: {
+    en?: string | null;
+    ml?: string | null;
+    image?: ImageLike;
+    images?: ImageLike[];
+  }) {
+    const extras = explanation.images || [];
+    const [imageUrl, ...imageUrls] = await this.imageUrlResolver.resolveMany([
+      explanation.image,
+      ...extras,
+    ]);
+
+    return {
+      en: explanation.en || null,
+      ml: explanation.ml || null,
+      imageUrl,
+      imageUrls: imageUrls.filter((url): url is string => Boolean(url)),
     };
   }
 }

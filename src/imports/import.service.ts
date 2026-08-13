@@ -1241,11 +1241,21 @@ export class ImportService {
     };
   }
 
-  async listFailedQuestions(page = 1, limit = 10) {
-    const { docs, total } = await this.failedQuestionService.listPaginated(
-      page,
-      limit,
-    );
+  async listFailedQuestions(
+    page = 1,
+    limit = 10,
+    filters?: {
+      subjectId?: string;
+      topicId?: string;
+      examId?: string;
+    },
+  ) {
+    const {
+      docs,
+      total,
+      page: validPage,
+      limit: validLimit,
+    } = await this.failedQuestionService.listPaginated(page, limit, filters);
     const metadataByUploadId = await this.loadMapperMetadataByUploadIds(docs);
 
     const items = docs.map(doc => {
@@ -1263,10 +1273,10 @@ export class ImportService {
     return {
       items,
       pagination: {
-        page,
-        limit,
+        page: validPage,
+        limit: validLimit,
         total,
-        totalPages: Math.ceil(total / limit) || 0,
+        totalPages: Math.ceil(total / validLimit) || 0,
       },
     };
   }
@@ -1512,14 +1522,93 @@ export class ImportService {
     doc: FailedQuestionDocument,
     mapperMetadata: QuestionMapperMetadata,
   ): ImportQuestion {
-    if (doc.questionDraft && typeof doc.questionDraft === 'object') {
-      return doc.questionDraft as unknown as ImportQuestion;
+    const shell = this.buildMetadataQuestionShell(mapperMetadata, {
+      questionMarkdown: doc.matchedQuestion?.question,
+      solutionMarkdown: doc.matchedQuestion?.solution,
+    });
+
+    if (!doc.questionDraft || typeof doc.questionDraft !== 'object') {
+      return shell;
     }
 
-    return this.buildMetadataQuestionShell(mapperMetadata, {
-      questionMarkdown: doc.matchedQuestion.question,
-      solutionMarkdown: doc.matchedQuestion.solution,
+    return this.mergeQuestionDraftOntoShell(
+      shell,
+      doc.questionDraft as Partial<ImportQuestion>,
+    );
+  }
+
+  private mergeQuestionDraftOntoShell(
+    shell: ImportQuestion,
+    draft: Partial<ImportQuestion>,
+  ): ImportQuestion {
+    const optionType =
+      draft.optionType === 'image' ? 'image' : shell.optionType;
+    const incomingOptions = Array.isArray(draft.options) ? draft.options : [];
+
+    const incomingById = new Map(
+      incomingOptions
+        .filter(option => option?.id)
+        .map(option => [option.id, option]),
+    );
+
+    const options = shell.options.map((slot, index) => {
+      const incoming = incomingById.get(slot.id) || incomingOptions[index];
+      if (!incoming) {
+        return { ...slot, type: optionType };
+      }
+
+      return {
+        id: slot.id,
+        type: optionType,
+        en: incoming.en ?? slot.en,
+        ml: null,
+        image:
+          incoming.image !== undefined ? incoming.image : (slot.image ?? null),
+      };
     });
+
+    const incomingCorrectIndex = incomingOptions.findIndex(
+      option => option?.id === draft.correctAnswer,
+    );
+    const correctAnswer = options.some(
+      option => option.id === draft.correctAnswer,
+    )
+      ? draft.correctAnswer!
+      : incomingCorrectIndex >= 0 && incomingCorrectIndex < options.length
+        ? options[incomingCorrectIndex].id
+        : options.some(option => option.id === shell.correctAnswer)
+          ? shell.correctAnswer
+          : options[0]?.id || shell.correctAnswer;
+
+    return {
+      ...shell,
+      questionText: {
+        en: {
+          text: draft.questionText?.en?.text ?? shell.questionText.en.text,
+          image:
+            draft.questionText?.en && 'image' in draft.questionText.en
+              ? (draft.questionText.en.image ?? null)
+              : shell.questionText.en.image,
+        },
+        ml: { text: null, image: null },
+      },
+      optionType,
+      options,
+      explanation: {
+        en: draft.explanation?.en ?? shell.explanation.en,
+        ml: null,
+        image:
+          draft.explanation && 'image' in draft.explanation
+            ? (draft.explanation.image ?? null)
+            : shell.explanation.image,
+        images: draft.explanation?.images ?? shell.explanation.images,
+      },
+      correctAnswer,
+      subject: draft.subject || shell.subject,
+      topic: draft.topic || shell.topic,
+      exams: draft.exams?.length ? draft.exams : shell.exams,
+      difficultyLevel: draft.difficultyLevel || shell.difficultyLevel,
+    };
   }
 
   private questionHasPendingImages(question: ImportQuestion): boolean {

@@ -2,6 +2,8 @@ import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AwsConfigService } from './config/aws.config';
 import { S3Service } from './s3/s3.service';
+import { ImageUrlResolver } from './s3/image-url.resolver';
+import { FilesController } from './files.controller';
 
 /**
  * AWS Module - Generic AWS services integration
@@ -12,8 +14,9 @@ import { S3Service } from './s3/s3.service';
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [AwsConfigService, S3Service],
-  exports: [AwsConfigService, S3Service],
+  controllers: [FilesController],
+  providers: [AwsConfigService, S3Service, ImageUrlResolver],
+  exports: [AwsConfigService, S3Service, ImageUrlResolver],
 })
 export class AwsModule {
   constructor(private readonly awsConfig: AwsConfigService) {

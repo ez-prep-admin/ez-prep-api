@@ -306,9 +306,11 @@ export class S3Service {
     const targetBucket = bucket ?? this.defaultBucket;
     const expiresIn = options.expiresIn ?? 3600; // 1 hour default
 
-    this.logger.log(
-      `[s3] Generating pre-signed URL for: ${key} (expires in ${expiresIn}s)`,
-    );
+    if (!options.quiet) {
+      this.logger.log(
+        `[s3] Generating pre-signed URL for: ${key} (expires in ${expiresIn}s)`,
+      );
+    }
 
     try {
       const command = new GetObjectCommand({
@@ -328,9 +330,11 @@ export class S3Service {
         bucket: targetBucket,
       };
 
-      this.logger.log(
-        `[s3] Pre-signed URL generated: ${key} (expires at ${expiresAt.toISOString()})`,
-      );
+      if (!options.quiet) {
+        this.logger.log(
+          `[s3] Pre-signed URL generated: ${key} (expires at ${expiresAt.toISOString()})`,
+        );
+      }
 
       return result;
     } catch (error) {

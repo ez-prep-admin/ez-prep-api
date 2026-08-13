@@ -85,6 +85,10 @@ export class AwsConfigService {
     return value;
   }
 
+  get allowedImageBuckets(): string[] {
+    return [this.s3ImageBucket];
+  }
+
   /**
    * Validate all required AWS configuration
    * Call this during module initialization
