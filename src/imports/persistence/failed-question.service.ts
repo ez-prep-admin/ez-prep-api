@@ -53,20 +53,43 @@ export class FailedQuestionService {
   async listPaginated(
     page: number,
     limit: number,
-  ): Promise<{ docs: FailedQuestionDocument[]; total: number }> {
-    const skip = (page - 1) * limit;
+    filters?: {
+      subjectId?: string;
+      topicId?: string;
+      examId?: string;
+    },
+  ): Promise<{
+    docs: FailedQuestionDocument[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const validPage = Math.max(1, Number(page) || 1);
+    const validLimit = Math.min(Math.max(1, Number(limit) || 10), 100);
+    const skip = (validPage - 1) * validLimit;
+    const query: Record<string, unknown> = {};
+
+    if (filters?.subjectId && Types.ObjectId.isValid(filters.subjectId)) {
+      query['questionDraft.subject'] = filters.subjectId;
+    }
+    if (filters?.topicId && Types.ObjectId.isValid(filters.topicId)) {
+      query['questionDraft.topic'] = filters.topicId;
+    }
+    if (filters?.examId && Types.ObjectId.isValid(filters.examId)) {
+      query['questionDraft.exams'] = filters.examId;
+    }
 
     const [docs, total] = await Promise.all([
       this.failedQuestionModel
-        .find()
+        .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limit)
+        .limit(validLimit)
         .exec(),
-      this.failedQuestionModel.countDocuments(),
+      this.failedQuestionModel.countDocuments(query),
     ]);
 
-    return { docs, total };
+    return { docs, total, page: validPage, limit: validLimit };
   }
 
   async listByUpload(uploadId: string): Promise<FailedQuestionDocument[]> {

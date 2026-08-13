@@ -103,6 +103,11 @@ export interface S3PresignedUrlOptions {
    * Response content disposition
    */
   responseContentDisposition?: string;
+
+  /**
+   * Skip info logs (used when signing many question images)
+   */
+  quiet?: boolean;
 }
 
 /**

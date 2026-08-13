@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MinLength, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  MinLength,
+  MaxLength,
+  IsOptional,
+} from 'class-validator';
 
 export class CreateTopicDto {
   @ApiProperty({
@@ -19,6 +25,7 @@ export class CreateTopicDto {
     example: 'Learn about ratios and proportions',
     maxLength: 1000,
   })
+  @IsOptional()
   @IsString()
   @MaxLength(1000)
   description?: string;

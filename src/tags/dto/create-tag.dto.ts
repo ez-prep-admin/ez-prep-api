@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsString, IsMongoId, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsMongoId,
+  MaxLength,
+  IsOptional,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTagDto {
@@ -16,6 +22,7 @@ export class CreateTagDto {
     description: 'Tag description',
     example: 'Fast calculation techniques for competitive exams',
   })
+  @IsOptional()
   @IsString()
   description?: string;
 

@@ -16,12 +16,42 @@ export const ImportImageMetadataSchema = z.object({
   url: z.string().url().optional(),
 });
 
+function nullIfIncompleteImage(value: unknown) {
+  if (value == null || value === '') {
+    return null;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const image = value as Record<string, unknown>;
+  if (typeof image.key !== 'string' || !image.key.trim()) {
+    return null;
+  }
+  if (typeof image.bucket !== 'string' || !image.bucket.trim()) {
+    return null;
+  }
+
+  return {
+    ...image,
+    region:
+      typeof image.region === 'string' && image.region.trim()
+        ? image.region
+        : 'ap-south-1',
+  };
+}
+
+const OptionalImageSchema = z.preprocess(
+  nullIfIncompleteImage,
+  ImportImageMetadataSchema.nullable().optional(),
+);
+
 export const ImportQuestionOptionSchema = z.object({
   id: z.string().uuid(),
   type: z.enum(['text', 'image']),
   en: z.string().trim().min(1).nullable().optional(),
   ml: z.null().optional(),
-  image: ImportImageMetadataSchema.nullable().optional(),
+  image: OptionalImageSchema,
 });
 
 export const ImportQuestionSchema = z
@@ -29,7 +59,7 @@ export const ImportQuestionSchema = z
     questionText: z.object({
       en: z.object({
         text: z.string().nullable().optional(),
-        image: ImportImageMetadataSchema.nullable().optional(),
+        image: OptionalImageSchema,
       }),
       ml: z.object({
         text: z.null(),
@@ -41,8 +71,15 @@ export const ImportQuestionSchema = z
     explanation: z.object({
       en: z.string().trim().min(1),
       ml: z.null().optional(),
-      image: ImportImageMetadataSchema.nullable().optional(),
-      images: z.array(ImportImageMetadataSchema).optional(),
+      image: OptionalImageSchema,
+      images: z.preprocess(value => {
+        if (!Array.isArray(value)) {
+          return undefined;
+        }
+        return value
+          .map(item => nullIfIncompleteImage(item))
+          .filter((item): item is NonNullable<typeof item> => item != null);
+      }, z.array(ImportImageMetadataSchema).optional()),
     }),
     correctAnswer: z.string().uuid(),
     subject: objectIdSchema,
@@ -58,7 +95,7 @@ export const ImportQuestionSchema = z
   })
   .superRefine((question, ctx) => {
     const hasQuestionText = Boolean(question.questionText.en.text?.trim());
-    const hasQuestionImage = Boolean(question.questionText.en.image?.url);
+    const hasQuestionImage = Boolean(question.questionText.en.image?.key);
 
     if (!hasQuestionText && !hasQuestionImage) {
       ctx.addIssue({

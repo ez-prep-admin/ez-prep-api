@@ -63,8 +63,8 @@ export class QuestionPersistenceService {
       topic: new Types.ObjectId(question.topic),
       exams: question.exams.map(examId => new Types.ObjectId(examId)),
       difficultyLevel: question.difficultyLevel,
-      isActive: question.isActive,
-      isDeleted: question.isDeleted,
+      isActive: true,
+      isDeleted: false,
       source: question.source,
       ...(question.uploadId
         ? { uploadId: new Types.ObjectId(question.uploadId) }

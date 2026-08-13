@@ -32,6 +32,11 @@ import { DraftResponseDto } from './dto/draft-response.dto';
 import { FullMockTestListItemDto } from './dto/full-mock-test-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { SearchQuestionItemDto } from './dto/search-question-item.dto';
+import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
+}
 
 @Injectable()
 export class FullMockTestsService {
@@ -47,6 +52,7 @@ export class FullMockTestsService {
     private readonly draftModel: Model<FullMockTestDraftDocument>,
     private readonly selectionService: FullMockSelectionService,
     private readonly mockTestsService: MockTestsService,
+    private readonly imageUrlResolver: ImageUrlResolver,
   ) {}
 
   async listExamsForAdmin(
@@ -63,9 +69,10 @@ export class FullMockTestsService {
 
     const query: FilterQuery<ExamDocument> = { isActive: true };
     if (search?.trim()) {
+      const term = escapeRegex(search.trim());
       query.$or = [
-        { name: { $regex: search.trim(), $options: 'i' } },
-        { description: { $regex: search.trim(), $options: 'i' } },
+        { name: { $regex: term, $options: 'i' } },
+        { description: { $regex: term, $options: 'i' } },
       ];
     }
 
@@ -228,7 +235,7 @@ export class FullMockTestsService {
     }
 
     if (params.search?.trim()) {
-      const term = params.search.trim();
+      const term = escapeRegex(params.search.trim());
       query.$or = [
         { 'questionText.en.text': { $regex: term, $options: 'i' } },
         { 'questionText.ml.text': { $regex: term, $options: 'i' } },
@@ -257,11 +264,14 @@ export class FullMockTestsService {
 
     const totalPages = Math.ceil(total / validLimit) || 0;
 
+    const safeQuestions = await Promise.all(
+      docs.map(q => this.toSafeQuestion(q)),
+    );
+
     return {
-      data: docs.map(q => {
-        const safe = this.toSafeQuestion(q);
-        const snippet = q.questionText?.en?.text
-          ? q.questionText.en.text.slice(0, 100)
+      data: safeQuestions.map((safe, index) => {
+        const snippet = docs[index].questionText?.en?.text
+          ? docs[index].questionText.en.text.slice(0, 100)
           : undefined;
         return { ...safe, snippet };
       }),
@@ -617,45 +627,50 @@ export class FullMockTestsService {
       : [];
     const byId = new Map(docs.map(q => [q._id.toString(), q]));
 
-    const subjects = draft.examSnapshot.subjects.map(row => {
-      const blockQuestions = draft.questions
-        .filter(q => q.subject.toString() === row.subject.toString())
-        .sort((a, b) => a.position - b.position)
-        .map(q => {
-          const doc = byId.get(q.question.toString());
-          const safe = doc
-            ? this.toSafeQuestion(doc)
-            : {
-                _id: q.question.toString(),
-                questionText: {
-                  en: { text: null, imageUrl: null },
-                  ml: { text: null, imageUrl: null },
-                },
-                options: [],
-                subject: q.subject.toString(),
-                topic: q.topic?.toString(),
-                difficultyLevel: q.difficultyLevel,
-              };
-          return {
-            ...safe,
-            position: q.position,
-            marksPerQuestion: q.marksPerQuestion,
-            negativeMarking: q.negativeMarking,
-            replacedFrom: q.replacedFrom?.toString(),
-          };
-        });
+    const subjects = await Promise.all(
+      draft.examSnapshot.subjects.map(async row => {
+        const blockSource = draft.questions
+          .filter(q => q.subject.toString() === row.subject.toString())
+          .sort((a, b) => a.position - b.position);
 
-      return {
-        subjectId: row.subject.toString(),
-        name: row.name,
-        numberOfQuestions: row.numberOfQuestions,
-        marksPerQuestion: row.marksPerQuestion,
-        hasNegativeMarking: row.hasNegativeMarking,
-        negativeMarksPerQuestion: row.negativeMarksPerQuestion,
-        sessionTime: row.sessionTime,
-        questions: blockQuestions,
-      };
-    });
+        const blockQuestions = await Promise.all(
+          blockSource.map(async q => {
+            const doc = byId.get(q.question.toString());
+            const safe = doc
+              ? await this.toSafeQuestion(doc)
+              : {
+                  _id: q.question.toString(),
+                  questionText: {
+                    en: { text: null, imageUrl: null },
+                    ml: { text: null, imageUrl: null },
+                  },
+                  options: [],
+                  subject: q.subject.toString(),
+                  topic: q.topic?.toString(),
+                  difficultyLevel: q.difficultyLevel,
+                };
+            return {
+              ...safe,
+              position: q.position,
+              marksPerQuestion: q.marksPerQuestion,
+              negativeMarking: q.negativeMarking,
+              replacedFrom: q.replacedFrom?.toString(),
+            };
+          }),
+        );
+
+        return {
+          subjectId: row.subject.toString(),
+          name: row.name,
+          numberOfQuestions: row.numberOfQuestions,
+          marksPerQuestion: row.marksPerQuestion,
+          hasNegativeMarking: row.hasNegativeMarking,
+          negativeMarksPerQuestion: row.negativeMarksPerQuestion,
+          sessionTime: row.sessionTime,
+          questions: blockQuestions,
+        };
+      }),
+    );
 
     return {
       id: draft.id || draft._id.toString(),
@@ -722,17 +737,11 @@ export class FullMockTestsService {
     };
   }
 
-  private extractImageUrl(
-    imageMetadata: { url?: string } | undefined | null,
-  ): string | null {
-    return imageMetadata?.url || null;
-  }
-
-  private toSafeQuestion(q: {
+  private async toSafeQuestion(q: {
     _id: { toString(): string };
     questionText?: {
-      en?: { text?: string; image?: { url?: string } };
-      ml?: { text?: string; image?: { url?: string } };
+      en?: { text?: string; image?: ImageLike };
+      ml?: { text?: string; image?: ImageLike };
     };
     optionType?: string;
     options?: Array<{
@@ -740,22 +749,32 @@ export class FullMockTestsService {
       type: string;
       en?: string | null;
       ml?: string | null;
-      image?: { url?: string };
+      image?: ImageLike;
     }>;
     subject?: { toString(): string };
     topic?: { toString(): string };
     difficultyLevel?: string;
-  }): SafeQuestionDto {
+  }): Promise<SafeQuestionDto> {
+    const images: ImageLike[] = [
+      q.questionText?.en?.image,
+      q.questionText?.ml?.image,
+      ...(q.options || []).map(opt => opt.image),
+    ];
+    const urls = await this.imageUrlResolver.resolveMany(images);
+    let cursor = 0;
+    const enUrl = urls[cursor++];
+    const mlUrl = urls[cursor++];
+
     return {
       _id: q._id.toString(),
       questionText: {
         en: {
           text: q.questionText?.en?.text || null,
-          imageUrl: this.extractImageUrl(q.questionText?.en?.image),
+          imageUrl: enUrl,
         },
         ml: {
           text: q.questionText?.ml?.text || null,
-          imageUrl: this.extractImageUrl(q.questionText?.ml?.image),
+          imageUrl: mlUrl,
         },
       },
       optionType: q.optionType,
@@ -765,7 +784,7 @@ export class FullMockTestsService {
           type: opt.type,
           en: opt.en,
           ml: opt.ml,
-          imageUrl: this.extractImageUrl(opt.image),
+          imageUrl: urls[cursor++],
         })) || [],
       subject: q.subject?.toString(),
       topic: q.topic?.toString(),

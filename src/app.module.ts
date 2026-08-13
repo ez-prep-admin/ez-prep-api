@@ -17,6 +17,7 @@ import { ExamGroupsModule } from './exam-groups/exam-groups.module';
 import { TopicsModule } from './topics/topics.module';
 import { SubjectsModule } from './subjects/subjects.module';
 import { TagsModule } from './tags/tags.module';
+import { QuestionsModule } from './questions/questions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
 import { ImportModule } from './imports/import.module';
@@ -93,6 +94,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     TopicsModule,
     SubjectsModule,
     TagsModule,
+    QuestionsModule,
     AnalyticsModule,
     SearchModule,
     ImportModule,

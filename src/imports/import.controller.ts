@@ -8,6 +8,7 @@ import {
   Post,
   Param,
   Query,
+  UseGuards,
   UseInterceptors,
   UploadedFile,
   ParseFilePipe,
@@ -17,6 +18,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { PdfUploadFileValidator } from './validators/pdf-upload-file.validator';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiConsumes,
   ApiOperation,
@@ -24,8 +26,15 @@ import {
   ApiQuery,
   ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { SkipTimeout } from '../common/decorators/skip-timeout.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { ImportService } from './import.service';
 import {
   CachedEnrichmentResponseDto,
@@ -56,6 +65,10 @@ import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 
 @ApiTags('imports')
 @Controller('imports')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
+@ApiBearerAuth('JWT-auth')
+@ApiUnauthorizedResponse({ description: 'Admin privileges required' })
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
 
@@ -176,15 +189,12 @@ export class ImportController {
     )
     file: Express.Multer.File,
     @Body() dto: UploadQuestionPdfDto,
+    @GetUser() user: UserResponseDto,
   ): Promise<{ message: string; data: UploadQuestionPdfResponseDto }> {
-    // TODO: Get userId from authentication context when auth is implemented
-    // For now, using undefined (will be stored as 'anonymous')
-    const userId = undefined;
-
     const result = await this.importService.uploadQuestionPdf(
       file,
       dto,
-      userId,
+      user.id,
     );
 
     return {
@@ -373,6 +383,9 @@ export class ImportController {
     example: 10,
     description: 'Items per page',
   })
+  @ApiQuery({ name: 'subjectId', required: false, type: String })
+  @ApiQuery({ name: 'topicId', required: false, type: String })
+  @ApiQuery({ name: 'examId', required: false, type: String })
   @ApiResponse({
     status: 200,
     description: 'Paginated failed questions',
@@ -381,10 +394,14 @@ export class ImportController {
   async listFailedQuestions(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('subjectId') subjectId?: string,
+    @Query('topicId') topicId?: string,
+    @Query('examId') examId?: string,
   ): Promise<{ message: string; data: FailedQuestionsListResponseDto }> {
     const result = await this.importService.listFailedQuestions(
       page ?? 1,
       limit ?? 10,
+      { subjectId, topicId, examId },
     );
 
     return {
