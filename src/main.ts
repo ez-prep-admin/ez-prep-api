@@ -90,14 +90,24 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('EZ Prep API')
       .setDescription(
-        'A comprehensive mock test application API with user management, authentication, and test functionality',
+        'EZ Prep API for topic-wise mock tests, exam-blueprint full mock tests, attempts, and related catalog (exams, subjects, topics). Full mocks are generated from an exam blueprint, reviewed as a draft, then published into the same mocktests collection as paperType FULL_EXAM. Topic-wise lists never include full-exam papers.',
       )
       .setVersion('1.0.0')
       .addTag('health', 'Health check endpoints')
       .addTag('users', 'User management endpoints')
-      .addTag('auth', 'Authentication endpoints (coming soon)')
-      .addTag('mock-tests', 'Mock test endpoints')
-      .addTag('mock-test-attempts', 'Mock test attempt endpoints')
+      .addTag('auth', 'Authentication endpoints')
+      .addTag(
+        'mock-tests',
+        'Topic-wise mock tests (paperType TOPIC_WISE). Does not return full-exam papers.',
+      )
+      .addTag(
+        'full-mock-tests',
+        'Exam-blueprint full mock tests: admin generate/review/publish, student list by exam.',
+      )
+      .addTag(
+        'mock-test-attempts',
+        'Start, answer, pause/resume, submit attempts. Also session-wise complete for full exams.',
+      )
       .addTag('imports', 'Question paper import endpoints')
       .addTag('tests', 'Test management endpoints (coming soon)')
       .addBearerAuth(

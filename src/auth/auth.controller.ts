@@ -15,11 +15,18 @@ import {
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
+  ApiForbiddenResponse,
+  ApiCreatedResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 
@@ -70,6 +77,67 @@ export class AuthController {
 
     return {
       message,
+      data: authResponse,
+    };
+  }
+
+  @Post('admins')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Create an admin account',
+    description: `
+Creates an admin in the users collection (\`role: admin\`) with a username and password.
+
+- **First admin (bootstrap):** no JWT required. Use this once from Postman.
+- **Later admins:** send an existing admin JWT in \`Authorization: Bearer <token>\`.
+
+OTP / student accounts are unchanged. Admins sign in via \`POST /auth/admin/login\`.
+    `,
+  })
+  @ApiCreatedResponse({
+    description: 'Admin created',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
+  @ApiConflictResponse({ description: 'Username or email already in use' })
+  @ApiForbiddenResponse({
+    description: 'An admin already exists and the caller is not an admin',
+  })
+  async createAdmin(
+    @Body() dto: CreateAdminDto,
+    @GetUser() actor?: UserResponseDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const admin = await this.authService.createAdmin(dto, actor);
+    return {
+      message: 'Admin created successfully',
+      data: admin,
+    };
+  }
+
+  @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Admin username/password login',
+    description:
+      'Authenticates an admin account and returns a JWT. Student OTP login is unchanged (`POST /auth/verify-otp`).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin authenticated',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid username or password' })
+  async loginAdmin(@Body() dto: AdminLoginDto): Promise<{
+    message: string;
+    data: AuthResponseDto;
+  }> {
+    const authResponse = await this.authService.loginAdmin(dto);
+    return {
+      message: 'Authentication successful',
       data: authResponse,
     };
   }

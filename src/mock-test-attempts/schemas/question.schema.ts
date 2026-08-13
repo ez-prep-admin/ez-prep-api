@@ -162,6 +162,12 @@ export class Question {
   })
   uploadId?: Types.ObjectId;
 
+  @Prop({ type: Number, default: 0, min: 0 })
+  fullMockUsageCount?: number;
+
+  @Prop({ type: Date })
+  lastUsedInFullMockAt?: Date;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

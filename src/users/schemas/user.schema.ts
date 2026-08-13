@@ -139,10 +139,20 @@ export class User {
   email: string;
 
   @Prop({
-    required: true,
+    required: false,
     match: /^[\+]?[1-9][\d]{0,15}$/,
   })
-  phoneNumber: string;
+  phoneNumber?: string;
+
+  @Prop({
+    type: String,
+    lowercase: true,
+    trim: true,
+  })
+  username?: string;
+
+  @Prop({ select: false })
+  passwordHash?: string;
 
   @Prop({
     type: String,
@@ -215,7 +225,8 @@ export class User {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // ─── Indexes ───────────────────────────────────────────────────────────────────
-UserSchema.index({ phoneNumber: 1 });
+UserSchema.index({ phoneNumber: 1 }, { sparse: true });
+UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
 UserSchema.index({ membershipTier: 1 });
 UserSchema.index({ 'subscription.plan': 1, 'subscription.status': 1 });
@@ -233,6 +244,7 @@ UserSchema.set('toJSON', {
   transform: function (doc, ret) {
     delete ret._id;
     delete ret.__v;
+    delete ret.passwordHash;
     return ret;
   },
 });
@@ -243,6 +255,7 @@ UserSchema.set('toObject', {
   transform: function (doc, ret) {
     delete ret._id;
     delete ret.__v;
+    delete ret.passwordHash;
     return ret;
   },
 });

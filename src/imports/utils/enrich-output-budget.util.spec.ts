@@ -19,7 +19,9 @@ describe('isOutputBudgetExhaustionError', () => {
 
   it('ignores unrelated enrich failures', () => {
     expect(
-      isOutputBudgetExhaustionError('Business validation failed: need 4 options'),
+      isOutputBudgetExhaustionError(
+        'Business validation failed: need 4 options',
+      ),
     ).toBe(false);
   });
 });

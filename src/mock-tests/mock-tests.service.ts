@@ -15,6 +15,11 @@ import {
 } from './dto/paginated-mock-tests-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
+import { PaperType } from '../common/enums/paper-type.enum';
+
+const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
+  paperType: { $ne: PaperType.FULL_EXAM },
+};
 
 @Injectable()
 export class MockTestsService {
@@ -44,8 +49,8 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100); // Max 100 items per page
     const skip = (validPage - 1) * validLimit;
 
-    // Build query
-    const query: any = {};
+    // Build query — never leak full-exam papers into topic-wise lists
+    const query: FilterQuery<MockTestDocument> = { ...TOPIC_WISE_FILTER };
 
     // Add search filter if search term is provided
     if (search && search.trim()) {
@@ -107,7 +112,9 @@ export class MockTestsService {
    * @throws NotFoundException if mock test not found
    */
   async findOne(id: string): Promise<MockTestResponseDto> {
-    const mockTest = await this.mockTestModel.findById(id).exec();
+    const mockTest = await this.mockTestModel
+      .findOne({ _id: id, ...TOPIC_WISE_FILTER })
+      .exec();
 
     if (!mockTest) {
       throw new NotFoundException(`Mock test with ID "${id}" not found`);
@@ -123,15 +130,25 @@ export class MockTestsService {
   async getStats() {
     const [totalTests, activeTests, staticTests, dynamicTests] =
       await Promise.all([
-        this.mockTestModel.countDocuments({}),
-        this.mockTestModel.countDocuments({ isActive: true }),
-        this.mockTestModel.countDocuments({ generationMode: 'STATIC' }),
-        this.mockTestModel.countDocuments({ generationMode: 'DYNAMIC' }),
+        this.mockTestModel.countDocuments({ ...TOPIC_WISE_FILTER }),
+        this.mockTestModel.countDocuments({
+          ...TOPIC_WISE_FILTER,
+          isActive: true,
+        }),
+        this.mockTestModel.countDocuments({
+          ...TOPIC_WISE_FILTER,
+          generationMode: 'STATIC',
+        }),
+        this.mockTestModel.countDocuments({
+          ...TOPIC_WISE_FILTER,
+          generationMode: 'DYNAMIC',
+        }),
       ]);
 
     // Aggregate difficulty distribution across all tests
     const difficultyAggregation = await this.mockTestModel
       .aggregate([
+        { $match: { ...TOPIC_WISE_FILTER, isDeleted: { $ne: true } } },
         {
           $group: {
             _id: null,
@@ -188,6 +205,7 @@ export class MockTestsService {
     const skip = (validPage - 1) * validLimit;
 
     const query: FilterQuery<MockTestDocument> = {
+      ...TOPIC_WISE_FILTER,
       exam: new Types.ObjectId(examId),
     };
 
@@ -282,7 +300,10 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { subject: new Types.ObjectId(subjectId) };
+    const query: FilterQuery<MockTestDocument> = {
+      ...TOPIC_WISE_FILTER,
+      subject: new Types.ObjectId(subjectId),
+    };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
@@ -345,7 +366,8 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = {
+    const query: FilterQuery<MockTestDocument> = {
+      ...TOPIC_WISE_FILTER,
       exam: new Types.ObjectId(examId),
       subject: new Types.ObjectId(subjectId),
     };
@@ -407,7 +429,10 @@ export class MockTestsService {
     const validLimit = Math.min(Math.max(1, limit), 100);
     const skip = (validPage - 1) * validLimit;
 
-    const query = { isActive: true };
+    const query: FilterQuery<MockTestDocument> = {
+      ...TOPIC_WISE_FILTER,
+      isActive: true,
+    };
 
     const [mockTests, total] = await Promise.all([
       this.mockTestModel
@@ -448,6 +473,18 @@ export class MockTestsService {
         hasPrevPage: validPage > 1,
       },
     };
+  }
+
+  /**
+   * Public wrapper used by full-mock lists (same START / RESUME / RETAKE rules).
+   */
+  async getUserAttemptActions(
+    mockTestIds: string[],
+    userId: string,
+  ): Promise<
+    Map<string, { action: UserAttemptAction; resumeAttemptId?: string }>
+  > {
+    return this.calculateUserAttemptActions(mockTestIds, userId);
   }
 
   /**

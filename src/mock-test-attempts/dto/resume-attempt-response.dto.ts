@@ -1,5 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AttemptTestMetadataDto } from './start-attempt-response.dto';
+import { AttemptSessionDto } from './attempt-session.dto';
 
 class QuestionOptionDto {
   @ApiProperty({ description: 'Option ID (UUID)' })
@@ -66,10 +67,16 @@ export class ResumeAttemptResponseDto {
   })
   questions: ResumeQuestionDto[];
 
-  @ApiProperty({ description: 'Time elapsed in seconds' })
+  @ApiProperty({
+    description:
+      'Seconds elapsed on the paper timer, or on the current session if session-wise',
+  })
   timeElapsed: number;
 
-  @ApiProperty({ description: 'Time remaining in seconds' })
+  @ApiProperty({
+    description:
+      'Seconds remaining on the paper timer, or on the current session if session-wise',
+  })
   timeRemaining: number;
 
   @ApiProperty({ description: 'Number of times paused', required: false })
@@ -80,4 +87,18 @@ export class ResumeAttemptResponseDto {
     required: false,
   })
   timeConsumed?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Session blocks for session-wise full exams (omit for topic-wise / mixed)',
+    type: [AttemptSessionDto],
+  })
+  sessions?: AttemptSessionDto[];
+
+  @ApiPropertyOptional({
+    description:
+      'Index of the active session. Timer fields apply to this session when set.',
+    example: 0,
+  })
+  currentSessionIndex?: number;
 }

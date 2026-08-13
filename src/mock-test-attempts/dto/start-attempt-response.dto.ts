@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AttemptSessionDto } from './attempt-session.dto';
 
 // Simplified - only expose URL to frontend, not S3 internal details
 export class QuestionTextLanguageDto {
@@ -213,17 +214,33 @@ export class AttemptTestMetadataDto {
   })
   exam: ExamSummaryDto;
 
-  @ApiProperty({
-    description: 'Subject details',
+  @ApiPropertyOptional({
+    description: 'Subject details (topic-wise papers only)',
     type: SubjectSummaryDto,
   })
-  subject: SubjectSummaryDto;
+  subject?: SubjectSummaryDto;
 
   @ApiPropertyOptional({
     description: 'Topic details (optional)',
     type: TopicSummaryDto,
   })
   topic?: TopicSummaryDto;
+
+  @ApiPropertyOptional({
+    description: 'True when this paper is a session-wise full exam',
+  })
+  isSessionWise?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Session blocks for session-wise full exams',
+    type: [AttemptSessionDto],
+  })
+  sessions?: AttemptSessionDto[];
+
+  @ApiPropertyOptional({
+    description: 'Index of the active session (session-wise only)',
+  })
+  currentSessionIndex?: number;
 }
 
 export class StartAttemptResponseDto {
@@ -240,7 +257,8 @@ export class StartAttemptResponseDto {
   mockTestData: AttemptTestMetadataDto;
 
   @ApiProperty({
-    description: 'Array of questions without answers',
+    description:
+      'Questions without correct answers or explanations. Full exams are grouped by subject in exam order. Session-wise: still returns the full paper; only the current session is answerable.',
     type: [SafeQuestionDto],
   })
   questions: SafeQuestionDto[];

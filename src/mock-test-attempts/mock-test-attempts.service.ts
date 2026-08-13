@@ -8,6 +8,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  AttemptQuestion,
+  AttemptSession,
   MockTestAttempt,
   MockTestAttemptDocument,
 } from './schemas/mock-test-attempt.schema';
@@ -21,6 +23,7 @@ import { StartAttemptResponseDto } from './dto/start-attempt-response.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
+import { CompleteSessionResponseDto } from './dto/complete-session-response.dto';
 import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
@@ -65,13 +68,72 @@ export class MockTestAttemptsService {
       .filter((url): url is string => Boolean(url));
   }
 
+  private getCurrentSession(
+    attempt: MockTestAttemptDocument,
+  ): AttemptSession | null {
+    if (!attempt.isSessionWise || !attempt.sessions?.length) {
+      return null;
+    }
+    return attempt.sessions[attempt.currentSessionIndex] || null;
+  }
+
+  private getAllowedTimeSeconds(attempt: MockTestAttemptDocument): number {
+    const session = this.getCurrentSession(attempt);
+    if (session) {
+      return session.durationInMinutes * 60;
+    }
+    return attempt.durationInMinutes * 60;
+  }
+
+  private getMarksForQuestion(
+    attempt: MockTestAttemptDocument,
+    attemptQuestion: AttemptQuestion,
+  ): { marks: number; negative: number } {
+    return {
+      marks: attemptQuestion.marksPerQuestion ?? attempt.marksPerQuestion,
+      negative: attemptQuestion.negativeMarking ?? attempt.negativeMarking,
+    };
+  }
+
+  private mapSessionDto(session: AttemptSession) {
+    return {
+      subject: session.subject?.toString(),
+      name: session.name,
+      order: session.order,
+      durationInMinutes: session.durationInMinutes,
+      startIndex: session.startIndex,
+      endIndex: session.endIndex,
+      status: session.status,
+      startedAt: session.startedAt,
+      submittedAt: session.submittedAt,
+      timeConsumed: session.timeConsumed || 0,
+    };
+  }
+
   /**
    * Helper: Calculate total time elapsed for an attempt
-   * Accounts for accumulated timeConsumed from previous pause/resume cycles
-   * @param attempt - The attempt document
-   * @returns Total time elapsed in seconds
+   * Accounts for accumulated timeConsumed from previous pause/resume cycles.
+   * Session-wise papers use the current session timer only.
    */
   private calculateTimeElapsed(attempt: MockTestAttemptDocument): number {
+    const session = this.getCurrentSession(attempt);
+    if (session) {
+      if (
+        attempt.status === 'PAUSED' ||
+        session.status === 'PAUSED' ||
+        session.status === 'SUBMITTED' ||
+        session.status === 'EXPIRED' ||
+        session.status === 'LOCKED'
+      ) {
+        return session.timeConsumed || 0;
+      }
+      const started = session.startedAt || attempt.startedAt;
+      const currentSessionTime = Math.floor(
+        (Date.now() - started.getTime()) / 1000,
+      );
+      return (session.timeConsumed || 0) + currentSessionTime;
+    }
+
     // If paused, return the saved timeConsumed
     if (attempt.status === 'PAUSED') {
       return attempt.timeConsumed || 0;
@@ -89,26 +151,9 @@ export class MockTestAttemptsService {
    * @param attempt - The attempt document
    * @returns true if attempt was auto-expired, false otherwise
    */
-  private async autoExpireIfNeeded(
+  private async scoreAttempt(
     attempt: MockTestAttemptDocument,
-  ): Promise<boolean> {
-    if (attempt.status !== 'IN_PROGRESS') {
-      return false; // Already completed or paused
-    }
-
-    const timeElapsed = this.calculateTimeElapsed(attempt);
-    const allowedTime = attempt.durationInMinutes * 60;
-
-    if (timeElapsed <= allowedTime) {
-      return false; // Still within time limit
-    }
-
-    // Time exceeded - auto-expire and evaluate
-    this.logger.warn(
-      `Auto-expiring abandoned attempt ${attempt.id} (exceeded by ${Math.floor(timeElapsed - allowedTime)}s)`,
-    );
-
-    // Fetch questions with correct answers for evaluation
+  ): Promise<number> {
     const questionIds = attempt.questions.map(q => q.question);
     const questions = await this.questionModel
       .find({ _id: { $in: questionIds } })
@@ -117,7 +162,6 @@ export class MockTestAttemptsService {
 
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
-    // Evaluate each question
     let totalScore = 0;
     for (const attemptQuestion of attempt.questions) {
       const questionId = attemptQuestion.question.toString();
@@ -127,23 +171,64 @@ export class MockTestAttemptsService {
 
       const selectedOption = attemptQuestion.selectedOption;
       const correctAnswer = question.correctAnswer;
+      const { marks, negative } = this.getMarksForQuestion(
+        attempt,
+        attemptQuestion,
+      );
 
       if (!selectedOption) {
         attemptQuestion.isCorrect = false;
         attemptQuestion.marksAwarded = 0;
       } else if (selectedOption === correctAnswer) {
         attemptQuestion.isCorrect = true;
-        attemptQuestion.marksAwarded = attempt.marksPerQuestion;
-        totalScore += attempt.marksPerQuestion;
+        attemptQuestion.marksAwarded = marks;
+        totalScore += marks;
       } else {
         attemptQuestion.isCorrect = false;
-        attemptQuestion.marksAwarded = -attempt.negativeMarking;
-        totalScore -= attempt.negativeMarking;
+        attemptQuestion.marksAwarded = -negative;
+        totalScore -= negative;
       }
     }
 
-    // Update attempt
-    attempt.score = totalScore;
+    return totalScore;
+  }
+
+  private async autoExpireIfNeeded(
+    attempt: MockTestAttemptDocument,
+  ): Promise<boolean> {
+    if (attempt.status !== 'IN_PROGRESS') {
+      return false; // Already completed or paused
+    }
+
+    const timeElapsed = this.calculateTimeElapsed(attempt);
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
+
+    if (timeElapsed <= allowedTime) {
+      return false; // Still within time limit
+    }
+
+    const session = this.getCurrentSession(attempt);
+    if (session && session.status === 'IN_PROGRESS') {
+      session.status = 'EXPIRED';
+      session.timeConsumed = allowedTime;
+      session.submittedAt = new Date();
+
+      const isLast =
+        attempt.currentSessionIndex >= (attempt.sessions?.length || 1) - 1;
+      if (!isLast) {
+        this.logger.warn(
+          `Session ${attempt.currentSessionIndex} expired on attempt ${attempt.id}`,
+        );
+        await attempt.save();
+        return false;
+      }
+    }
+
+    this.logger.warn(
+      `Auto-expiring abandoned attempt ${attempt.id} (exceeded by ${Math.floor(timeElapsed - allowedTime)}s)`,
+    );
+
+    attempt.score = await this.scoreAttempt(attempt);
     attempt.status = 'EXPIRED';
     attempt.submittedAt = new Date();
     await attempt.save();
@@ -228,6 +313,8 @@ export class MockTestAttemptsService {
     }
 
     // Step 5: Create the attempt with frozen configuration
+    const subjectConfig = test.subjectConfig || [];
+    const now = new Date();
     const attempt = await this.attemptModel.create({
       user: new Types.ObjectId(userId),
       mockTest: test._id,
@@ -243,14 +330,40 @@ export class MockTestAttemptsService {
       shuffleOptions: test.shuffleOptions,
       showResultsImmediately: test.showResultsImmediately,
       difficultyDistribution: test.difficultyDistribution,
-      questions: test.questionIds.map(q => ({
-        question: q,
-        selectedOption: null,
-        isCorrect: null,
-        marksAwarded: 0,
-      })),
-      startedAt: new Date(),
+      questions: test.questionIds.map((q, i) => {
+        const config = subjectConfig.find(
+          c => i >= c.questionStartIndex && i <= c.questionEndIndex,
+        );
+        return {
+          question: q,
+          selectedOption: null,
+          isCorrect: null,
+          marksAwarded: 0,
+          marksPerQuestion: config?.marksPerQuestion ?? test.marksPerQuestion,
+          negativeMarking: config
+            ? config.hasNegativeMarking
+              ? config.negativeMarksPerQuestion
+              : 0
+            : test.negativeMarking,
+        };
+      }),
+      startedAt: now,
       status: 'IN_PROGRESS',
+      isSessionWise: !!test.isSessionWise,
+      currentSessionIndex: 0,
+      sessions: test.isSessionWise
+        ? subjectConfig.map((config, order) => ({
+            subject: config.subject,
+            name: config.name,
+            order,
+            durationInMinutes: config.sessionTime || 0,
+            startIndex: config.questionStartIndex,
+            endIndex: config.questionEndIndex,
+            status: order === 0 ? 'IN_PROGRESS' : 'LOCKED',
+            startedAt: order === 0 ? now : undefined,
+            timeConsumed: 0,
+          }))
+        : undefined,
     });
 
     // Step 6: Fetch questions without correct answers or explanations
@@ -283,17 +396,22 @@ export class MockTestAttemptsService {
           name: examDoc?.name || '',
           description: examDoc?.description,
         },
-        subject: {
-          id: subjectDoc?._id?.toString() || '',
-          name: subjectDoc?.name || '',
-          description: subjectDoc?.description,
-        },
+        subject: subjectDoc?._id
+          ? {
+              id: subjectDoc._id.toString(),
+              name: subjectDoc?.name || '',
+              description: subjectDoc?.description,
+            }
+          : undefined,
         topic: topicDoc
           ? {
               id: topicDoc?._id?.toString() || '',
               name: topicDoc?.name || '',
             }
           : undefined,
+        isSessionWise: !!attempt.isSessionWise,
+        currentSessionIndex: attempt.currentSessionIndex,
+        sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
       },
       questions: questions.map(q => ({
         _id: q._id.toString(),
@@ -364,13 +482,19 @@ export class MockTestAttemptsService {
     }
 
     // Step 4: Calculate time consumed with grace period
+    const activeSession = this.getCurrentSession(attempt);
+    const timerStart = activeSession?.startedAt || attempt.startedAt;
     const currentSessionTime = Math.floor(
-      (Date.now() - attempt.startedAt.getTime()) / 1000,
+      (Date.now() - timerStart.getTime()) / 1000,
     );
+    const session = this.getCurrentSession(attempt);
+    const priorConsumed = session
+      ? session.timeConsumed || 0
+      : attempt.timeConsumed || 0;
     const totalTimeConsumed =
-      (attempt.timeConsumed || 0) + currentSessionTime + GRACE_PERIOD_SECONDS;
+      priorConsumed + currentSessionTime + GRACE_PERIOD_SECONDS;
 
-    const allowedTime = attempt.durationInMinutes * 60;
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
     const timeRemaining = Math.max(0, allowedTime - totalTimeConsumed);
 
     // Step 5: Check if time has already expired
@@ -384,6 +508,10 @@ export class MockTestAttemptsService {
     attempt.status = 'PAUSED';
     attempt.timeConsumed = totalTimeConsumed;
     attempt.pausedAt = new Date();
+    if (session) {
+      session.status = 'PAUSED';
+      session.timeConsumed = totalTimeConsumed;
+    }
 
     // Add pause event to history
     attempt.pauseResumeHistory.push({
@@ -469,7 +597,7 @@ export class MockTestAttemptsService {
 
     // Step 5: Calculate time metrics (using helper for accurate calculation)
     const timeElapsed = this.calculateTimeElapsed(attempt);
-    const allowedTime = attempt.durationInMinutes * 60; // seconds
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 6: Build response based on attempt status
@@ -565,7 +693,10 @@ export class MockTestAttemptsService {
           : undefined,
       },
       questions: mappedQuestions as never[],
-    };
+      sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
+      currentSessionIndex: attempt.currentSessionIndex,
+      isSessionWise: !!attempt.isSessionWise,
+    } as AttemptDetailResponseDto;
 
     // Step 10: Add time metrics for in-progress and paused attempts
     if (isInProgress || isPaused) {
@@ -654,11 +785,14 @@ export class MockTestAttemptsService {
     }
 
     // Step 4.5: If resuming from PAUSED, update status and startedAt
-    let wasPaused = false;
     if (attempt.status === 'PAUSED') {
-      wasPaused = true;
       attempt.status = 'IN_PROGRESS';
       attempt.startedAt = new Date(); // Reset startedAt for new session
+      const pausedSession = this.getCurrentSession(attempt);
+      if (pausedSession) {
+        pausedSession.status = 'IN_PROGRESS';
+        pausedSession.startedAt = attempt.startedAt;
+      }
 
       // Add resume event to history
       attempt.pauseResumeHistory.push({
@@ -685,20 +819,8 @@ export class MockTestAttemptsService {
     const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
 
     // Step 6: Calculate time metrics
-    let timeElapsed: number;
-    if (wasPaused) {
-      // For paused attempts, use timeConsumed as base and add current session time
-      const currentSessionTime = Math.floor(
-        (Date.now() - attempt.startedAt.getTime()) / 1000,
-      );
-      timeElapsed = (attempt.timeConsumed || 0) + currentSessionTime;
-    } else {
-      // For in-progress attempts, calculate from startedAt
-      timeElapsed = Math.floor(
-        (Date.now() - attempt.startedAt.getTime()) / 1000,
-      );
-    }
-    const allowedTime = attempt.durationInMinutes * 60; // seconds
+    const timeElapsed = this.calculateTimeElapsed(attempt);
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
     const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 7: Map questions with selected options (no answers/explanations)
@@ -770,23 +892,30 @@ export class MockTestAttemptsService {
           name: examDoc?.name || '',
           description: examDoc?.description,
         },
-        subject: {
-          id: subjectDoc?._id?.toString() || '',
-          name: subjectDoc?.name || '',
-          description: subjectDoc?.description,
-        },
+        subject: subjectDoc?._id
+          ? {
+              id: subjectDoc._id.toString(),
+              name: subjectDoc?.name || '',
+              description: subjectDoc?.description,
+            }
+          : undefined,
         topic: topicDoc
           ? {
               id: topicDoc?._id?.toString() || '',
               name: topicDoc?.name || '',
             }
           : undefined,
+        isSessionWise: !!attempt.isSessionWise,
+        currentSessionIndex: attempt.currentSessionIndex,
+        sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
       },
       questions: mappedQuestions,
       timeElapsed,
       timeRemaining,
       pauseCount: pauseCount > 0 ? pauseCount : undefined,
       timeConsumed: attempt.timeConsumed > 0 ? attempt.timeConsumed : undefined,
+      sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
+      currentSessionIndex: attempt.currentSessionIndex,
     };
 
     return response;
@@ -1008,30 +1137,47 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 5: Check if attempt has expired (using helper for accurate time calculation)
+    // Step 5: Check if attempt / current session has expired
     const timeElapsed = this.calculateTimeElapsed(attempt);
-    const allowedTime = attempt.durationInMinutes * 60; // in seconds
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
 
     if (timeElapsed > allowedTime) {
-      // Mark attempt as expired
-      await this.attemptModel.updateOne(
-        { _id: attemptId },
-        { $set: { status: 'EXPIRED' } },
-      );
-
+      const wasFullyExpired = await this.autoExpireIfNeeded(attempt);
+      if (wasFullyExpired) {
+        throw new BadRequestException(
+          'Test has expired. You can no longer update answers.',
+        );
+      }
       throw new BadRequestException(
-        'Test has expired. You can no longer update answers.',
+        'This session has expired. Complete the session to continue to the next subject.',
       );
     }
 
-    // Step 6: Verify question exists in the attempt
-    const questionExists = attempt.questions.some(
+    const currentSession = this.getCurrentSession(attempt);
+    if (currentSession && currentSession.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        'This session is not active. Complete it to continue, or resume the attempt.',
+      );
+    }
+
+    // Step 6: Verify question exists in the attempt (and current session, if session-wise)
+    const questionIndex = attempt.questions.findIndex(
       q => q.question.toString() === questionId,
     );
 
-    if (!questionExists) {
+    if (questionIndex < 0) {
       throw new BadRequestException(
         `Question with ID "${questionId}" is not part of this attempt`,
+      );
+    }
+
+    if (
+      currentSession &&
+      (questionIndex < currentSession.startIndex ||
+        questionIndex > currentSession.endIndex)
+    ) {
+      throw new BadRequestException(
+        'You can only answer questions in the current session',
       );
     }
 
@@ -1089,9 +1235,19 @@ export class MockTestAttemptsService {
       );
     }
 
+    const currentSession = this.getCurrentSession(attempt);
+    const isLastSession =
+      !currentSession ||
+      attempt.currentSessionIndex >= (attempt.sessions?.length || 1) - 1;
+    if (currentSession && !isLastSession) {
+      throw new BadRequestException(
+        'This is a session-wise test. Complete the current session before submitting the paper.',
+      );
+    }
+
     // Step 4: Server-side timer check (using helper for accurate time calculation)
     const timeElapsed = this.calculateTimeElapsed(attempt);
-    const allowedTime = attempt.durationInMinutes * 60; // in seconds
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
     const GRACE_PERIOD_SECONDS = 10; // Allow 10 seconds for network delays
     const isExpired = timeElapsed > allowedTime;
     const exceededBySeconds = timeElapsed - allowedTime;
@@ -1115,7 +1271,20 @@ export class MockTestAttemptsService {
             continue; // Skip invalid IDs
           }
 
-          // Update each answer
+          const questionIndex = attempt.questions.findIndex(
+            q => q.question.toString() === answer.questionId,
+          );
+          if (questionIndex < 0) {
+            continue;
+          }
+          if (
+            currentSession &&
+            (questionIndex < currentSession.startIndex ||
+              questionIndex > currentSession.endIndex)
+          ) {
+            continue;
+          }
+
           await this.attemptModel
             .updateOne(
               {
@@ -1173,6 +1342,11 @@ export class MockTestAttemptsService {
       const selectedOption = attemptQuestion.selectedOption;
       const correctAnswer = question.correctAnswer;
 
+      const { marks, negative } = this.getMarksForQuestion(
+        attempt,
+        attemptQuestion,
+      );
+
       if (!selectedOption) {
         // Unanswered - no marks, no negative marking
         attemptQuestion.isCorrect = false;
@@ -1181,20 +1355,25 @@ export class MockTestAttemptsService {
       } else if (selectedOption === correctAnswer) {
         // Correct answer
         attemptQuestion.isCorrect = true;
-        attemptQuestion.marksAwarded = attempt.marksPerQuestion;
-        totalScore += attempt.marksPerQuestion;
+        attemptQuestion.marksAwarded = marks;
+        totalScore += marks;
         correctCount++;
       } else {
         // Incorrect answer - apply negative marking
         attemptQuestion.isCorrect = false;
-        attemptQuestion.marksAwarded = -attempt.negativeMarking;
-        totalScore -= attempt.negativeMarking;
+        attemptQuestion.marksAwarded = -negative;
+        totalScore -= negative;
         incorrectCount++;
       }
     }
 
     // Step 8: Update attempt with final results
     const submittedAt = new Date();
+    if (currentSession) {
+      currentSession.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
+      currentSession.submittedAt = submittedAt;
+      currentSession.timeConsumed = Math.min(timeElapsed, allowedTime);
+    }
     attempt.score = totalScore;
     attempt.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
     attempt.submittedAt = submittedAt;
@@ -1202,8 +1381,9 @@ export class MockTestAttemptsService {
     await attempt.save();
 
     // Step 9: Prepare response
-    const totalPossibleScore =
-      attempt.totalQuestions * attempt.marksPerQuestion;
+    const totalPossibleScore = attempt.questions.reduce((sum, q) => {
+      return sum + (q.marksPerQuestion ?? attempt.marksPerQuestion);
+    }, 0);
     const passed = attempt.passingScore
       ? totalScore >= attempt.passingScore
       : false;
@@ -1248,5 +1428,103 @@ export class MockTestAttemptsService {
     }
 
     return response;
+  }
+
+  /**
+   * Complete the current session on a session-wise full mock.
+   * Opens the next session, or submits the paper when this was the last session.
+   */
+  async completeSession(
+    attemptId: string,
+    userId: string,
+  ): Promise<CompleteSessionResponseDto> {
+    if (!Types.ObjectId.isValid(attemptId)) {
+      throw new BadRequestException('Invalid attempt ID format');
+    }
+
+    const attempt = await this.attemptModel
+      .findOne({
+        _id: attemptId,
+        user: new Types.ObjectId(userId),
+      })
+      .exec();
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `Attempt with ID "${attemptId}" not found or you don't have access to it`,
+      );
+    }
+
+    if (!attempt.isSessionWise || !attempt.sessions?.length) {
+      throw new BadRequestException(
+        'This attempt is not session-wise. Use POST /:attemptId/submit instead.',
+      );
+    }
+
+    if (attempt.status === 'PAUSED') {
+      throw new BadRequestException(
+        'Resume the attempt before completing a session.',
+      );
+    }
+
+    if (attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED') {
+      throw new BadRequestException(
+        `Cannot complete a session on an attempt with status "${attempt.status}".`,
+      );
+    }
+
+    const session = this.getCurrentSession(attempt);
+    if (!session) {
+      throw new BadRequestException('No active session found');
+    }
+
+    if (session.status === 'LOCKED') {
+      throw new BadRequestException('This session is locked');
+    }
+
+    const timeElapsed = this.calculateTimeElapsed(attempt);
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
+    const isExpired = timeElapsed > allowedTime;
+
+    if (session.status === 'IN_PROGRESS' || session.status === 'PAUSED') {
+      session.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
+      session.submittedAt = new Date();
+      session.timeConsumed = Math.min(timeElapsed, allowedTime + 10);
+    }
+
+    const isLast = attempt.currentSessionIndex >= attempt.sessions.length - 1;
+
+    if (isLast) {
+      await attempt.save();
+      const results = await this.submitAttempt(attemptId, userId);
+      const fresh = await this.attemptModel.findById(attemptId).exec();
+      return {
+        paperCompleted: true,
+        sessions: (fresh?.sessions || attempt.sessions).map(s =>
+          this.mapSessionDto(s),
+        ),
+        currentSessionIndex:
+          fresh?.currentSessionIndex ?? attempt.currentSessionIndex,
+        results,
+      };
+    }
+
+    attempt.currentSessionIndex += 1;
+    const next = attempt.sessions[attempt.currentSessionIndex];
+    next.status = 'IN_PROGRESS';
+    next.startedAt = new Date();
+    next.timeConsumed = 0;
+    attempt.status = 'IN_PROGRESS';
+    attempt.startedAt = next.startedAt;
+    await attempt.save();
+
+    const nextSession = await this.resumeAttempt(attemptId, userId);
+
+    return {
+      paperCompleted: false,
+      sessions: (attempt.sessions || []).map(s => this.mapSessionDto(s)),
+      currentSessionIndex: attempt.currentSessionIndex,
+      nextSession,
+    };
   }
 }

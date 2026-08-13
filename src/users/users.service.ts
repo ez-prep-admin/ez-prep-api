@@ -2,11 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
+import * as bcrypt from 'bcryptjs';
 import { User, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
+import { CreateAdminDto } from '../auth/dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
@@ -21,6 +24,12 @@ export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+    if (createUserDto.role === UserRole.ADMIN) {
+      throw new BadRequestException(
+        'Admin accounts must be created via POST /auth/admins',
+      );
+    }
+
     try {
       // Check if user already exists
       const existingUser = await this.userModel.findOne({
@@ -74,6 +83,57 @@ export class UsersService {
   async findByPhone(phoneNumber: string): Promise<UserResponseDto | null> {
     const user = await this.userModel.findOne({ phoneNumber }).exec();
     return user ? this.toResponseDto(user) : null;
+  }
+
+  async countPasswordAdmins(): Promise<number> {
+    return this.userModel
+      .countDocuments({
+        role: UserRole.ADMIN,
+        passwordHash: { $exists: true, $ne: null },
+      })
+      .exec();
+  }
+
+  async findByUsernameForAuth(username: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({ username: username.trim().toLowerCase() })
+      .select('+passwordHash')
+      .exec();
+  }
+
+  async createAdmin(dto: CreateAdminDto): Promise<UserResponseDto> {
+    const username = dto.username.trim().toLowerCase();
+    const email = (dto.email || `${username}@admin.ezprep.local`)
+      .trim()
+      .toLowerCase();
+
+    const existing = await this.userModel.findOne({
+      $or: [{ username }, { email }],
+    });
+
+    if (existing) {
+      throw new ConflictException('Username or email is already in use');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+
+    try {
+      const created = await this.userModel.create({
+        name: dto.name,
+        email,
+        username,
+        passwordHash,
+        role: UserRole.ADMIN,
+        isActive: true,
+        isDeleted: false,
+      });
+      return this.toResponseDto(created);
+    } catch (error) {
+      if (error?.code === 11000) {
+        throw new ConflictException('Username or email is already in use');
+      }
+      throw error;
+    }
   }
 
   async findByRole(role: UserRole): Promise<UserResponseDto[]> {
@@ -446,6 +506,9 @@ export class UsersService {
       const diff = (obj.targetExamDate as Date).getTime() - now.getTime();
       obj.targetExamRemainingDays = Math.max(0, Math.ceil(diff / 86_400_000));
     }
+
+    // Never leak password hashes even if they were explicitly selected
+    delete obj.passwordHash;
 
     return new UserResponseDto(obj);
   }
