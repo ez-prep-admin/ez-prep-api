@@ -77,9 +77,19 @@ export class UserResponseDto {
   @Expose()
   email: string;
 
-  @ApiProperty({ description: 'Phone number', example: '+911234567890' })
+  @ApiPropertyOptional({
+    description: 'Phone number',
+    example: '+911234567890',
+  })
   @Expose()
-  phoneNumber: string;
+  phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Admin username (admins only)',
+    example: 'sharun',
+  })
+  @Expose()
+  username?: string;
 
   @ApiProperty({
     description: 'System role',

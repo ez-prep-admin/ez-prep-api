@@ -1,16 +1,26 @@
 /* eslint-disable prettier/prettier */
-import { Injectable, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { Msg91Service } from './services/msg91.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
+import { CreateAdminDto } from './dto/create-admin.dto';
+import { AdminLoginDto } from './dto/admin-login.dto';
+import { UserRole } from '../common/enums/user-role.enum';
 
 export interface JwtPayload {
   sub: string; // user id
-  phoneNumber: string;
+  phoneNumber?: string;
+  username?: string;
   role: string;
   iat?: number;
   exp?: number;
@@ -63,6 +73,12 @@ export class AuthService {
         }
 
         user = existingUser;
+
+        if (user.role === UserRole.ADMIN) {
+          throw new UnauthorizedException(
+            'Admin accounts must sign in with username and password',
+          );
+        }
       } else {
         // New user - signup flow
         this.logger.log(`New user detected for phone: ${phoneNumber}`);
@@ -117,6 +133,71 @@ export class AuthService {
       );
       throw new UnauthorizedException('Authentication failed');
     }
+  }
+
+  /**
+   * Create an admin account (username + password).
+   * The first admin may be created with no token (bootstrap).
+   * After that, only an authenticated admin may create more.
+   */
+  async createAdmin(
+    dto: CreateAdminDto,
+    actor?: UserResponseDto,
+  ): Promise<UserResponseDto> {
+    if (actor && actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Only an existing admin can create another admin',
+      );
+    }
+
+    const passwordAdminCount = await this.usersService.countPasswordAdmins();
+    if (passwordAdminCount > 0 && actor?.role !== UserRole.ADMIN) {
+      throw new ForbiddenException(
+        'Only an existing admin can create another admin',
+      );
+    }
+
+    const admin = await this.usersService.createAdmin(dto);
+    this.logger.log(`Admin account created: ${admin.username} (${admin.id})`);
+    return admin;
+  }
+
+  /**
+   * Username/password login for admin accounts only.
+   */
+  async loginAdmin(dto: AdminLoginDto): Promise<AuthResponseDto> {
+    const userDoc = await this.usersService.findByUsernameForAuth(dto.username);
+
+    if (
+      !userDoc ||
+      userDoc.role !== UserRole.ADMIN ||
+      !userDoc.passwordHash ||
+      !userDoc.isActive
+    ) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      userDoc.passwordHash,
+    );
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Invalid username or password');
+    }
+
+    const user = await this.usersService.findOne(userDoc._id.toString());
+    const jwtPayload: JwtPayload = {
+      sub: user.id,
+      phoneNumber: user.phoneNumber,
+      username: user.username,
+      role: user.role,
+    };
+    const accessToken = this.jwtService.sign(jwtPayload, {
+      expiresIn: '30d',
+    });
+
+    this.logger.log(`Admin login successful: ${user.username} (${user.id})`);
+    return new AuthResponseDto(accessToken, user, false);
   }
 
   /**

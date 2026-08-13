@@ -52,7 +52,7 @@ export class ExamsController {
     Features:
     - Returns array of categories with their exams
     - Includes all active exams per category
-    - Includes mock test counts per exam
+    - Includes topic-wise mock test counts per exam (full-exam papers are not counted)
     - Returns all data (no pagination or filtering needed)
     - No authentication required
     

@@ -18,6 +18,7 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiParam,
 } from '@nestjs/swagger';
 import { MockTestAttemptsService } from './mock-test-attempts.service';
 import { StartAttemptDto } from './dto/start-attempt.dto';
@@ -28,6 +29,7 @@ import { SubmitAttemptResponseDto } from './dto/submit-attempt-response.dto';
 import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
+import { CompleteSessionResponseDto } from './dto/complete-session-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -47,19 +49,25 @@ export class MockTestAttemptsController {
   @ApiOperation({
     summary: 'Start a new mock test attempt',
     description: `
-    Starts a new attempt for the specified mock test.
-    
+    Starts a new attempt for a **topic-wise or full-exam** mock test (same endpoint).
+
     Validations:
     - Mock test must exist and be active
     - If retakes are not allowed, user cannot have existing attempts
     - User cannot have multiple IN_PROGRESS attempts for the same test
-    
+
     Creates an attempt with:
     - Frozen test configuration (marks, duration, etc.)
     - Locked question set
     - Initial state as IN_PROGRESS
-    
+    - **Full exams:** per-question marks/negative marking from each subject row
+    - **Session-wise full exams:** \`sessions[]\` + \`currentSessionIndex\` (only session 0 is unlocked)
+
     Returns questions without correct answers or explanations.
+
+    For session-wise papers, answer only the current session, then call
+    \`POST /mock-test-attempts/:attemptId/sessions/complete\` to unlock the next subject.
+    Mixed full exams and topic-wise tests use a single paper timer and \`POST .../submit\`.
     `,
   })
   @ApiResponse({
@@ -177,16 +185,19 @@ export class MockTestAttemptsController {
     summary: 'Update answer for a question in an attempt',
     description: `
     Updates the selected answer for a specific question during an active test attempt.
-    
+
     Validations:
     - Attempt must exist and belong to the authenticated user
     - Attempt status must be IN_PROGRESS
-    - Test must not have expired (based on startedAt + durationInMinutes)
+    - Timer must not have expired (paper timer, or **current session** timer if session-wise)
     - Question must be part of the attempt
-    
-    If the test has expired, the attempt status is automatically updated to EXPIRED.
-    
-    Note: This endpoint only saves the answer. Evaluation happens during submission.
+    - **Session-wise:** question must belong to the current session only
+
+    If the paper (or last session) has expired, status becomes EXPIRED.
+    If a mid-paper session expires, answers are rejected until
+    \`POST .../sessions/complete\` is called.
+
+    This endpoint only saves the answer. Evaluation happens during submission.
     `,
   })
   @ApiResponse({
@@ -221,26 +232,21 @@ export class MockTestAttemptsController {
     summary: 'Pause an in-progress mock test attempt',
     description: `
     Pauses an active test attempt, allowing the user to resume later.
-    
+
     Features:
     - Saves current progress (all selected answers are preserved)
     - Calculates and saves time consumed with 10-second grace period
+    - **Session-wise:** pause applies to the **current session** timer
     - Tracks pause/resume history for auditing
     - No limit on number of pauses
     - Time remaining is preserved for resumption
-    
+
     Validations:
     - Attempt must exist and belong to the authenticated user
     - Attempt status must be IN_PROGRESS
-    - Test must not have expired
-    
-    Use Cases:
-    - User needs to take a break
-    - Network interruption handling
-    - Multitasking scenarios
-    - Emergency situations
-    
-    After pausing, use GET /:attemptId/resume to continue the test.
+    - Current timer must not have expired
+
+    After pausing, use GET /:attemptId/resume to continue.
     `,
   })
   @ApiResponse({
@@ -275,31 +281,80 @@ export class MockTestAttemptsController {
     };
   }
 
+  @Post(':attemptId/sessions/complete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Complete the current session (session-wise full mocks)',
+    description: `
+    **Session-wise full exams only.** Locks the current subject (answers kept, not scored yet)
+    and unlocks the next subject. The student cannot jump ahead or go back.
+
+    - Mid-paper: \`paperCompleted: false\` and \`nextSession\` is a resume-style payload
+      (questions + timer for the new session).
+    - Last session: equivalent to final submit — scores the **whole** paper using
+      per-question marks. \`paperCompleted: true\` and \`results\` are set.
+
+    If the current session timer already expired, this still advances (or submits
+    on the last session). It does **not** auto-start the next session on expiry;
+    the client must call this endpoint.
+
+    Mixed full exams and topic-wise tests must use \`POST /:attemptId/submit\` instead.
+    Resume first if the attempt is PAUSED.
+    `,
+  })
+  @ApiParam({ name: 'attemptId', description: 'Attempt ID' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Session locked. nextSession present if more subjects remain; results present if the paper is finished.',
+    type: CompleteSessionResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Not session-wise, attempt paused/already finished, or session locked',
+  })
+  @ApiNotFoundResponse({ description: 'Attempt not found or access denied' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async completeSession(
+    @Param('attemptId') attemptId: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{
+    message: string;
+    data: CompleteSessionResponseDto;
+  }> {
+    const result = await this.mockTestAttemptsService.completeSession(
+      attemptId,
+      user.id,
+    );
+
+    return {
+      message: result.paperCompleted
+        ? 'Last session completed. Paper submitted.'
+        : 'Session completed. Next subject is now unlocked.',
+      data: result,
+    };
+  }
+
   @Post(':attemptId/submit')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Submit mock test attempt and get results',
     description: `
     Submits the mock test attempt for evaluation.
-    
+
+    **Session-wise full exams:** only allowed on the **last** session.
+    Complete earlier subjects with \`POST .../sessions/complete\`.
+
     Process:
     1. Validates attempt (exists, belongs to user, status = IN_PROGRESS)
-    2. Server-side timer check (if expired, marks as EXPIRED but still evaluates)
-    3. Optionally accepts final answers array with grace period protection:
-       - If within time limit: Accepts all answers
-       - If expired within 10s grace period: Accepts answers (network delay tolerance)
-       - If exceeded beyond grace period: Rejects answers (anti-cheat), evaluates existing answers only
-    4. Evaluates all questions:
-       - Correct answer: +marksPerQuestion
-       - Incorrect answer: -negativeMarking
-       - Unanswered: 0 (no negative marking)
-    5. Calculates total score and pass/fail status
-    6. Updates attempt (score, status = SUBMITTED/EXPIRED, submittedAt)
-    7. Returns results:
-       - If showResultsImmediately = true: Full results with correct answers and explanations
-       - If showResultsImmediately = false: Only submission confirmation and basic stats
-    
-    Security: Grace period prevents manipulation while allowing for network delays.
+    2. Server-side timer check (paper timer, or current session timer if session-wise)
+    3. Optionally accepts a final answers array with 10s grace for network delay
+    4. Evaluates each question:
+       - Topic-wise: +attempt.marksPerQuestion / −attempt.negativeMarking
+       - Full exam: +/− the marks frozen on that question from its subject row
+       - Unanswered: 0
+    5. Status SUBMITTED or EXPIRED; score and submittedAt stored
+    6. Results: full keys if showResultsImmediately, otherwise summary only
     `,
   })
   @ApiResponse({
@@ -342,21 +397,18 @@ export class MockTestAttemptsController {
   @ApiOperation({
     summary: 'Resume attempt (Reload/Reconnection fallback)',
     description: `
-    Retrieves attempt details for resuming an IN_PROGRESS test.
-    Perfect for handling page reloads, network reconnections, or navigation back.
-    
+    Retrieves attempt details for resuming an IN_PROGRESS or PAUSED test
+    (page reload, reconnect, or after pause).
+
     Response includes:
-    - Test configuration (frozen at start)
-    - All questions with options
-    - Selected answers so far (to restore user's progress)
-    - Time elapsed and time remaining
-    - NO correct answers or explanations (security: test is still active)
-    
+    - Frozen test configuration
+    - Questions with options and selected answers (no keys)
+    - Time elapsed / remaining (current **session** timer if session-wise)
+    - \`sessions\`, \`currentSessionIndex\`, \`isSessionWise\` for full exams
+
     Restrictions:
-    - Only works for IN_PROGRESS attempts
-    - For completed attempts (SUBMITTED/EXPIRED), use GET /:id endpoint
-    
-    Users can only access their own attempts.
+    - IN_PROGRESS or PAUSED only (PAUSED is resumed as a side effect)
+    - Completed attempts: use GET /:id
     `,
   })
   @ApiResponse({
@@ -396,30 +448,16 @@ export class MockTestAttemptsController {
   @ApiOperation({
     summary: 'Get detailed attempt information (View results)',
     description: `
-    Retrieves comprehensive details about a specific attempt.
-    This endpoint is primarily for viewing completed test results.
-    
-    For resuming IN_PROGRESS attempts, use GET /:attemptId/resume instead.
-    
-    Response includes populated exam, subject, and topic details (name, id, description).
-    
-    Response varies by attempt status and configuration:
-    
-    IN_PROGRESS attempts:
-    - Basic test information and status (with exam, subject, topic details)
-    - Questions with selected answers (if any)
-    - NO correct answers or explanations
-    - Time metrics (elapsed/remaining)
-    
-    SUBMITTED/EXPIRED attempts:
-    - All of the above PLUS:
-    - Final score and statistics
-    - Submission timestamp
-    - Correct/incorrect/unanswered breakdown
-    - If showResultsImmediately=true: Correct answers and explanations for each question
-    - If showResultsImmediately=false: Only summary statistics, no per-question details
-    
-    Users can only access their own attempts.
+    Retrieves comprehensive details about a specific attempt (topic-wise or full exam).
+    Primarily for viewing completed results. For an in-progress test use GET /:attemptId/resume.
+
+    IN_PROGRESS / PAUSED:
+    - Status, frozen config, selected answers, time remaining
+    - Session-wise: \`sessions\` + \`currentSessionIndex\` (no keys)
+
+    SUBMITTED / EXPIRED:
+    - Score, correct/incorrect/unanswered, isPassed
+    - Per-question keys and explanations only if showResultsImmediately
     `,
   })
   @ApiResponse({

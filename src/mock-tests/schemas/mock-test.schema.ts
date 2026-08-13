@@ -1,7 +1,42 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types, Query } from 'mongoose';
+import { PaperType } from '../../common/enums/paper-type.enum';
 
 export type MockTestDocument = MockTest & Document;
+
+@Schema({ _id: false })
+export class MockTestSubjectConfig {
+  @Prop({ type: Types.ObjectId, ref: 'Subject', required: true })
+  subject: Types.ObjectId;
+
+  @Prop({ trim: true })
+  name: string;
+
+  @Prop({ required: true, min: 1 })
+  numberOfQuestions: number;
+
+  @Prop({ required: true, min: 0 })
+  marksPerQuestion: number;
+
+  @Prop({ required: true, default: false })
+  hasNegativeMarking: boolean;
+
+  @Prop({ min: 0, default: 0 })
+  negativeMarksPerQuestion: number;
+
+  @Prop({ min: 0 })
+  sessionTime?: number;
+
+  @Prop({ required: true, min: 0 })
+  questionStartIndex: number;
+
+  @Prop({ required: true, min: 0 })
+  questionEndIndex: number;
+}
+
+export const MockTestSubjectConfigSchema = SchemaFactory.createForClass(
+  MockTestSubjectConfig,
+);
 
 @Schema({ _id: false })
 export class DifficultyDistribution {
@@ -25,10 +60,18 @@ export const DifficultyDistributionSchema = SchemaFactory.createForClass(
   collection: 'mocktests', // Use existing collection name
 })
 export class MockTest {
-  @Prop({ required: true, enum: [10, 15, 20, 25, 30] })
+  @Prop({
+    type: String,
+    enum: Object.values(PaperType),
+    default: PaperType.TOPIC_WISE,
+    index: true,
+  })
+  paperType: PaperType;
+
+  @Prop({ required: true, min: 1 })
   totalQuestions: number;
 
-  @Prop({ required: true, enum: [10, 15, 20, 25, 30] })
+  @Prop({ required: true, min: 1 })
   durationInMinutes: number;
 
   @Prop({
@@ -42,10 +85,9 @@ export class MockTest {
   @Prop({
     type: Types.ObjectId,
     ref: 'Subject',
-    required: true,
     index: true,
   })
-  subject: Types.ObjectId;
+  subject?: Types.ObjectId;
 
   @Prop({
     type: Types.ObjectId,
@@ -77,6 +119,15 @@ export class MockTest {
 
   @Prop({ default: 0 })
   negativeMarking: number;
+
+  @Prop({ min: 0 })
+  totalMarks?: number;
+
+  @Prop({ default: false })
+  isSessionWise: boolean;
+
+  @Prop({ type: [MockTestSubjectConfigSchema], default: undefined })
+  subjectConfig?: MockTestSubjectConfig[];
 
   @Prop()
   passingScore?: number;
@@ -115,6 +166,7 @@ MockTestSchema.index({ isActive: 1, isDeleted: 1 });
 MockTestSchema.index({ createdAt: -1 }); // For sorting by newest
 MockTestSchema.index({ exam: 1, subject: 1 }); // For filtering by exam and subject
 MockTestSchema.index({ exam: 1, subject: 1, topic: 1 }); // For filtering with topic
+MockTestSchema.index({ paperType: 1, exam: 1, isActive: 1, isDeleted: 1 });
 
 // Virtual for id field (removes _id and adds id)
 MockTestSchema.virtual('id').get(function () {

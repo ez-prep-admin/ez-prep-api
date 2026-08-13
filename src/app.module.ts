@@ -10,6 +10,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
+import { FullMockTestsModule } from './full-mock-tests/full-mock-tests.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ExamsModule } from './exams/exams.module';
 import { ExamGroupsModule } from './exam-groups/exam-groups.module';
@@ -85,6 +86,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     AuthModule,
     MockTestsModule,
     MockTestAttemptsModule,
+    FullMockTestsModule,
     CategoriesModule,
     ExamsModule,
     ExamGroupsModule,

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AttemptSessionDto } from './attempt-session.dto';
 
 /**
  * Basic info DTO for exam/subject/topic
@@ -108,8 +109,11 @@ class TestMetadataDto {
   @ApiProperty({ description: 'Exam information', type: BasicInfoDto })
   exam: BasicInfoDto;
 
-  @ApiProperty({ description: 'Subject information', type: BasicInfoDto })
-  subject: BasicInfoDto;
+  @ApiPropertyOptional({
+    description: 'Subject information (topic-wise papers)',
+    type: BasicInfoDto,
+  })
+  subject?: BasicInfoDto;
 
   @ApiPropertyOptional({
     description: 'Topic information (optional)',
@@ -169,4 +173,13 @@ export class AttemptDetailResponseDto {
     description: 'Whether passed (only for submitted attempts)',
   })
   isPassed?: boolean;
+
+  @ApiPropertyOptional({ type: [AttemptSessionDto] })
+  sessions?: AttemptSessionDto[];
+
+  @ApiPropertyOptional()
+  currentSessionIndex?: number;
+
+  @ApiPropertyOptional()
+  isSessionWise?: boolean;
 }

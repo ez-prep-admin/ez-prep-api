@@ -16,6 +16,12 @@ export class AttemptQuestion {
 
   @Prop({ type: Number, default: 0 })
   marksAwarded: number;
+
+  @Prop({ type: Number })
+  marksPerQuestion?: number;
+
+  @Prop({ type: Number })
+  negativeMarking?: number;
 }
 
 export const AttemptQuestionSchema =
@@ -51,6 +57,54 @@ export class PauseResumeEvent {
 
 export const PauseResumeEventSchema =
   SchemaFactory.createForClass(PauseResumeEvent);
+
+export const ATTEMPT_SESSION_STATUSES = [
+  'LOCKED',
+  'IN_PROGRESS',
+  'PAUSED',
+  'SUBMITTED',
+  'EXPIRED',
+] as const;
+
+@Schema({ _id: false })
+export class AttemptSession {
+  @Prop({ type: Types.ObjectId, ref: 'Subject', required: true })
+  subject: Types.ObjectId;
+
+  @Prop()
+  name?: string;
+
+  @Prop({ required: true, min: 0 })
+  order: number;
+
+  @Prop({ required: true, min: 1 })
+  durationInMinutes: number;
+
+  @Prop({ required: true, min: 0 })
+  startIndex: number;
+
+  @Prop({ required: true, min: 0 })
+  endIndex: number;
+
+  @Prop({
+    type: String,
+    enum: ATTEMPT_SESSION_STATUSES,
+    default: 'LOCKED',
+  })
+  status: string;
+
+  @Prop()
+  startedAt?: Date;
+
+  @Prop()
+  submittedAt?: Date;
+
+  @Prop({ type: Number, default: 0 })
+  timeConsumed: number;
+}
+
+export const AttemptSessionSchema =
+  SchemaFactory.createForClass(AttemptSession);
 
 @Schema({
   timestamps: true,
@@ -140,6 +194,15 @@ export class MockTestAttempt {
 
   @Prop({ type: [PauseResumeEventSchema], default: [] })
   pauseResumeHistory: PauseResumeEvent[]; // Track all pause/resume events
+
+  @Prop({ default: false })
+  isSessionWise: boolean;
+
+  @Prop({ type: [AttemptSessionSchema], default: undefined })
+  sessions?: AttemptSession[];
+
+  @Prop({ type: Number, default: 0 })
+  currentSessionIndex: number;
 
   // Timestamps are automatically added by mongoose when timestamps: true
   createdAt?: Date;
