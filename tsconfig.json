@@ -6,6 +6,7 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
@@ -18,6 +19,17 @@
     "strictBindCallApply": false,
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
-    "useUnknownInCatchVariables": false
-  }
+    "useUnknownInCatchVariables": false,
+    "types": [
+      "node",
+      "jest",
+      "multer",
+      "express",
+      "supertest",
+      "passport-jwt",
+      "bcryptjs"
+    ]
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
 }

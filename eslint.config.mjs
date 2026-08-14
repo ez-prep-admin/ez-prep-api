@@ -8,6 +8,8 @@ export default tseslint.config(
   {
     ignores: [
       'eslint.config.mjs',
+      'jest.config.js',
+      'ecosystem.config.js',
       'dist/**',
       'node_modules/**',
       'coverage/**',
@@ -28,7 +30,9 @@ export default tseslint.config(
       },
       sourceType: 'commonjs',
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['*.mjs', '*.js'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

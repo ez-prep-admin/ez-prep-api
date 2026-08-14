@@ -11,9 +11,7 @@ module.exports = {
     '^.+\\.(t|j)s$': [
       'ts-jest',
       {
-        tsconfig: {
-          types: ['node', 'jest', 'multer'],
-        },
+        tsconfig: 'tsconfig.spec.json',
       },
     ],
   },
