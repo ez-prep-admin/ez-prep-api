@@ -21,6 +21,7 @@ import { QuestionsModule } from './questions/questions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { SearchModule } from './search/search.module';
 import { ImportModule } from './imports/import.module';
+import { CurrentAffairsModule } from './current-affairs/current-affairs.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { securityConfig } from './common/config/security.config';
@@ -98,6 +99,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     AnalyticsModule,
     SearchModule,
     ImportModule,
+    CurrentAffairsModule,
   ],
   controllers: [AppController],
   providers: [

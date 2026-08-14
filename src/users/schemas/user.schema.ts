@@ -199,7 +199,6 @@ export class User {
     type: String,
     enum: MembershipTier,
     default: MembershipTier.NONE,
-    index: true,
   })
   membershipTier: MembershipTier;
 

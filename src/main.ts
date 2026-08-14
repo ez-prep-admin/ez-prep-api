@@ -109,6 +109,10 @@ async function bootstrap() {
         'Start, answer, pause/resume, submit attempts. Also session-wise complete for full exams.',
       )
       .addTag('imports', 'Question paper import endpoints')
+      .addTag(
+        'current-affairs',
+        'Daily current affairs: one document per item, grouped by calendar date (YYYY-MM-DD). Admin CRUD; public GET for the user app.',
+      )
       .addTag('tests', 'Test management endpoints (coming soon)')
       .addBearerAuth(
         {
