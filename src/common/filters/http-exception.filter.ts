@@ -195,7 +195,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     switch (code) {
       case 11000:
-      case 11001:
+      case 11001: {
         // Duplicate key error
         const field = this.extractDuplicateField(error);
         return {
@@ -205,6 +205,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
             : 'Duplicate entry. A record with this value already exists.',
           error: 'DuplicateEntry',
         };
+      }
 
       case 121:
         // Document validation failed

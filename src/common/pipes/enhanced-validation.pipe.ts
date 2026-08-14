@@ -6,7 +6,7 @@ import {
   Type,
 } from '@nestjs/common';
 import { validate } from 'class-validator';
-import { plainToClass } from 'class-transformer';
+import { plainToInstance } from 'class-transformer';
 
 @Injectable()
 export class EnhancedValidationPipe implements PipeTransform<unknown> {
@@ -18,7 +18,7 @@ export class EnhancedValidationPipe implements PipeTransform<unknown> {
       return value;
     }
 
-    const object = plainToClass(metatype, value);
+    const object = plainToInstance(metatype, value);
     const errors = await validate(object);
 
     if (errors.length > 0) {
