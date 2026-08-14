@@ -1,4 +1,4 @@
-import { FileValidator } from '@nestjs/common/pipes/file';
+import { FileValidator } from '@nestjs/common';
 
 const PDF_MIME_TYPES = new Set(['application/pdf', 'application/x-pdf']);
 

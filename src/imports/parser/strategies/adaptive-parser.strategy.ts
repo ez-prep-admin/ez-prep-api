@@ -247,6 +247,10 @@ export class AdaptiveParserStrategy extends BaseQuestionPaperParser {
         errors: [],
       };
     } catch (error) {
+      this.logger.error(
+        '[adaptive-parser] Parse execution failed',
+        error instanceof Error ? error.stack : String(error),
+      );
       throw error;
     }
   }

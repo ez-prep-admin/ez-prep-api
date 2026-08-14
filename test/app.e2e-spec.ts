@@ -12,13 +12,34 @@ describe('AppController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api/v1');
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  afterEach(async () => {
+    await app.close();
+  });
+
+  it('/api/v1 (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/api/v1')
       .expect(200)
-      .expect('Hello World!');
+      .expect(res => {
+        expect(res.body).toEqual({
+          message: 'Success',
+          data: { greeting: 'Hello World!' },
+        });
+      });
+  });
+
+  it('/api/v1/health (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/health')
+      .expect(200)
+      .expect(res => {
+        expect(res.body.status).toBe('OK');
+        expect(res.body.message).toBe('EZ Prep API is running successfully');
+        expect(res.body.timestamp).toBeDefined();
+      });
   });
 });

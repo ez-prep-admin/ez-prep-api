@@ -16,6 +16,12 @@ if [ -s "$NVM_DIR/nvm.sh" ]; then
     . "$NVM_DIR/nvm.sh"
 fi
 
+echo "Using Node $(node -v) (required 24.16.0)"
+if command -v nvm >/dev/null 2>&1; then
+    nvm install 24.16.0
+    nvm use 24.16.0
+fi
+
 echo ""
 echo "======================================================="
 echo "🚀 EZ Prep API Deployment Started"

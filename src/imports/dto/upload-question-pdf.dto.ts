@@ -97,6 +97,7 @@ export class UploadQuestionPdfDto {
     description: 'Additional metadata as key-value pairs',
     example: { examYear: '2023', testSeries: 'NEET Mock Test' },
     type: 'object',
+    additionalProperties: true,
   })
   @IsOptional()
   @Transform(({ value }) => parseOptionalJsonField(value))
