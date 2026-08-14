@@ -97,7 +97,16 @@ fi
 echo ""
 echo "🏗️ Building application..."
 
+# Stale incremental cache at repo root survives `deleteOutDir` and can skip emit.
+rm -f tsconfig.build.tsbuildinfo tsconfig.tsbuildinfo
+
 npm run build
+
+if [ ! -f dist/main.js ]; then
+    echo "❌ Build did not produce dist/main.js"
+    ls -la dist 2>/dev/null || true
+    exit 1
+fi
 
 ###############################################################################
 # Restart application
