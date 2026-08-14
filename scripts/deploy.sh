@@ -7,19 +7,26 @@
 set -Eeuo pipefail
 
 ###############################################################################
-# Load NVM (required for non-interactive SSH sessions)
+# Load NVM and select Node.js
 ###############################################################################
 
 export NVM_DIR="$HOME/.nvm"
 
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-    . "$NVM_DIR/nvm.sh"
+if [ ! -s "$NVM_DIR/nvm.sh" ]; then
+    echo "❌ NVM is not installed or could not be found."
+    exit 1
 fi
 
-echo "Using Node $(node -v) (required 24.16.0)"
-if command -v nvm >/dev/null 2>&1; then
-    nvm install 24.16.0
-    nvm use 24.16.0
+. "$NVM_DIR/nvm.sh"
+
+nvm use 24.16.0
+
+echo "Using Node $(node -v)"
+echo "Using npm $(npm -v)"
+
+if [ "$(node -v)" != "v24.16.0" ]; then
+    echo "❌ Unexpected Node.js version."
+    exit 1
 fi
 
 echo ""
