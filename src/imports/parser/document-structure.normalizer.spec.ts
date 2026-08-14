@@ -3,6 +3,7 @@ import * as path from 'path';
 import {
   normalizeDocumentStructure,
   isInvalidSolutionMarker,
+  extractSolutionsSection,
 } from './document-structure.normalizer';
 import { DocumentStructure } from '../types/document-structure';
 import { AdaptiveBoundaryStrategy } from './boundaries/adaptive-boundary.strategy';
@@ -217,5 +218,92 @@ describe('normalizeDocumentStructure', () => {
     expect(normalized.solutionPattern.numberingRegex).toBe('^Sol\\.(\\d+)\\.');
     expect(normalized.solutionPattern.location).toBe('separate');
     expect(normalized.solutionPattern.matchesQuestionNumbering).toBe(false);
+  });
+
+  it('drops markers that are missing from the document', () => {
+    const normalized = normalizeDocumentStructure('1. Q\n2. Q', {
+      ...mathonGoStructure,
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: true,
+        marker: '## SOLUTIONS',
+      },
+    });
+    expect(normalized.solutionPattern.marker).toBeUndefined();
+    expect(
+      normalized.warnings?.some(w => w.includes('not found in document')),
+    ).toBe(true);
+  });
+
+  it('rejects structure-sample labels as solution markers', () => {
+    expect(
+      isInvalidSolutionMarker('<<<STRUCTURE_DETECTION_SAMPLE>>>'),
+    ).toBe(true);
+  });
+
+  it('defaults inlineFormat and keeps an existing numbering regex', () => {
+    const normalized = normalizeDocumentStructure('1. Q\n2. Q', {
+      ...mathonGoStructure,
+      solutionPattern: {
+        location: 'inline',
+        matchesQuestionNumbering: false,
+        numberingRegex: '^Sol\\.(\\d+)',
+      },
+    });
+    expect(normalized.solutionPattern.inlineFormat).toBe('Ans:');
+    expect(normalized.solutionPattern.numberingRegex).toBe('^Sol\\.(\\d+)');
+  });
+
+  it('infers solution numbering from a known answers section', () => {
+    const markdown = [
+      '1. Question one',
+      '2. Question two',
+      '## SOLUTIONS',
+      '1. Answer one',
+      '2. Answer two',
+    ].join('\n');
+    const normalized = normalizeDocumentStructure(markdown, {
+      questionPattern: {
+        type: 'numbered',
+        regex: '^(\\d+)\\.\\s',
+        exampleMatch: '1. Question one',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: false,
+      },
+      delimiter: { type: 'heading', value: '##', confidence: 0.9 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'separate answers',
+      confidence: 0.9,
+    });
+    expect(normalized.solutionPattern.marker).toBe('## SOLUTIONS');
+    expect(normalized.solutionPattern.numberingRegex).toBeDefined();
+  });
+
+  it('adds a capture group for LaTeX section question headings', () => {
+    const normalized = normalizeDocumentStructure('no questions here', {
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'numbered',
+        regex: '^\\\\section\\*\\{Q\\d+\\.',
+        exampleMatch: '\\section*{Q1.',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: true,
+      },
+    });
+    expect(normalized.questionPattern.regex).toContain('Q(\\d+)');
+    expect(normalized.questionPattern.type).toBe('labeled');
+  });
+
+  it('extractSolutionsSection returns empty without a present marker', () => {
+    expect(extractSolutionsSection('body', undefined)).toBe('');
+    expect(extractSolutionsSection('body', '## SOLUTIONS')).toBe('');
   });
 });

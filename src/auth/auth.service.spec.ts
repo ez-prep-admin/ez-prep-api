@@ -3,12 +3,18 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { Msg91Service } from './services/msg91.service';
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { UserRole } from '../common/enums/user-role.enum';
 import {
   mockJwtService,
   mockMsg91Service,
   mockUsers,
 } from '../../test/fixtures';
+import * as bcrypt from 'bcryptjs';
+
+jest.mock('bcryptjs', () => ({
+  compare: jest.fn(),
+}));
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -21,6 +27,9 @@ describe('AuthService', () => {
     findByPhone: jest.fn(),
     create: jest.fn(),
     findOne: jest.fn(),
+    countPasswordAdmins: jest.fn(),
+    createAdmin: jest.fn(),
+    findByUsernameForAuth: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -93,6 +102,19 @@ describe('AuthService', () => {
           service.verifyOtpAndAuthenticate(validDto),
         ).rejects.toThrow(UnauthorizedException);
       });
+
+      it('should reject admin accounts on OTP login', async () => {
+        mockMsg91Service.verifyAccessToken.mockResolvedValue('+1234567892');
+        mockUsersService.findByPhone.mockResolvedValue({
+          ...mockUsers.validAdmin,
+          role: UserRole.ADMIN,
+          isActive: true,
+        });
+
+        await expect(
+          service.verifyOtpAndAuthenticate(validDto),
+        ).rejects.toThrow(/username and password/);
+      });
     });
 
     describe('new user registration', () => {
@@ -145,6 +167,115 @@ describe('AuthService', () => {
           service.verifyOtpAndAuthenticate(validDto),
         ).rejects.toThrow(UnauthorizedException);
       });
+    });
+  });
+
+  describe('createAdmin', () => {
+    const dto = {
+      name: 'Site Admin',
+      username: 'siteadmin',
+      password: 'long-pass',
+    };
+
+    it('bootstraps the first admin without an actor', async () => {
+      mockUsersService.countPasswordAdmins.mockResolvedValue(0);
+      mockUsersService.createAdmin.mockResolvedValue({
+        id: 'a1',
+        username: 'siteadmin',
+      });
+
+      const result = await service.createAdmin(dto);
+
+      expect(result.username).toBe('siteadmin');
+    });
+
+    it('forbids a non-admin actor', async () => {
+      await expect(
+        service.createAdmin(dto, mockUsers.validStudent as never),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('forbids bootstrap after an admin already exists', async () => {
+      mockUsersService.countPasswordAdmins.mockResolvedValue(1);
+
+      await expect(service.createAdmin(dto)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows an existing admin to create another', async () => {
+      mockUsersService.countPasswordAdmins.mockResolvedValue(1);
+      mockUsersService.createAdmin.mockResolvedValue({
+        id: 'a2',
+        username: 'second',
+      });
+
+      const result = await service.createAdmin(dto, {
+        ...mockUsers.validAdmin,
+        role: UserRole.ADMIN,
+      } as never);
+
+      expect(result.username).toBe('second');
+    });
+  });
+
+  describe('loginAdmin', () => {
+    const dto = { username: 'admin', password: 'secret' };
+
+    it('authenticates an active admin with a matching password', async () => {
+      mockUsersService.findByUsernameForAuth.mockResolvedValue({
+        _id: { toString: () => mockUsers.validAdmin.id },
+        role: UserRole.ADMIN,
+        passwordHash: 'hash',
+        isActive: true,
+      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockUsersService.findOne.mockResolvedValue({
+        ...mockUsers.validAdmin,
+        role: UserRole.ADMIN,
+        username: 'admin',
+      });
+      mockJwtService.sign.mockReturnValue('admin-jwt');
+
+      const result = await service.loginAdmin(dto);
+
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: 'admin',
+          role: UserRole.ADMIN,
+        }),
+        { expiresIn: '30d' },
+      );
+      expect(result.accessToken).toBe('admin-jwt');
+      expect(result.isNewUser).toBe(false);
+    });
+
+    it('rejects unknown, inactive, or non-admin users', async () => {
+      mockUsersService.findByUsernameForAuth.mockResolvedValue(null);
+      await expect(service.loginAdmin(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      mockUsersService.findByUsernameForAuth.mockResolvedValue({
+        role: UserRole.USER,
+        passwordHash: 'hash',
+        isActive: true,
+      });
+      await expect(service.loginAdmin(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects a wrong password', async () => {
+      mockUsersService.findByUsernameForAuth.mockResolvedValue({
+        _id: { toString: () => 'id' },
+        role: UserRole.ADMIN,
+        passwordHash: 'hash',
+        isActive: true,
+      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.loginAdmin(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

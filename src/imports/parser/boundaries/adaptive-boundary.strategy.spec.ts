@@ -70,4 +70,83 @@ describe('AdaptiveBoundaryStrategy', () => {
       content: 'Alpha particles question',
     });
   });
+
+  it('throws when used before initialize', () => {
+    const fresh = new AdaptiveBoundaryStrategy();
+    expect(() => fresh.isQuestionStart('1. Q')).toThrow(/not initialized/);
+    expect(() => fresh.parseQuestionStart('1. Q')).toThrow(/not initialized/);
+  });
+
+  it('falls back when the question regex is invalid', () => {
+    strategy.initialize({
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'numbered',
+        regex: '(unclosed',
+        exampleMatch: 'x',
+      },
+    });
+    expect(strategy.isQuestionStart('1. Fallback')).toBe(true);
+    expect(strategy.getStructure()?.questionPattern.regex).toBe('(unclosed');
+  });
+
+  it('initializeForSolutions uses the question regex when solutions have none', () => {
+    const solutions = new AdaptiveBoundaryStrategy();
+    solutions.initializeForSolutions({
+      ...mathonGoStructure,
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: false,
+      },
+    });
+    expect(solutions.isInitialized()).toBe(true);
+  });
+
+  it('falls back when the solution regex is invalid', () => {
+    const solutions = new AdaptiveBoundaryStrategy();
+    solutions.initializeForSolutions({
+      ...mathonGoStructure,
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: false,
+        numberingRegex: '(bad',
+      },
+    });
+    expect(solutions.isQuestionStart('## Q1. x')).toBe(true);
+  });
+
+  it('parses labeled, hierarchical, and numberless matches', () => {
+    strategy.initialize({
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'labeled',
+        regex: '^Q\\.(foo)\\s(.*)$',
+        exampleMatch: 'Q.foo stem',
+      },
+    });
+    expect(strategy.parseQuestionStart('Q.foo stem')).toBeNull();
+
+    strategy.initialize({
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'hierarchical',
+        regex: '^(\\d+\\.\\d+)\\s(.*)$',
+        exampleMatch: '1.2 Stem',
+      },
+    });
+    expect(strategy.parseQuestionStart('1.2 Stem')).toEqual({
+      number: 1,
+      content: 'Stem',
+    });
+
+    strategy.initialize({
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'numbered',
+        regex: '^NO-DIGITS',
+        exampleMatch: 'NO-DIGITS',
+      },
+    });
+    expect(strategy.parseQuestionStart('NO-DIGITS')).toBeNull();
+  });
 });

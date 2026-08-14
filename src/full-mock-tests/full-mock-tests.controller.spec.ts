@@ -1,0 +1,89 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { FullMockTestsController } from './full-mock-tests.controller';
+import { FullMockTestsService } from './full-mock-tests.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { UserRole } from '../common/enums/user-role.enum';
+
+describe('FullMockTestsController', () => {
+  let controller: FullMockTestsController;
+  const service = {
+    listExamsForAdmin: jest.fn(),
+    createDraft: jest.fn(),
+    searchQuestions: jest.fn(),
+    getDraft: jest.fn(),
+    replaceQuestion: jest.fn(),
+    publishDraft: jest.fn(),
+    discardDraft: jest.fn(),
+    listPublished: jest.fn(),
+    findOnePublished: jest.fn(),
+  };
+  const admin = { id: 'a1', role: UserRole.ADMIN };
+  const page = { data: [{ id: '1' }], pagination: { total: 1 } };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [FullMockTestsController],
+      providers: [{ provide: FullMockTestsService, useValue: service }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    controller = module.get(FullMockTestsController);
+    jest.clearAllMocks();
+  });
+
+  it('should be defined', () => {
+    expect(controller).toBeDefined();
+  });
+
+  it('should delegate admin and student endpoints', async () => {
+    service.listExamsForAdmin.mockResolvedValue(page);
+    service.createDraft.mockResolvedValue({ id: 'd1' });
+    service.searchQuestions.mockResolvedValue(page);
+    service.getDraft.mockResolvedValue({ id: 'd1' });
+    service.replaceQuestion.mockResolvedValue({ id: 'd1' });
+    service.publishDraft.mockResolvedValue({ mockTestId: 't1' });
+    service.discardDraft.mockResolvedValue(undefined);
+    service.listPublished.mockResolvedValue(page);
+    service.findOnePublished.mockResolvedValue({ id: 't1' });
+
+    await expect(controller.listExams(1, 10, 'cgl')).resolves.toMatchObject({
+      data: page.data,
+    });
+    await expect(
+      controller.createDraft({ examId: 'e1' }, admin as any),
+    ).resolves.toMatchObject({ data: { id: 'd1' } });
+    await expect(
+      controller.searchQuestions('s1', 'd1', 'q', 't', 'easy', 1, 20),
+    ).resolves.toMatchObject({ data: page.data });
+    await expect(controller.getDraft('d1')).resolves.toMatchObject({
+      data: { id: 'd1' },
+    });
+    await expect(
+      controller.replaceQuestion('d1', 0, { questionId: 'q1' }),
+    ).resolves.toMatchObject({ data: { id: 'd1' } });
+    await expect(
+      controller.publishDraft('d1', { title: 'P' }, admin as any),
+    ).resolves.toMatchObject({ data: { mockTestId: 't1' } });
+    await expect(controller.discardDraft('d1')).resolves.toEqual({
+      message: 'Draft discarded successfully',
+    });
+    await expect(
+      controller.listPublished('e1', 1, 10, admin as any),
+    ).resolves.toMatchObject({ data: page.data });
+    expect(service.listPublished).toHaveBeenCalledWith(
+      'e1',
+      1,
+      10,
+      'a1',
+      true,
+    );
+    await expect(
+      controller.findOne('t1', admin as any),
+    ).resolves.toMatchObject({ data: { id: 't1' } });
+  });
+});

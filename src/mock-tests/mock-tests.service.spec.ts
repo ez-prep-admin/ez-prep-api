@@ -1,0 +1,632 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/mongoose';
+import {
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { MockTestsService } from './mock-tests.service';
+import { MockTest } from './schemas/mock-test.schema';
+import { Topic } from '../topics/schemas/topic.schema';
+import { Question } from '../mock-test-attempts/schemas/question.schema';
+import { MockTestAttempt } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
+import { UserRole } from '../common/enums/user-role.enum';
+import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
+import { CreateTopicWiseMockTestDto } from './dto/create-topic-wise-mock-test.dto';
+
+const TEST_ID = '507f1f77bcf86cd799439011';
+const EXAM_ID = '507f1f77bcf86cd799439012';
+const SUB_ID = '507f1f77bcf86cd799439013';
+const TOP_ID = '507f1f77bcf86cd799439014';
+const USER_ID = '507f1f77bcf86cd799439015';
+const Q1 = '507f1f77bcf86cd799439016';
+const Q2 = '507f1f77bcf86cd799439017';
+const ATTEMPT_ID = '507f1f77bcf86cd799439018';
+
+function chainable(resolved: unknown) {
+  const query: any = {};
+  ['populate', 'sort', 'skip', 'limit', 'lean', 'select', 'session'].forEach(
+    m => {
+      query[m] = jest.fn().mockReturnValue(query);
+    },
+  );
+  query.exec = jest.fn().mockResolvedValue(resolved);
+  return query;
+}
+
+function makeTest(overrides: Record<string, unknown> = {}) {
+  const exam = {
+    _id: { toString: () => EXAM_ID },
+    toString: () => EXAM_ID,
+    name: 'NEET',
+    description: 'exam',
+  };
+  const subject = {
+    _id: { toString: () => SUB_ID },
+    toString: () => SUB_ID,
+    name: 'Physics',
+    description: 'sub',
+  };
+  const topic = {
+    _id: { toString: () => TOP_ID },
+    toString: () => TOP_ID,
+    name: 'Optics',
+  };
+  const doc: any = {
+    _id: { toString: () => TEST_ID },
+    id: TEST_ID,
+    totalQuestions: 10,
+    durationInMinutes: 10,
+    exam,
+    subject,
+    topic,
+    title: 'Optics 10',
+    description: 'desc',
+    generationMode: 'STATIC',
+    marksPerQuestion: 1,
+    negativeMarking: 0.25,
+    passingScore: 5,
+    allowRetake: true,
+    shuffleOptions: false,
+    showResultsImmediately: true,
+    isActive: true,
+    createdBy: { toString: () => USER_ID },
+    difficultyDistribution: { easy: 4, medium: 4, hard: 2 },
+    createdAt: new Date('2024-01-01'),
+    updatedAt: new Date('2024-01-02'),
+    questionIds: [{ toString: () => Q1 }],
+    toObject() {
+      return {
+        id: TEST_ID,
+        totalQuestions: this.totalQuestions,
+        durationInMinutes: this.durationInMinutes,
+        exam: EXAM_ID,
+        subject: SUB_ID,
+        topic: TOP_ID,
+        title: this.title,
+        description: this.description,
+        generationMode: this.generationMode,
+        marksPerQuestion: this.marksPerQuestion,
+        negativeMarking: this.negativeMarking,
+        passingScore: this.passingScore,
+        allowRetake: this.allowRetake,
+        shuffleOptions: this.shuffleOptions,
+        showResultsImmediately: this.showResultsImmediately,
+        isActive: this.isActive,
+        createdBy: USER_ID,
+        difficultyDistribution: this.difficultyDistribution,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt,
+      };
+    },
+    ...overrides,
+  };
+  return doc;
+}
+
+const dto: CreateTopicWiseMockTestDto = {
+  totalQuestions: 10,
+  durationInMinutes: 10,
+  exam: EXAM_ID,
+  subject: SUB_ID,
+  topic: TOP_ID,
+  difficultyDistribution: { easy: 4, medium: 4, hard: 2 },
+  title: 'Test',
+};
+
+describe('MockTestsService', () => {
+  let service: MockTestsService;
+  const mockTestModel: any = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    countDocuments: jest.fn(),
+    create: jest.fn(),
+    aggregate: jest.fn(),
+  };
+  const attemptModel: any = { find: jest.fn() };
+  const topicModel: any = { find: jest.fn() };
+  const questionModel: any = { aggregate: jest.fn() };
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        MockTestsService,
+        { provide: getModelToken(MockTest.name), useValue: mockTestModel },
+        {
+          provide: getModelToken(MockTestAttempt.name),
+          useValue: attemptModel,
+        },
+        { provide: getModelToken(Topic.name), useValue: topicModel },
+        { provide: getModelToken(Question.name), useValue: questionModel },
+      ],
+    }).compile();
+
+    service = module.get(MockTestsService);
+    jest.clearAllMocks();
+    mockTestModel.find.mockReset();
+    mockTestModel.findOne.mockReset();
+    mockTestModel.findOneAndUpdate.mockReset();
+    mockTestModel.countDocuments.mockReset();
+    mockTestModel.create.mockReset();
+    mockTestModel.aggregate.mockReset();
+    attemptModel.find.mockReset();
+    topicModel.find.mockReset();
+    questionModel.aggregate.mockReset();
+    mockTestModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(1),
+    });
+  });
+
+  it('should be defined', () => {
+    expect(service).toBeDefined();
+  });
+
+  describe('findAll', () => {
+    it('should list tests for a student without questionIds', async () => {
+      const test = makeTest();
+      mockTestModel.find.mockReturnValue(chainable([test]));
+
+      const result = await service.findAll(1, 10);
+
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination.total).toBe(1);
+      expect(mockTestModel.find().select).toHaveBeenCalledWith('-questionIds');
+    });
+
+    it('should apply search, admin populate, and user actions', async () => {
+      const test = makeTest();
+      mockTestModel.find.mockReturnValue(chainable([test]));
+      attemptModel.find.mockReturnValue(
+        chainable([
+          {
+            _id: { toString: () => ATTEMPT_ID },
+            mockTest: { toString: () => TEST_ID },
+            status: 'PAUSED',
+          },
+        ]),
+      );
+
+      const result = await service.findAll(0, 200, '  NEET  ', USER_ID, true);
+
+      expect(result.data[0].userAttemptAction).toBe(UserAttemptAction.RESUME);
+      expect(result.data[0].resumeAttemptId).toBe(ATTEMPT_ID);
+      expect(result.pagination.limit).toBe(100);
+      expect(result.pagination.page).toBe(1);
+    });
+
+    it('should map RETAKE and START from attempt history', async () => {
+      const otherId = '507f1f77bcf86cd799439019';
+      const t1 = makeTest();
+      const t2 = makeTest({
+        _id: { toString: () => otherId },
+        toObject() {
+          return { ...makeTest().toObject(), id: otherId };
+        },
+      });
+      mockTestModel.find.mockReturnValue(chainable([t1, t2]));
+      mockTestModel.countDocuments.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(2),
+      });
+      attemptModel.find.mockReturnValue(
+        chainable([
+          {
+            _id: { toString: () => ATTEMPT_ID },
+            mockTest: { toString: () => TEST_ID },
+            status: 'SUBMITTED',
+          },
+        ]),
+      );
+
+      const result = await service.findAll(1, 10, undefined, USER_ID);
+
+      const byId = new Map(result.data.map(d => [d.id, d.userAttemptAction]));
+      expect(byId.get(TEST_ID)).toBe(UserAttemptAction.RETAKE);
+      expect(byId.get(otherId) ?? result.data[1].userAttemptAction).toBe(
+        UserAttemptAction.START,
+      );
+    });
+
+    it('uses default pagination arguments', async () => {
+      mockTestModel.find.mockReturnValue(chainable([makeTest()]));
+      const result = await service.findAll();
+      expect(result.pagination.page).toBe(1);
+      expect(result.pagination.limit).toBe(10);
+    });
+  });
+
+  describe('findOne', () => {
+    it('should throw NotFoundException when missing', async () => {
+      mockTestModel.findOne.mockReturnValue(chainable(null));
+
+      await expect(service.findOne(TEST_ID)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return student dto without admin populate', async () => {
+      mockTestModel.findOne.mockReturnValue(chainable(makeTest()));
+
+      const result = await service.findOne(TEST_ID);
+
+      expect(result.id).toBe(TEST_ID);
+      expect(mockTestModel.findOne().select).toHaveBeenCalledWith(
+        '-questionIds',
+      );
+    });
+
+    it('should return admin detail with populated questions', async () => {
+      const test = makeTest({
+        questionIds: [
+          {
+            id: Q1,
+            _id: { toString: () => Q1 },
+            questionText: { en: { text: 'Q' } },
+            subject: { _id: { toString: () => SUB_ID }, name: 'Physics' },
+          },
+        ],
+      });
+      mockTestModel.findOne.mockReturnValue(chainable(test));
+
+      const result = await service.findOne(TEST_ID, {
+        id: USER_ID,
+        role: UserRole.ADMIN,
+      } as any);
+
+      expect((result as any).questions[0].id).toBe(Q1);
+      expect((result as any).exam).toEqual({ id: EXAM_ID, name: 'NEET' });
+    });
+
+    it('maps admin questions without subjects and missing exam/subject docs', async () => {
+      const test = makeTest({
+        exam: undefined,
+        subject: undefined,
+        topic: undefined,
+        difficultyDistribution: undefined,
+        questionIds: [
+          {
+            _id: { toString: () => Q1 },
+            questionText: { en: { text: 'Q' } },
+          },
+        ],
+        toObject() {
+          return {
+            id: TEST_ID,
+            totalQuestions: 10,
+            durationInMinutes: 10,
+            createdAt: new Date('2024-01-01'),
+            updatedAt: new Date('2024-01-02'),
+          };
+        },
+      });
+      mockTestModel.findOne.mockReturnValue(chainable(test));
+
+      const result = await service.findOne(TEST_ID, {
+        id: USER_ID,
+        role: UserRole.ADMIN,
+      } as any);
+
+      expect((result as any).questions[0].subject).toBeNull();
+      expect((result as any).questions[0].id).toBe(Q1);
+    });
+  });
+
+  describe('createTopicWise', () => {
+    it('should throw when difficulty sum mismatches', async () => {
+      await expect(
+        service.createTopicWise(
+          { ...dto, difficultyDistribution: { easy: 1, medium: 1, hard: 1 } },
+          USER_ID,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw when not enough questions', async () => {
+      questionModel.aggregate.mockResolvedValue([{ _id: Q1 }]);
+
+      await expect(service.createTopicWise(dto, USER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('should sample questions and create a test', async () => {
+      questionModel.aggregate
+        .mockResolvedValueOnce(
+          Array.from({ length: 4 }, (_, i) => ({
+            _id: `e${i}`.padEnd(24, '0'),
+          })),
+        )
+        .mockResolvedValueOnce(
+          Array.from({ length: 4 }, (_, i) => ({
+            _id: `m${i}`.padEnd(24, '0'),
+          })),
+        )
+        .mockResolvedValueOnce(
+          Array.from({ length: 2 }, (_, i) => ({
+            _id: `h${i}`.padEnd(24, '0'),
+          })),
+        );
+      mockTestModel.create.mockResolvedValue({ id: TEST_ID });
+      mockTestModel.findOne.mockReturnValue(chainable(makeTest()));
+
+      const result = await service.createTopicWise(dto, USER_ID);
+
+      expect(mockTestModel.create).toHaveBeenCalled();
+      expect(result.id).toBe(TEST_ID);
+    });
+
+    it('creates without an optional topic and uses dto defaults', async () => {
+      questionModel.aggregate
+        .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q1 })))
+        .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q2 })))
+        .mockResolvedValueOnce(
+          Array.from({ length: 2 }, () => ({ _id: ATTEMPT_ID })),
+        );
+      mockTestModel.create.mockResolvedValue({ id: TEST_ID });
+      mockTestModel.findOne.mockReturnValue(chainable(makeTest()));
+
+      await service.createTopicWise(
+        {
+          ...dto,
+          topic: undefined,
+          title: undefined,
+          description: undefined,
+          generationMode: undefined,
+          marksPerQuestion: undefined,
+          negativeMarking: undefined,
+          passingScore: undefined,
+          allowRetake: undefined,
+          shuffleOptions: undefined,
+          showResultsImmediately: undefined,
+        },
+        USER_ID,
+      );
+
+      expect(mockTestModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: null,
+          generationMode: 'STATIC',
+          marksPerQuestion: 1,
+        }),
+      );
+    });
+  });
+
+  describe('updateTopicWise', () => {
+    it('should throw when test not found', async () => {
+      mockTestModel.findOne.mockReturnValue(chainable(null));
+
+      await expect(
+        service.updateTopicWise(TEST_ID, dto, USER_ID),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should skip resample when selection fields match', async () => {
+      const existing = makeTest({
+        exam: { toString: () => EXAM_ID },
+        subject: { toString: () => SUB_ID },
+        topic: { toString: () => TOP_ID },
+        questionIds: [{ toString: () => Q1 }, { toString: () => Q2 }],
+      });
+      mockTestModel.findOne.mockReturnValueOnce(chainable(existing));
+      mockTestModel.findOneAndUpdate.mockReturnValue(chainable(existing));
+      mockTestModel.findOne.mockReturnValue(chainable(existing));
+
+      await service.updateTopicWise(TEST_ID, dto, USER_ID);
+
+      expect(questionModel.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('should resample when totals change', async () => {
+      const existing = makeTest({
+        totalQuestions: 15,
+        exam: { toString: () => EXAM_ID },
+        subject: { toString: () => SUB_ID },
+        topic: { toString: () => TOP_ID },
+        questionIds: [{ toString: () => Q1 }],
+      });
+      mockTestModel.findOne.mockReturnValueOnce(chainable(existing));
+      questionModel.aggregate
+        .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q1 })))
+        .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q2 })))
+        .mockResolvedValueOnce(
+          Array.from({ length: 2 }, () => ({ _id: ATTEMPT_ID })),
+        );
+      mockTestModel.findOneAndUpdate.mockReturnValue(chainable(existing));
+      mockTestModel.findOne.mockReturnValue(chainable(existing));
+
+      await service.updateTopicWise(TEST_ID, { ...dto, topic: undefined }, USER_ID);
+
+      expect(questionModel.aggregate).toHaveBeenCalled();
+    });
+  });
+
+  describe('removeTopicWise', () => {
+    it('should soft-delete', async () => {
+      mockTestModel.findOneAndUpdate.mockReturnValue(chainable(makeTest()));
+
+      await expect(service.removeTopicWise(TEST_ID)).resolves.toEqual({
+        message: 'Mock test deleted successfully',
+      });
+    });
+
+    it('should throw when missing', async () => {
+      mockTestModel.findOneAndUpdate.mockReturnValue(chainable(null));
+
+      await expect(service.removeTopicWise(TEST_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getStats', () => {
+    it('should aggregate difficulty stats', async () => {
+      mockTestModel.countDocuments.mockResolvedValue(5);
+      mockTestModel.aggregate.mockReturnValue(
+        chainable([{ totalEasy: 10, totalMedium: 20, totalHard: 5 }]),
+      );
+
+      const stats = await service.getStats();
+
+      expect(stats.inactiveTests).toBe(0);
+      expect(stats.totalQuestionsByDifficulty.easy).toBe(10);
+    });
+
+    it('should default difficulty when aggregation is empty', async () => {
+      mockTestModel.countDocuments.mockResolvedValue(0);
+      mockTestModel.aggregate.mockReturnValue(chainable([]));
+
+      const stats = await service.getStats();
+
+      expect(stats.totalQuestionsByDifficulty).toEqual({
+        easy: 0,
+        medium: 0,
+        hard: 0,
+      });
+    });
+  });
+
+  describe('findByExam', () => {
+    it('should return empty when search matches no topics', async () => {
+      topicModel.find.mockReturnValue(chainable([]));
+
+      const result = await service.findByExam(EXAM_ID, 1, 10, USER_ID, 'zzz');
+
+      expect(result.data).toEqual([]);
+      expect(result.pagination.total).toBe(0);
+    });
+
+    it('should filter by subject and search topics', async () => {
+      topicModel.find.mockReturnValue(chainable([{ _id: TOP_ID }]));
+      mockTestModel.find.mockReturnValue(chainable([makeTest()]));
+      attemptModel.find.mockReturnValue(chainable([]));
+
+      const result = await service.findByExam(
+        EXAM_ID,
+        2,
+        10,
+        USER_ID,
+        'opt',
+        SUB_ID,
+      );
+
+      expect(result.data[0].exam?.name).toBe('NEET');
+      expect(result.pagination.hasPrevPage).toBe(true);
+    });
+
+    it('lists by exam with default pagination and no topic search', async () => {
+      mockTestModel.find.mockReturnValue(
+        chainable([
+          makeTest({
+            exam: undefined,
+            subject: undefined,
+            topic: undefined,
+          }),
+        ]),
+      );
+      const result = await service.findByExam(EXAM_ID);
+      expect(result.pagination.page).toBe(1);
+      expect(result.data[0].exam).toBeNull();
+      expect(result.data[0].subject).toBeNull();
+    });
+  });
+
+  describe('findBySubject / findByExamAndSubject / findActive', () => {
+    beforeEach(() => {
+      mockTestModel.find.mockReturnValue(chainable([makeTest()]));
+      attemptModel.find.mockReturnValue(chainable([]));
+    });
+
+    it('should list by subject with user actions', async () => {
+      const result = await service.findBySubject(SUB_ID, 1, 10, USER_ID);
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should list by exam and subject', async () => {
+      const result = await service.findByExamAndSubject(
+        EXAM_ID,
+        SUB_ID,
+        1,
+        10,
+        USER_ID,
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should list active tests', async () => {
+      const result = await service.findActive(1, 10, USER_ID);
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('uses default arguments without user actions', async () => {
+      expect((await service.findBySubject(SUB_ID)).data).toHaveLength(1);
+      expect(
+        (await service.findByExamAndSubject(EXAM_ID, SUB_ID)).data,
+      ).toHaveLength(1);
+      expect((await service.findActive()).data).toHaveLength(1);
+    });
+  });
+
+  describe('getUserAttemptActions', () => {
+    it('should return empty map without ids', async () => {
+      const map = await service.getUserAttemptActions([], USER_ID);
+      expect(map.size).toBe(0);
+    });
+
+    it('should treat IN_PROGRESS as resume and other statuses as start', async () => {
+      attemptModel.find.mockReturnValue(
+        chainable([
+          {
+            _id: { toString: () => ATTEMPT_ID },
+            mockTest: { toString: () => TEST_ID },
+            status: 'IN_PROGRESS',
+          },
+          {
+            _id: { toString: () => '507f1f77bcf86cd799439099' },
+            mockTest: { toString: () => EXAM_ID },
+            status: 'ABANDONED',
+          },
+        ]),
+      );
+
+      const map = await service.getUserAttemptActions(
+        [TEST_ID, EXAM_ID],
+        USER_ID,
+      );
+
+      expect(map.get(TEST_ID)?.action).toBe(UserAttemptAction.RESUME);
+      expect(map.get(EXAM_ID)?.action).toBe(UserAttemptAction.START);
+    });
+
+    it('should map EXPIRED as RETAKE', async () => {
+      attemptModel.find.mockReturnValue(
+        chainable([
+          {
+            _id: { toString: () => ATTEMPT_ID },
+            mockTest: { toString: () => TEST_ID },
+            status: 'EXPIRED',
+          },
+        ]),
+      );
+
+      const map = await service.getUserAttemptActions([TEST_ID], USER_ID);
+      expect(map.get(TEST_ID)?.action).toBe(UserAttemptAction.RETAKE);
+    });
+
+    it('keeps multiple attempts for the same test grouped', async () => {
+      attemptModel.find.mockReturnValue(
+        chainable([
+          {
+            _id: { toString: () => ATTEMPT_ID },
+            mockTest: { toString: () => TEST_ID },
+            status: 'SUBMITTED',
+          },
+          {
+            _id: { toString: () => Q1 },
+            mockTest: { toString: () => TEST_ID },
+            status: 'EXPIRED',
+          },
+        ]),
+      );
+      const map = await service.getUserAttemptActions([TEST_ID], USER_ID);
+      expect(map.get(TEST_ID)?.action).toBe(UserAttemptAction.RETAKE);
+    });
+  });
+});
