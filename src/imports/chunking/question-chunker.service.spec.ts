@@ -48,4 +48,63 @@ describe('QuestionChunkerService', () => {
     expect(chunks).toHaveLength(3);
     expect(chunks.map(chunk => chunk.questions.length)).toEqual([20, 20, 6]);
   });
+
+  it('returns empty arrays for empty input', () => {
+    expect(chunker.chunk([])).toEqual([]);
+    expect(chunker.chunkByTokenLimit([])).toEqual([]);
+  });
+
+  it('uses fixedChunkSize when provided', () => {
+    const questions: MatchedQuestion[] = Array.from({ length: 5 }, (_, i) => ({
+      number: i + 1,
+      question: `Q${i + 1}`,
+    }));
+
+    const chunks = chunker.chunkByTokenLimit(questions, { fixedChunkSize: 2 });
+    expect(chunks.map(chunk => chunk.questions.length)).toEqual([2, 2, 1]);
+  });
+
+  it('isolates a single question that exceeds the input budget', () => {
+    const questions: MatchedQuestion[] = [
+      { number: 1, question: 'x'.repeat(20_000) },
+      { number: 2, question: 'short' },
+    ];
+
+    const chunks = chunker.chunkByTokenLimit(questions, {
+      maxTokensPerChunk: 2000,
+      promptOverheadTokens: 500,
+    });
+
+    expect(chunks[0].questions).toHaveLength(1);
+    expect(chunks[0].questions[0].number).toBe(1);
+  });
+
+  it('merges a tiny trailing chunk when it still fits the budget', () => {
+    const questions: MatchedQuestion[] = Array.from({ length: 5 }, (_, i) => ({
+      number: i + 1,
+      question: i < 4 ? 'x'.repeat(800) : 'tail',
+    }));
+
+    const chunks = chunker.chunkByTokenLimit(questions, {
+      minQuestionsPerChunk: 3,
+      maxQuestionsPerChunk: 50,
+      maxTokensPerChunk: 900,
+      promptOverheadTokens: 0,
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].questions).toHaveLength(5);
+  });
+
+  it('reports zero averages when getChunkingStats has no questions', () => {
+    const stats = chunker.getChunkingStats([]);
+    expect(stats.estimatedChunks).toBe(0);
+    expect(stats.avgQuestionsPerChunk).toBe(0);
+    expect(stats.avgTokensPerChunk).toBe(0);
+    expect(stats.chunks).toEqual([]);
+  });
+
+  it('estimateTokens treats empty text as zero', () => {
+    expect(chunker.estimateTokens('')).toBe(0);
+  });
 });

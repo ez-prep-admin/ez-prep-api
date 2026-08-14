@@ -108,6 +108,56 @@ Answer 2: because
     expect(result?.split).toBe(true);
     expect(result?.numberingRegex).toBe('^Answer\\s+(\\d+):');
   });
+
+  it('returns null for short documents, invalid regex, and few questions', () => {
+    expect(
+      splitHeaderlessAlternateSolutions('Q.1. only', '^Q\\.(\\d+)\\.\\s'),
+    ).toBeNull();
+    expect(
+      splitHeaderlessAlternateSolutions(
+        'Q.1. One\nQ.2. Two\nSol.1. a\nSol.2. b',
+        '(unclosed',
+      ),
+    ).toBeNull();
+    expect(
+      splitHeaderlessAlternateSolutions(
+        'Q.1. Only one question\nmore\nSol.1. a\nSol.2. b',
+        '^Q\\.(\\d+)\\.\\s',
+      ),
+    ).toBeNull();
+  });
+
+  it('ignores an invalid preferred solution regex', () => {
+    const markdown = `
+Q.1. One
+Q.2. Two
+Sol.1.(a) because
+Sol.2.(b) because
+`.trim();
+    const result = splitHeaderlessAlternateSolutions(
+      markdown,
+      '^Q\\.(\\d+)\\.\\s',
+      '(bad',
+    );
+    expect(result?.split).toBe(true);
+    expect(result?.numberingRegex).toBe('^Sol\\.(\\d+)\\.');
+  });
+
+  it('treats preferred Q( patterns as labeled', () => {
+    const markdown = `
+Q.1. One
+Q.2. Two
+Q(1) because
+Q(2) because
+`.trim();
+    const result = splitHeaderlessAlternateSolutions(
+      markdown,
+      '^Q\\.(\\d+)\\.\\s',
+      '^Q\\((\\d+)\\)',
+    );
+    expect(result?.split).toBe(true);
+    expect(result?.numberingRegex).toBe('^Q\\((\\d+)\\)');
+  });
 });
 
 describe('SSC Maths headerless Sol. PDF fixture', () => {
