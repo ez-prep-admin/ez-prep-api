@@ -539,6 +539,26 @@ db.mocktestattepts.aggregate([
 
 ---
 
+## Admin dashboard
+
+```
+GET /api/v1/admin/dashboard
+GET /api/v1/admin/dashboard/users
+GET /api/v1/admin/dashboard/questions
+GET /api/v1/admin/dashboard/failed-questions
+GET /api/v1/admin/dashboard/mock-tests
+GET /api/v1/admin/dashboard/full-mock-tests
+GET /api/v1/admin/dashboard/attempts
+GET /api/v1/admin/dashboard/exams
+GET /api/v1/admin/dashboard/subjects
+GET /api/v1/admin/dashboard/topics
+GET /api/v1/admin/dashboard/tags
+```
+
+Admin JWT required. Summary powers dashboard cards; other routes are card-detail tables.
+
+---
+
 ## Need Help?
 
 - Full documentation: `docs/PAUSE_RESUME_API.md`
