@@ -54,6 +54,13 @@ class AttemptQuestionDto {
   subject: string;
 
   @ApiPropertyOptional({
+    description:
+      'Session-wise only: which session this question belongs to (sessions[].order)',
+    example: 0,
+  })
+  sessionOrder?: number;
+
+  @ApiPropertyOptional({
     description: 'Selected option ID (only for IN_PROGRESS attempts)',
   })
   selectedOption?: string | null;

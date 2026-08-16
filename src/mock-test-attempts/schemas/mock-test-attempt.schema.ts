@@ -22,6 +22,10 @@ export class AttemptQuestion {
 
   @Prop({ type: Number })
   negativeMarking?: number;
+
+  /** Session-wise only: matches AttemptSession.order. Omitted for topic-wise papers. */
+  @Prop({ type: Number, min: 0 })
+  sessionOrder?: number;
 }
 
 export const AttemptQuestionSchema =
@@ -85,6 +89,9 @@ export class AttemptSession {
 
   @Prop({ required: true, min: 0 })
   endIndex: number;
+
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Question' }], default: undefined })
+  questionIds?: Types.ObjectId[];
 
   @Prop({
     type: String,

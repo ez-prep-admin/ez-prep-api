@@ -109,6 +109,13 @@ export class SafeQuestionDto {
     example: 'medium',
   })
   difficultyLevel?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Session-wise only: which session this question belongs to (same as sessions[].order). Omitted for topic-wise papers.',
+    example: 0,
+  })
+  sessionOrder?: number;
 }
 
 export class ExamSummaryDto {
@@ -258,7 +265,7 @@ export class StartAttemptResponseDto {
 
   @ApiProperty({
     description:
-      'Questions without correct answers or explanations. Full exams are grouped by subject in exam order. Session-wise: still returns the full paper; only the current session is answerable.',
+      'Questions without correct answers or explanations. Session-wise papers are grouped into contiguous subject blocks in exam order. Each question includes sessionOrder. Topic-wise papers omit sessionOrder.',
     type: [SafeQuestionDto],
   })
   questions: SafeQuestionDto[];

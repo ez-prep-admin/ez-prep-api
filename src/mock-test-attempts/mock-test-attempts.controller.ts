@@ -61,11 +61,14 @@ export class MockTestAttemptsController {
     - Locked question set
     - Initial state as IN_PROGRESS
     - **Full exams:** per-question marks/negative marking from each subject row
-    - **Session-wise full exams:** \`sessions[]\` + \`currentSessionIndex\` (only session 0 is unlocked)
+    - **Session-wise full exams:** \`sessions[]\` (with \`questionIds\` / \`questionCount\`) + \`currentSessionIndex\`
+    - Questions are returned in locked paper order, grouped by session. Each question includes \`sessionOrder\`.
+    - Topic-wise papers omit \`sessionOrder\` and \`sessions\`.
 
     Returns questions without correct answers or explanations.
 
-    For session-wise papers, answer only the current session, then call
+    For session-wise papers, show only questions where \`sessionOrder === currentSessionIndex\`
+    (or \`_id\` is in the current session's \`questionIds\`). Then call
     \`POST /mock-test-attempts/:attemptId/sessions/complete\` to unlock the next subject.
     Mixed full exams and topic-wise tests use a single paper timer and \`POST .../submit\`.
     `,

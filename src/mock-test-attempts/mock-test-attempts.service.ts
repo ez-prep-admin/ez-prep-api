@@ -73,6 +73,7 @@ export class MockTestAttemptsService {
   }
 
   private mapSessionDto(session: AttemptSession) {
+    const questionIds = (session.questionIds || []).map(id => id.toString());
     return {
       subject: session.subject?.toString(),
       name: session.name,
@@ -80,11 +81,57 @@ export class MockTestAttemptsService {
       durationInMinutes: session.durationInMinutes,
       startIndex: session.startIndex,
       endIndex: session.endIndex,
+      questionIds: questionIds.length ? questionIds : undefined,
+      questionCount: questionIds.length
+        ? questionIds.length
+        : session.endIndex >= session.startIndex
+          ? session.endIndex - session.startIndex + 1
+          : 0,
       status: session.status,
       startedAt: session.startedAt,
       submittedAt: session.submittedAt,
       timeConsumed: session.timeConsumed || 0,
     };
+  }
+
+  private isQuestionInSession(
+    attempt: MockTestAttemptDocument,
+    session: AttemptSession,
+    questionId: string,
+    questionIndex: number,
+  ): boolean {
+    if (session.questionIds?.length) {
+      return session.questionIds.some(id => id.toString() === questionId);
+    }
+    const locked = attempt.questions[questionIndex];
+    if (locked?.sessionOrder != null) {
+      return locked.sessionOrder === session.order;
+    }
+    return (
+      questionIndex >= session.startIndex && questionIndex <= session.endIndex
+    );
+  }
+
+  private sessionOrderForIndex(
+    subjectConfig: Array<{
+      questionStartIndex: number;
+      questionEndIndex: number;
+      questionIds?: Types.ObjectId[];
+    }>,
+    questionId: string,
+    index: number,
+  ): number | undefined {
+    const byId = subjectConfig.findIndex(config =>
+      (config.questionIds || []).some(id => id.toString() === questionId),
+    );
+    if (byId >= 0) {
+      return byId;
+    }
+    const byRange = subjectConfig.findIndex(
+      config =>
+        index >= config.questionStartIndex && index <= config.questionEndIndex,
+    );
+    return byRange >= 0 ? byRange : undefined;
   }
 
   /**
@@ -292,6 +339,31 @@ export class MockTestAttemptsService {
     // Step 5: Create the attempt with frozen configuration
     const subjectConfig = test.subjectConfig || [];
     const now = new Date();
+    const paperQuestionIds = test.questionIds;
+    const attemptQuestions = paperQuestionIds.map((q, i) => {
+      const config = subjectConfig.find(c =>
+        (c.questionIds || []).some(id => id.toString() === q.toString()),
+      ) ||
+        subjectConfig.find(
+          c => i >= c.questionStartIndex && i <= c.questionEndIndex,
+        );
+      const sessionOrder = test.isSessionWise
+        ? this.sessionOrderForIndex(subjectConfig, q.toString(), i)
+        : undefined;
+      return {
+        question: q,
+        selectedOption: null,
+        isCorrect: null,
+        marksAwarded: 0,
+        marksPerQuestion: config?.marksPerQuestion ?? test.marksPerQuestion,
+        negativeMarking: config
+          ? config.hasNegativeMarking
+            ? config.negativeMarksPerQuestion
+            : 0
+          : test.negativeMarking,
+        sessionOrder,
+      };
+    });
     const attempt = await this.attemptModel.create({
       user: new Types.ObjectId(userId),
       mockTest: test._id,
@@ -307,50 +379,39 @@ export class MockTestAttemptsService {
       shuffleOptions: test.shuffleOptions,
       showResultsImmediately: test.showResultsImmediately,
       difficultyDistribution: test.difficultyDistribution,
-      questions: test.questionIds.map((q, i) => {
-        const config = subjectConfig.find(
-          c => i >= c.questionStartIndex && i <= c.questionEndIndex,
-        );
-        return {
-          question: q,
-          selectedOption: null,
-          isCorrect: null,
-          marksAwarded: 0,
-          marksPerQuestion: config?.marksPerQuestion ?? test.marksPerQuestion,
-          negativeMarking: config
-            ? config.hasNegativeMarking
-              ? config.negativeMarksPerQuestion
-              : 0
-            : test.negativeMarking,
-        };
-      }),
+      questions: attemptQuestions,
       startedAt: now,
       status: 'IN_PROGRESS',
       isSessionWise: !!test.isSessionWise,
       currentSessionIndex: 0,
       sessions: test.isSessionWise
-        ? subjectConfig.map((config, order) => ({
-            subject: config.subject,
-            name: config.name,
-            order,
-            durationInMinutes: config.sessionTime || 0,
-            startIndex: config.questionStartIndex,
-            endIndex: config.questionEndIndex,
-            status: order === 0 ? 'IN_PROGRESS' : 'LOCKED',
-            startedAt: order === 0 ? now : undefined,
-            timeConsumed: 0,
-          }))
+        ? subjectConfig.map((config, order) => {
+            const fromIds = (config.questionIds || []).map(id => id);
+            const fromRange = paperQuestionIds.slice(
+              config.questionStartIndex,
+              config.questionEndIndex + 1,
+            );
+            const sessionQuestionIds = fromIds.length ? fromIds : fromRange;
+            return {
+              subject: config.subject,
+              name: config.name,
+              order,
+              durationInMinutes: config.sessionTime || 0,
+              startIndex: config.questionStartIndex,
+              endIndex: config.questionEndIndex,
+              questionIds: sessionQuestionIds,
+              status: order === 0 ? 'IN_PROGRESS' : 'LOCKED',
+              startedAt: order === 0 ? now : undefined,
+              timeConsumed: 0,
+            };
+          })
         : undefined,
     });
 
-    // Step 6: Fetch questions without correct answers or explanations
-    const questions = await this.questionModel
-      .find({
-        _id: { $in: test.questionIds },
-      })
-      .select('-correctAnswer -explanation')
-      .lean()
-      .exec();
+    const lockedRows = await this.loadLockedQuestionRows(
+      attempt.questions,
+      true,
+    );
 
     // Step 7: Format response with simplified image data (only URLs)
     // Extract populated data
@@ -390,7 +451,10 @@ export class MockTestAttemptsService {
         currentSessionIndex: attempt.currentSessionIndex,
         sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
       },
-      questions: await this.mapAttemptQuestions(questions),
+      questions: await this.mapAttemptQuestionsWithSession(
+        lockedRows.map(row => row.question),
+        lockedRows.map(row => row.aq),
+      ),
     };
 
     return response;
@@ -539,14 +603,10 @@ export class MockTestAttemptsService {
     await this.autoExpireIfNeeded(attempt);
 
     // Step 4: Fetch full question details (with options)
-    const questionIds = attempt.questions.map(q => q.question);
-    const questions = await this.questionModel
-      .find({ _id: { $in: questionIds } })
-      .lean()
-      .exec();
-
-    // Create question map for quick lookup
-    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+    const orderedQuestions = await this.loadLockedQuestionRows(
+      attempt.questions,
+      false,
+    );
 
     // Step 5: Calculate time metrics (using helper for accurate calculation)
     const timeElapsed = this.calculateTimeElapsed(attempt);
@@ -560,16 +620,11 @@ export class MockTestAttemptsService {
       attempt.status === 'SUBMITTED' || attempt.status === 'EXPIRED';
     const showResults = isSubmitted && attempt.showResultsImmediately;
 
-    // Step 7: Map questions with signed image URLs (never raw S3 metadata)
-    const orderedQuestions = attempt.questions
-      .map(aq => ({
-        aq,
-        question: questionMap.get(aq.question.toString()),
-      }))
-      .filter(row => Boolean(row.question));
-
     const mappedQuestions = (
-      await this.mapAttemptQuestions(orderedQuestions.map(row => row.question!))
+      await this.mapAttemptQuestionsWithSession(
+        orderedQuestions.map(row => row.question),
+        orderedQuestions.map(row => row.aq),
+      )
     ).map((questionDto, index) => {
       const { aq, question } = orderedQuestions[index];
       const next: Record<string, unknown> = { ...questionDto };
@@ -759,36 +814,24 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 5: Fetch questions WITHOUT correct answers or explanations
-    const questionIds = attempt.questions.map(q => q.question);
-    const questions = await this.questionModel
-      .find({ _id: { $in: questionIds } })
-      .select('-correctAnswer -explanation')
-      .lean()
-      .exec();
-
-    // Create question map for quick lookup
-    const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
-
-    // Step 6: Calculate time metrics
-    const timeElapsed = this.calculateTimeElapsed(attempt);
-    const allowedTime = this.getAllowedTimeSeconds(attempt);
-    const timeRemaining = Math.max(0, allowedTime - timeElapsed);
-
-    // Step 7: Map questions with selected options (no answers/explanations)
-    const orderedQuestions = attempt.questions
-      .map(aq => ({
-        aq,
-        question: questionMap.get(aq.question.toString()),
-      }))
-      .filter(row => Boolean(row.question));
+    const orderedQuestions = await this.loadLockedQuestionRows(
+      attempt.questions,
+      true,
+    );
 
     const mappedQuestions = (
-      await this.mapAttemptQuestions(orderedQuestions.map(row => row.question!))
+      await this.mapAttemptQuestionsWithSession(
+        orderedQuestions.map(row => row.question),
+        orderedQuestions.map(row => row.aq),
+      )
     ).map((questionDto, index) => {
       const selectedOption = orderedQuestions[index].aq.selectedOption;
       return selectedOption ? { ...questionDto, selectedOption } : questionDto;
     });
+
+    const timeElapsed = this.calculateTimeElapsed(attempt);
+    const allowedTime = this.getAllowedTimeSeconds(attempt);
+    const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 8: Build response with exam, subject, topic details
     const pauseCount = attempt.pauseResumeHistory.filter(
@@ -1097,8 +1140,12 @@ export class MockTestAttemptsService {
 
     if (
       currentSession &&
-      (questionIndex < currentSession.startIndex ||
-        questionIndex > currentSession.endIndex)
+      !this.isQuestionInSession(
+        attempt,
+        currentSession,
+        questionId,
+        questionIndex,
+      )
     ) {
       throw new BadRequestException(
         'You can only answer questions in the current session',
@@ -1203,8 +1250,12 @@ export class MockTestAttemptsService {
           }
           if (
             currentSession &&
-            (questionIndex < currentSession.startIndex ||
-              questionIndex > currentSession.endIndex)
+            !this.isQuestionInSession(
+              attempt,
+              currentSession,
+              answer.questionId,
+              questionIndex,
+            )
           ) {
             continue;
           }
@@ -1446,6 +1497,58 @@ export class MockTestAttemptsService {
       currentSessionIndex: attempt.currentSessionIndex,
       nextSession,
     };
+  }
+
+  private async loadLockedQuestionRows(
+    attemptQuestions: AttemptQuestion[],
+    hideAnswers: boolean,
+  ): Promise<Array<{ aq: AttemptQuestion; question: any }>> {
+    const ids = attemptQuestions.map(q => q.question);
+    let query = this.questionModel.find({ _id: { $in: ids } });
+    if (hideAnswers) {
+      query = query.select('-correctAnswer -explanation');
+    }
+    const docs = await query.lean().exec();
+    const questionMap = new Map(
+      docs.map((q: { _id: { toString(): string } }) => [q._id.toString(), q]),
+    );
+    return attemptQuestions
+      .map(aq => ({
+        aq,
+        question: questionMap.get(aq.question.toString()),
+      }))
+      .filter(row => Boolean(row.question));
+  }
+
+  private async mapAttemptQuestionsWithSession(
+    questions: Array<{
+      _id: { toString(): string };
+      questionText?: {
+        en?: { text?: string | null; image?: ImageLike };
+        ml?: { text?: string | null; image?: ImageLike };
+      };
+      optionType?: string;
+      options?: Array<{
+        id: string;
+        type: string;
+        en?: string | null;
+        ml?: string | null;
+        image?: ImageLike;
+      }>;
+      subject?: { toString(): string };
+      topic?: { toString(): string };
+      difficultyLevel?: string;
+    }>,
+    attemptQuestions: AttemptQuestion[],
+  ) {
+    const mapped = await this.mapAttemptQuestions(questions);
+    return mapped.map((questionDto, index) => {
+      const sessionOrder = attemptQuestions[index]?.sessionOrder;
+      if (sessionOrder == null) {
+        return questionDto;
+      }
+      return { ...questionDto, sessionOrder };
+    });
   }
 
   private collectStemImages(question: {

@@ -43,6 +43,13 @@ class ResumeQuestionDto {
   @ApiProperty({ description: 'Subject ID' })
   subject: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Session-wise only: which session this question belongs to (sessions[].order)',
+    example: 0,
+  })
+  sessionOrder?: number;
+
   @ApiProperty({
     description: 'Selected option ID (if user has answered this question)',
     nullable: true,

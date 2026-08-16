@@ -22,6 +22,7 @@ import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { FullMockSelectionService } from './full-mock-selection.service';
 import {
+  DraftQuestion,
   FullMockTestDraft,
   FullMockTestDraftDocument,
 } from './schemas/full-mock-test-draft.schema';
@@ -163,7 +164,11 @@ export class FullMockTestsService {
 
     const { questions, subjectNames } =
       await this.selectionService.generatePaper(exam);
-    this.assertNoDuplicateQuestions(questions);
+    const grouped = this.groupQuestionsBySubjectOrder(
+      questions,
+      exam.subjects,
+    );
+    this.assertNoDuplicateQuestions(grouped);
 
     const draft = await this.draftModel.create({
       exam: exam._id,
@@ -186,7 +191,7 @@ export class FullMockTestsService {
           sessionTime: row.sessionTime,
         })),
       },
-      questions,
+      questions: grouped,
     });
 
     return this.toDraftResponse(draft);
@@ -397,8 +402,9 @@ export class FullMockTestsService {
     userId: string,
   ): Promise<{ mockTestId: string; draft: DraftResponseDto }> {
     const snapshot = draft.examSnapshot;
-    const ordered = [...draft.questions].sort(
-      (a, b) => a.position - b.position,
+    const ordered = this.groupQuestionsBySubjectOrder(
+      draft.questions,
+      snapshot.subjects,
     );
     this.assertNoDuplicateQuestions(ordered);
     if (
@@ -414,7 +420,13 @@ export class FullMockTestsService {
         },
       });
     }
-    const questionIds = ordered.map(q => q.question);
+    const questionIds = ordered.map(q => q.question).filter(Boolean);
+    if (questionIds.length !== ordered.length) {
+      throw new BadRequestException({
+        message: 'Draft questions are missing question ids',
+        error: 'PAPER_INCOMPLETE',
+      });
+    }
     await this.assertQuestionsEligibleForPublish(questionIds);
 
     const subjectConfig = snapshot.subjects.map(row => {
@@ -434,6 +446,9 @@ export class FullMockTestsService {
         sessionTime: row.sessionTime,
         questionStartIndex: start,
         questionEndIndex: end,
+        questionIds: ordered
+          .filter(q => q.subject.toString() === row.subject.toString())
+          .map(q => q.question),
       };
     });
 
@@ -722,6 +737,7 @@ export class FullMockTestsService {
         sessionTime: row.sessionTime,
         questionStartIndex: row.questionStartIndex,
         questionEndIndex: row.questionEndIndex,
+        questionIds: row.questionIds?.map(id => id.toString()),
       })),
       marksPerQuestion: test.marksPerQuestion,
       negativeMarking: test.negativeMarking,
@@ -818,6 +834,7 @@ export class FullMockTestsService {
 
     const liveIds = new Set(live.map(q => q._id.toString()));
     const missing = questionIds
+      .filter(id => id != null)
       .map(id => id.toString())
       .filter(id => !liveIds.has(id));
 
@@ -827,6 +844,58 @@ export class FullMockTestsService {
       error: 'QUESTION_NOT_ELIGIBLE',
       details: { questionIds: missing },
     });
+  }
+
+  /**
+   * Contiguous subject blocks in exam-subject order, positions rewritten 0..n-1.
+   * Within a subject, original position is preserved.
+   */
+  private groupQuestionsBySubjectOrder(
+    questions: DraftQuestion[],
+    subjects: Array<{ subject: Types.ObjectId | { toString(): string } }>,
+  ): DraftQuestion[] {
+    const bySubject = new Map<string, DraftQuestion[]>();
+    for (const q of questions) {
+      const key = q.subject.toString();
+      const bucket = bySubject.get(key) || [];
+      bucket.push(q);
+      bySubject.set(key, bucket);
+    }
+    for (const bucket of bySubject.values()) {
+      bucket.sort((a, b) => a.position - b.position);
+    }
+
+    const grouped: DraftQuestion[] = [];
+    const seen = new Set<string>();
+    for (const row of subjects) {
+      const key = row.subject.toString();
+      const block = bySubject.get(key) || [];
+      grouped.push(...block);
+      seen.add(key);
+    }
+    for (const [key, block] of bySubject) {
+      if (!seen.has(key)) {
+        grouped.push(...block);
+      }
+    }
+
+    return grouped.map((q, position) => this.cloneDraftQuestion(q, position));
+  }
+
+  private cloneDraftQuestion(
+    q: DraftQuestion,
+    position?: number,
+  ): DraftQuestion {
+    return {
+      question: q.question,
+      subject: q.subject,
+      topic: q.topic,
+      difficultyLevel: q.difficultyLevel,
+      position: position ?? q.position,
+      marksPerQuestion: q.marksPerQuestion,
+      negativeMarking: q.negativeMarking,
+      replacedFrom: q.replacedFrom,
+    };
   }
 
   private assertNoDuplicateQuestions(
