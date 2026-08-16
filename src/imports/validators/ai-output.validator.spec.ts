@@ -42,26 +42,24 @@ describe('AiOutputValidator', () => {
   });
 
   it('throws on schema failure for a single payload', () => {
-    expect(() => validator.validate(JSON.stringify({ questionText: '' }))).toThrow(
-      AiOutputValidationError,
-    );
+    expect(() =>
+      validator.validate(JSON.stringify({ questionText: '' })),
+    ).toThrow(AiOutputValidationError);
   });
 
   it('throws on schema failure for a batch payload', () => {
-    expect(() => validator.validateBatch(JSON.stringify({ questions: [] }))).toThrow(
-      AiOutputValidationError,
-    );
+    expect(() =>
+      validator.validateBatch(JSON.stringify({ questions: [] })),
+    ).toThrow(AiOutputValidationError);
   });
 
   it('throws a truncation error when finishReason is length and JSON is invalid', () => {
-    expect(() =>
-      validator.validate('{', { finishReason: 'length' }),
-    ).toThrow(/truncated before valid JSON/);
+    expect(() => validator.validate('{', { finishReason: 'length' })).toThrow(
+      /truncated before valid JSON/,
+    );
   });
 
   it('throws a generic JSON error when finishReason is not length', () => {
-    expect(() => validator.validateBatch('not-json')).toThrow(
-      /not valid JSON/,
-    );
+    expect(() => validator.validateBatch('not-json')).toThrow(/not valid JSON/);
   });
 });

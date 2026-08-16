@@ -114,6 +114,8 @@ Append the subject’s picks in topic order (stable, easier to review). Then mov
 
 Paper order = subject blocks. Within a subject, topic groups stay together.
 
+Create-draft and publish **re-group** questions into contiguous exam-subject order and rewrite `position` `0..n-1`, so a later replace cannot leave interleaved subjects on the published paper.
+
 Each picked question stores on the draft:
 
 - `position` (0-based across the whole paper)

@@ -6,7 +6,7 @@ import { UpdateAnswerDto } from './update-answer.dto';
 export class SubmitAttemptDto {
   @ApiPropertyOptional({
     description:
-      'Optional array of answers to update before submission (protects against last-second internet loss)',
+      'Optional last-second answers applied before scoring. Ignored if the timer is more than 10s over. Session-wise: out-of-session ids are skipped. Prefer PATCH .../answer during the test.',
     type: [UpdateAnswerDto],
     example: [
       {

@@ -366,9 +366,7 @@ describe('UsersService', () => {
 
   describe('hardDelete', () => {
     it('should permanently delete a user', async () => {
-      mockUserModel.findByIdAndDelete.mockReturnValue(
-        chain({ _id: OID }),
-      );
+      mockUserModel.findByIdAndDelete.mockReturnValue(chain({ _id: OID }));
       await expect(service.hardDelete(OID)).resolves.toBeUndefined();
     });
 
@@ -406,9 +404,9 @@ describe('UsersService', () => {
   describe('toggleUserStatus', () => {
     it('should toggle isActive', async () => {
       const user = mockUserDocument({ isActive: true, name: 'John' });
-      user.save = jest.fn().mockResolvedValue(
-        mockUserDocument({ isActive: false, name: 'John' }),
-      );
+      user.save = jest
+        .fn()
+        .mockResolvedValue(mockUserDocument({ isActive: false, name: 'John' }));
       mockUserModel.findById.mockResolvedValue(user);
       const result = await service.toggleUserStatus(OID);
       expect(result).toBeDefined();
@@ -542,7 +540,9 @@ describe('UsersService', () => {
     it('should throw NotFoundException', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(null));
       await expect(
-        service.updatePreferences(OID, { studyTime: StudyTimePreference.NIGHT }),
+        service.updatePreferences(OID, {
+          studyTime: StudyTimePreference.NIGHT,
+        }),
       ).rejects.toThrow(NotFoundException);
     });
   });

@@ -77,7 +77,9 @@ describe('FullMockSelectionService', () => {
 
       expect(() =>
         service.assertBlueprint({
-          subjects: [{ subject: SUB_ID, numberOfQuestions: 1, marksPerQuestion: 1 }],
+          subjects: [
+            { subject: SUB_ID, numberOfQuestions: 1, marksPerQuestion: 1 },
+          ],
           totalQuestions: 2,
           totalMarks: 99,
           duration: 0,
@@ -132,7 +134,9 @@ describe('FullMockSelectionService', () => {
           },
         ],
       });
-      jest.spyOn(service, 'assertBlueprint').mockImplementation(() => undefined);
+      jest
+        .spyOn(service, 'assertBlueprint')
+        .mockImplementation(() => undefined);
 
       await expect(service.generatePaper(bad)).rejects.toThrow(
         BadRequestException,

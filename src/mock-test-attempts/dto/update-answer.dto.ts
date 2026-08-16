@@ -3,7 +3,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateAnswerDto {
   @ApiProperty({
-    description: 'Question ID (MongoDB ObjectId)',
+    description:
+      'Question MongoDB id. Session-wise: must belong to the current session (sessions[].questionIds).',
     example: '67c5f4ee4d671dbf0cb95a12',
   })
   @IsString({ message: 'Question ID must be a string' })

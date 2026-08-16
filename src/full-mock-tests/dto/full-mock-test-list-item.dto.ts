@@ -46,8 +46,10 @@ export class FullMockSubjectConfigDto {
   questionEndIndex: number;
 
   @ApiPropertyOptional({
-    description: 'Question IDs in this subject block, in paper order',
+    description:
+      'Frozen question IDs in this subject block, in paper order. Present on newly published full mocks. Use with numberOfQuestions to splice the attempt questions array.',
     type: [String],
+    example: ['64f123456789abcdef123456'],
   })
   questionIds?: string[];
 }
@@ -89,7 +91,8 @@ export class FullMockTestListItemDto {
   exam: ExamSummaryDto | null;
 
   @ApiProperty({
-    description: 'Frozen exam subject rows with index ranges into the paper',
+    description:
+      'Frozen exam subject rows with contiguous index ranges and questionIds into the paper',
     type: [FullMockSubjectConfigDto],
   })
   subjectConfig: FullMockSubjectConfigDto[];

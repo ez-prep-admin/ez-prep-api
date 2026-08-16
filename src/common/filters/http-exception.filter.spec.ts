@@ -146,8 +146,7 @@ describe('HttpExceptionFilter', () => {
 
     expect(json).toHaveBeenCalledWith(
       expect.objectContaining({
-        message:
-          'Duplicate entry. A record with this value already exists.',
+        message: 'Duplicate entry. A record with this value already exists.',
       }),
     );
   });
@@ -213,11 +212,7 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('should handle mongoose CastError', () => {
-    const castError = new MongooseError.CastError(
-      'ObjectId',
-      'bad-id',
-      '_id',
-    );
+    const castError = new MongooseError.CastError('ObjectId', 'bad-id', '_id');
 
     filter.catch(castError, host);
 

@@ -68,14 +68,18 @@ describe('ExamsController', () => {
 
   it('findByCategory wraps data', async () => {
     service.findByCategory.mockResolvedValue({ data: [exam], pagination });
-    await expect(controller.findByCategory('c1', 1, 10)).resolves.toMatchObject({
-      data: [exam],
-    });
+    await expect(controller.findByCategory('c1', 1, 10)).resolves.toMatchObject(
+      {
+        data: [exam],
+      },
+    );
   });
 
   it('findOne wraps data', async () => {
     service.findOne.mockResolvedValue(exam);
-    await expect(controller.findOne('e1')).resolves.toMatchObject({ data: exam });
+    await expect(controller.findOne('e1')).resolves.toMatchObject({
+      data: exam,
+    });
   });
 
   it('update wraps data', async () => {
@@ -87,6 +91,8 @@ describe('ExamsController', () => {
 
   it('remove wraps data', async () => {
     service.remove.mockResolvedValue(exam);
-    await expect(controller.remove('e1')).resolves.toMatchObject({ data: exam });
+    await expect(controller.remove('e1')).resolves.toMatchObject({
+      data: exam,
+    });
   });
 });

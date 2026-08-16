@@ -1,8 +1,14 @@
 # Mock Test Creation Module
 
-This document describes how mock tests are created, stored, listed, viewed, updated, and deleted in the **admin app**. It is based on the current code — not an intended future design.
+This document describes how **topic-wise** mock tests are created in the **admin app**. It is based on the current code — not an intended future design.
 
-Mock tests are **admin-authored, frozen question sets**. An admin picks an exam, a subject, optionally a topic, a size, a duration, and a difficulty mix. The server then randomly samples matching questions from the question bank and **locks those IDs onto the test**. Students later take that exact paper. The admin app does not run the student attempt flow.
+On **ez-prep-api** (this repo):
+
+- Topic-wise papers: `src/mock-tests` — `GET/POST /api/v1/mock-tests`. Lists never include `paperType: FULL_EXAM`.
+- Full-exam papers: `src/full-mock-tests` — see `docs/FULL-MOCK-TESTS.md`.
+- Students take **both** kinds through `src/mock-test-attempts` — see `docs/MOCK-TEST-ATTEMPTS.md`.
+
+The rest of this file is the older admin-app (Next.js) authoring flow for topic-wise papers.
 
 ---
 

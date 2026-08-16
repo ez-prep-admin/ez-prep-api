@@ -81,7 +81,9 @@ describe('DeepseekService', () => {
   });
 
   it('extractQuestionsBatch sends batch prompts and thinking options', async () => {
-    const service = buildService({ DEEPSEEK_MAX_OUTPUT_TOKENS: 'not-a-number' });
+    const service = buildService({
+      DEEPSEEK_MAX_OUTPUT_TOKENS: 'not-a-number',
+    });
     const result = await service.extractQuestionsBatch([matched], {
       thinking: { enabled: true, reasoningEffort: 'high' },
     });

@@ -72,6 +72,16 @@ export class MockTestAttemptsService {
     };
   }
 
+  private sessionFields(attempt: MockTestAttemptDocument) {
+    if (!attempt.isSessionWise) {
+      return {};
+    }
+    return {
+      currentSessionIndex: attempt.currentSessionIndex,
+      sessions: (attempt.sessions || []).map(s => this.mapSessionDto(s)),
+    };
+  }
+
   private mapSessionDto(session: AttemptSession) {
     const questionIds = (session.questionIds || []).map(id => id.toString());
     return {
@@ -341,15 +351,17 @@ export class MockTestAttemptsService {
     const now = new Date();
     const paperQuestionIds = test.questionIds;
     const attemptQuestions = paperQuestionIds.map((q, i) => {
-      const config = subjectConfig.find(c =>
-        (c.questionIds || []).some(id => id.toString() === q.toString()),
-      ) ||
+      const config =
+        subjectConfig.find(c =>
+          (c.questionIds || []).some(id => id.toString() === q.toString()),
+        ) ||
         subjectConfig.find(
           c => i >= c.questionStartIndex && i <= c.questionEndIndex,
         );
-      const sessionOrder = test.isSessionWise
-        ? this.sessionOrderForIndex(subjectConfig, q.toString(), i)
-        : undefined;
+      const sessionOrder =
+        subjectConfig.length > 0
+          ? this.sessionOrderForIndex(subjectConfig, q.toString(), i)
+          : undefined;
       return {
         question: q,
         selectedOption: null,
@@ -448,8 +460,7 @@ export class MockTestAttemptsService {
             }
           : undefined,
         isSessionWise: !!attempt.isSessionWise,
-        currentSessionIndex: attempt.currentSessionIndex,
-        sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
+        ...this.sessionFields(attempt),
       },
       questions: await this.mapAttemptQuestionsWithSession(
         lockedRows.map(row => row.question),
@@ -700,9 +711,8 @@ export class MockTestAttemptsService {
           : undefined,
       },
       questions: mappedQuestions as never[],
-      sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
-      currentSessionIndex: attempt.currentSessionIndex,
       isSessionWise: !!attempt.isSessionWise,
+      ...this.sessionFields(attempt),
     } as AttemptDetailResponseDto;
 
     // Step 10: Add time metrics for in-progress and paused attempts
@@ -872,8 +882,7 @@ export class MockTestAttemptsService {
             }
           : undefined,
         isSessionWise: !!attempt.isSessionWise,
-        currentSessionIndex: attempt.currentSessionIndex,
-        sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
+        ...this.sessionFields(attempt),
       },
       questions:
         mappedQuestions as unknown as ResumeAttemptResponseDto['questions'],
@@ -881,8 +890,7 @@ export class MockTestAttemptsService {
       timeRemaining,
       pauseCount: pauseCount > 0 ? pauseCount : undefined,
       timeConsumed: attempt.timeConsumed > 0 ? attempt.timeConsumed : undefined,
-      sessions: attempt.sessions?.map(s => this.mapSessionDto(s)),
-      currentSessionIndex: attempt.currentSessionIndex,
+      ...this.sessionFields(attempt),
     };
 
     return response;

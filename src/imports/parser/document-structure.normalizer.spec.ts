@@ -236,9 +236,9 @@ describe('normalizeDocumentStructure', () => {
   });
 
   it('rejects structure-sample labels as solution markers', () => {
-    expect(
-      isInvalidSolutionMarker('<<<STRUCTURE_DETECTION_SAMPLE>>>'),
-    ).toBe(true);
+    expect(isInvalidSolutionMarker('<<<STRUCTURE_DETECTION_SAMPLE>>>')).toBe(
+      true,
+    );
   });
 
   it('defaults inlineFormat and keeps an existing numbering regex', () => {

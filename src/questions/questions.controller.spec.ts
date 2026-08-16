@@ -67,7 +67,9 @@ describe('QuestionsController', () => {
   });
 
   it('remove returns service message', async () => {
-    service.remove.mockResolvedValue({ message: 'Question deleted successfully' });
+    service.remove.mockResolvedValue({
+      message: 'Question deleted successfully',
+    });
     await expect(controller.remove('q1')).resolves.toEqual({
       message: 'Question deleted successfully',
     });

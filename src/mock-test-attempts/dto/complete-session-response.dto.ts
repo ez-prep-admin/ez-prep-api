@@ -26,7 +26,7 @@ export class CompleteSessionResponseDto {
 
   @ApiPropertyOptional({
     description:
-      'Present when paperCompleted is false. Resume-style payload for the newly unlocked subject.',
+      'Present when paperCompleted is false. Same shape as GET /:attemptId/resume: the **full** paper is still returned. Show only questions whose sessionOrder matches currentSessionIndex (or whose id is in sessions[current].questionIds). Timer fields apply to the newly unlocked session.',
     type: ResumeAttemptResponseDto,
   })
   nextSession?: ResumeAttemptResponseDto;

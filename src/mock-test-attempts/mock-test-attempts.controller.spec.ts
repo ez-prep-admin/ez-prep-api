@@ -58,9 +58,9 @@ describe('MockTestAttemptsController', () => {
     await expect(
       controller.resumeAttempt('a1', user as any),
     ).resolves.toMatchObject({ data: { attemptId: 'a1' } });
-    await expect(controller.getAttempt('a1', user as any)).resolves.toMatchObject(
-      { data: { attemptId: 'a1' } },
-    );
+    await expect(
+      controller.getAttempt('a1', user as any),
+    ).resolves.toMatchObject({ data: { attemptId: 'a1' } });
   });
 
   it('should call updateAnswer and complete/submit with messages', async () => {

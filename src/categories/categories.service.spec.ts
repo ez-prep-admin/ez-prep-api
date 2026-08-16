@@ -58,7 +58,9 @@ describe('CategoriesService', () => {
   describe('create', () => {
     it('creates a category', async () => {
       model.findOne.mockReturnValue(chain(null));
-      model.create.mockResolvedValue(doc({ name: 'Banking', shortName: 'BANK' }));
+      model.create.mockResolvedValue(
+        doc({ name: 'Banking', shortName: 'BANK' }),
+      );
       await expect(
         service.create({ name: 'Banking', shortName: 'BANK' } as any),
       ).resolves.toBeDefined();
@@ -100,7 +102,9 @@ describe('CategoriesService', () => {
 
     it('throws NotFoundException', async () => {
       model.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -153,13 +157,17 @@ describe('CategoriesService', () => {
 
     it('throws NotFoundException', async () => {
       model.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('findActiveCategories', () => {
     it('returns active categories', async () => {
-      model.find.mockReturnValue(chain([doc({ name: 'Banking', isActive: true })]));
+      model.find.mockReturnValue(
+        chain([doc({ name: 'Banking', isActive: true })]),
+      );
       const result = await service.findActiveCategories();
       expect(result).toHaveLength(1);
     });

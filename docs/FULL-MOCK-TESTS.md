@@ -50,7 +50,7 @@ Attempts load by attempt id + owner. They do not filter on `paperType`. Session 
 - `paperType`: `'TOPIC_WISE' | 'FULL_EXAM'`, default `'TOPIC_WISE'`.
 - `totalQuestions` / `durationInMinutes`: no 10–30 mongoose enum (FULL papers are 80–200 Q / 60–180 min). Topic-wise writers still send 10–30.
 - `subject` / `topic`: required only for `TOPIC_WISE`. Full papers omit them.
-- `subjectConfig[]` (FULL only): copy of exam subject rows + names + `questionStartIndex` / `questionEndIndex` into `questionIds`.
+- `subjectConfig[]` (FULL only): copy of exam subject rows + names + contiguous `questionStartIndex` / `questionEndIndex` **and** `questionIds` for that block.
 - `isSessionWise` (FULL only).
 - `totalMarks` (FULL only).
 - `marksPerQuestion` / `negativeMarking`: display fallback (first subject). Scoring for FULL uses per-question marks on the attempt.
@@ -74,7 +74,8 @@ Do **not** write `mocktests` until publish. Increment question usage **only on p
 ### `MockTestAttempt` / `AttemptQuestion`
 
 - `AttemptQuestion.marksPerQuestion` / `negativeMarking` — copied from `subjectConfig` at start for FULL papers. Scoring uses these when present.
-- `isSessionWise`, `sessions[]`, `currentSessionIndex` — set for session-wise FULL papers.
+- `AttemptQuestion.sessionOrder` — set when the paper has `subjectConfig` (subject-block index). Topic-wise omits it.
+- `isSessionWise`, `sessions[]` (`questionIds`, indexes, timer), `currentSessionIndex` — set for session-wise FULL papers only.
 
 ---
 
@@ -103,37 +104,43 @@ Base path: `/api/v1`.
 
 Taking the test: existing `/mock-test-attempts` (`start`, `answer`, `pause`, `resume`, `submit`). Session-wise adds `POST /mock-test-attempts/:id/sessions/complete`.
 
+Frontend contract for those APIs: `docs/MOCK-TEST-ATTEMPTS.md`.
+
 ---
 
 ## Publish pipeline
 
 1. Draft status must be `REVIEW`.
 2. Reject if any question id appears more than once (`DUPLICATE_QUESTION`, with positions). Reject if slot count ≠ `examSnapshot.totalQuestions` (`PAPER_INCOMPLETE`).
-3. Create `MockTest` with `paperType: 'FULL_EXAM'`, `exam`, `questionIds` in position order, `subjectConfig`, `isSessionWise`, `totalQuestions`, `durationInMinutes` (mixed: exam.duration; session-wise: sum of sessionTimes), `totalMarks`, title/flags from body.
-4. Increment `fullMockUsageCount` and set `lastUsedInFullMockAt` on every question id.
-5. Set draft `status: PUBLISHED`, `publishedMockTestId`.
+3. **Regroup** draft questions into contiguous exam-subject blocks and rewrite positions `0..n-1`.
+4. Create `MockTest` with `paperType: 'FULL_EXAM'`, `exam`, `questionIds` in that grouped order, `subjectConfig` (indexes **and** `questionIds` per row), `isSessionWise`, `totalQuestions`, `durationInMinutes` (mixed: exam.duration; session-wise: sum of sessionTimes), `totalMarks`, title/flags from body.
+5. Increment `fullMockUsageCount` and set `lastUsedInFullMockAt` on every question id.
+6. Set draft `status: PUBLISHED`, `publishedMockTestId`.
 
 ---
 
 ## Session semantics (attempts)
 
-**Mixed** (`isSessionWise === false`): one timer = `exam.duration`. Existing start/answer/pause/resume/submit. Questions already grouped by subject in `questionIds`.
+**Mixed** (`isSessionWise === false`): one timer = `exam.duration`. Existing start/answer/pause/resume/submit. Questions are grouped by subject in `questionIds`. Start/resume may include `sessionOrder` (subject-block index) when `subjectConfig` is present. No `sessions[]`, no complete-session.
 
 **Session-wise** (`isSessionWise === true`):
 
 - One session per `subjectConfig` row; timer = that row’s `sessionTime`.
-- Only the current session is answerable.
+- Start/resume/detail return the **full** `questions` array in locked session order, each with `sessionOrder`.
+- `sessions[]` includes frozen `questionIds` and `questionCount`. Only the current session is answerable.
 - Pause/expiry uses the **current session** timer, not the whole paper.
-- `POST .../sessions/complete` locks the current session and opens the next. Last session = final submit.
-- Session timer expiry auto-completes **that session only**; does not auto-start the next.
-- Final `submit` is allowed on the last session (or force-completes remaining sessions as unanswered).
+- `POST .../sessions/complete` locks the current session and opens the next. Last session = final submit (`paperCompleted: true`, `results`).
+- Session timer expiry auto-completes **that session only**; does not auto-start the next. Client must call complete-session.
+- Final `submit` is allowed on the last session only.
 
-Topic-wise attempts: zero behaviour change (no sessions, attempt-level marks).
+Topic-wise attempts: no sessions, no `sessionOrder`, attempt-level marks.
+
+See `docs/MOCK-TEST-ATTEMPTS.md` for the student-app flow.
 
 ---
 
 ## Student UI impact
 
 - New list call: `GET /full-mock-tests` (optional `?examId=` to filter by exam).
-- Mixed full mocks: existing take-test player (grouped questions, one timer).
-- Session-wise: student player must honour `currentSessionIndex` and call complete-session before the next subject.
+- Mixed full mocks: existing take-test player (grouped questions, one timer). Prefer `sessionOrder` / catalog `subjectConfig` for grouping; do not use Mongo return order.
+- Session-wise: honour `isSessionWise`, filter questions by `sessionOrder` / `sessions[].questionIds`, use the **session** timer, call complete-session before the next subject. Full player rules: `docs/MOCK-TEST-ATTEMPTS.md`.

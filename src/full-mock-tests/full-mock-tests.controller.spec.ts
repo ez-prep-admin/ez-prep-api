@@ -75,15 +75,9 @@ describe('FullMockTestsController', () => {
     await expect(
       controller.listPublished('e1', 1, 10, admin as any),
     ).resolves.toMatchObject({ data: page.data });
-    expect(service.listPublished).toHaveBeenCalledWith(
-      'e1',
-      1,
-      10,
-      'a1',
-      true,
+    expect(service.listPublished).toHaveBeenCalledWith('e1', 1, 10, 'a1', true);
+    await expect(controller.findOne('t1', admin as any)).resolves.toMatchObject(
+      { data: { id: 't1' } },
     );
-    await expect(
-      controller.findOne('t1', admin as any),
-    ).resolves.toMatchObject({ data: { id: 't1' } });
   });
 });

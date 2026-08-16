@@ -90,7 +90,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('EZ Prep API')
       .setDescription(
-        'EZ Prep API for topic-wise mock tests, exam-blueprint full mock tests, attempts, and related catalog (exams, subjects, topics). Full mocks are generated from an exam blueprint, reviewed as a draft, then published into the same mocktests collection as paperType FULL_EXAM. Topic-wise lists never include full-exam papers.',
+        'EZ Prep API. Topic-wise papers: /mock-tests. Full-exam papers: /full-mock-tests (admin draft → publish). Students take both via /mock-test-attempts. Session-wise full exams: one subject timer at a time; filter questions by sessionOrder / sessions[].questionIds; POST .../sessions/complete before the next subject. GET .../resume unpauses a paused attempt.',
       )
       .setVersion('1.0.0')
       .addTag('health', 'Health check endpoints')
@@ -98,15 +98,15 @@ async function bootstrap() {
       .addTag('auth', 'Authentication endpoints')
       .addTag(
         'mock-tests',
-        'Topic-wise mock tests (paperType TOPIC_WISE). Does not return full-exam papers.',
+        'Topic-wise papers only (paperType TOPIC_WISE). Full-exam papers are never returned here — use full-mock-tests. Start an attempt with POST /mock-test-attempts/start.',
       )
       .addTag(
         'full-mock-tests',
-        'Exam-blueprint full mock tests: admin generate/review/publish, student list by exam.',
+        'Exam-blueprint papers (paperType FULL_EXAM). Admin: generate draft, replace questions, publish. Student: list/get published papers, then take them via mock-test-attempts (same start/answer/submit as topic-wise; session-wise adds sessions/complete).',
       )
       .addTag(
         'mock-test-attempts',
-        'Start, answer, pause/resume, submit attempts. Also session-wise complete for full exams.',
+        'Student take-test APIs for both topic-wise and full-exam papers. Branch on mockTestData.isSessionWise. Session-wise: show one subject at a time using sessionOrder / sessions[].questionIds; complete a session before the next. GET .../resume unpauses if PAUSED.',
       )
       .addTag('imports', 'Question paper import endpoints')
       .addTag(

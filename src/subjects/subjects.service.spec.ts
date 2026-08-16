@@ -82,7 +82,11 @@ describe('SubjectsService', () => {
       topicModel.find.mockReturnValue(chain([{ _id: OID }]));
       const created = subjectDoc({
         name: 'QA',
-        topics: [{ _id: { toString: () => OID }, name: 'Ratio' }, OID2, 'plain'],
+        topics: [
+          { _id: { toString: () => OID }, name: 'Ratio' },
+          OID2,
+          'plain',
+        ],
       });
       created.topics.push(new Types.ObjectId(OID));
       subjectModel.create.mockResolvedValue(created);
@@ -120,15 +124,15 @@ describe('SubjectsService', () => {
 
   describe('findOne', () => {
     it('returns a subject', async () => {
-      subjectModel.findById.mockReturnValue(
-        chain(subjectDoc({ name: 'QA' })),
-      );
+      subjectModel.findById.mockReturnValue(chain(subjectDoc({ name: 'QA' })));
       await expect(service.findOne(OID)).resolves.toBeDefined();
     });
 
     it('throws NotFoundException', async () => {
       subjectModel.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -176,7 +180,9 @@ describe('SubjectsService', () => {
 
     it('throws NotFoundException', async () => {
       subjectModel.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

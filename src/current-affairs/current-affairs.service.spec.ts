@@ -319,9 +319,9 @@ describe('CurrentAffairsService', () => {
   describe('update', () => {
     it('throws when the item does not exist', async () => {
       model.findById.mockReturnValue(chain(null));
-      await expect(
-        service.update('missing', { title: 'x' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('missing', { title: 'x' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('updates scalar fields without moving the date', async () => {
@@ -453,9 +453,9 @@ describe('CurrentAffairsService', () => {
       model.findById.mockReturnValue(chain(doc()));
       model.findByIdAndUpdate.mockReturnValue(chain(null));
 
-      await expect(
-        service.update('ca1', { title: 'Gone' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('ca1', { title: 'Gone' })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

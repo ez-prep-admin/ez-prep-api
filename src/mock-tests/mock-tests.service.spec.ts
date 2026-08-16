@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { MockTestsService } from './mock-tests.service';
 import { MockTest } from './schemas/mock-test.schema';
 import { Topic } from '../topics/schemas/topic.schema';
@@ -432,7 +429,11 @@ describe('MockTestsService', () => {
       mockTestModel.findOneAndUpdate.mockReturnValue(chainable(existing));
       mockTestModel.findOne.mockReturnValue(chainable(existing));
 
-      await service.updateTopicWise(TEST_ID, { ...dto, topic: undefined }, USER_ID);
+      await service.updateTopicWise(
+        TEST_ID,
+        { ...dto, topic: undefined },
+        USER_ID,
+      );
 
       expect(questionModel.aggregate).toHaveBeenCalled();
     });

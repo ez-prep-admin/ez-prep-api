@@ -60,7 +60,9 @@ describe('TopicsService', () => {
     it('creates a topic', async () => {
       model.findOne.mockReturnValue(chain(null));
       model.create.mockResolvedValue(topicDoc({ name: 'Ratio' }));
-      await expect(service.create({ name: 'Ratio' } as any)).resolves.toBeDefined();
+      await expect(
+        service.create({ name: 'Ratio' } as any),
+      ).resolves.toBeDefined();
     });
 
     it('throws ConflictException', async () => {
@@ -86,7 +88,9 @@ describe('TopicsService', () => {
 
     it('throws NotFoundException', async () => {
       model.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -96,7 +100,9 @@ describe('TopicsService', () => {
       model.findByIdAndUpdate.mockReturnValue(
         chain(topicDoc({ name: 'Updated' })),
       );
-      await expect(service.update(OID, { name: 'Updated' })).resolves.toBeDefined();
+      await expect(
+        service.update(OID, { name: 'Updated' }),
+      ).resolves.toBeDefined();
     });
 
     it('throws ConflictException', async () => {
@@ -124,7 +130,9 @@ describe('TopicsService', () => {
 
     it('throws NotFoundException', async () => {
       model.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

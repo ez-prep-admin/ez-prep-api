@@ -190,7 +190,9 @@ describe('ExamsService', () => {
 
     it('throws NotFoundException', async () => {
       examModel.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -207,9 +209,7 @@ describe('ExamsService', () => {
     it('updates an exam', async () => {
       categoryModel.findById.mockReturnValue(chain({ _id: OID }));
       examGroupModel.findById.mockReturnValue(chain({ _id: OID2 }));
-      examModel.findById.mockReturnValue(
-        chain({ name: 'Old', category: OID }),
-      );
+      examModel.findById.mockReturnValue(chain({ name: 'Old', category: OID }));
       examModel.findOne.mockReturnValue(chain(null));
       examModel.findByIdAndUpdate.mockReturnValue(
         chain(examDoc({ name: 'New' })),
@@ -247,9 +247,7 @@ describe('ExamsService', () => {
     });
 
     it('throws ConflictException on duplicate', async () => {
-      examModel.findById.mockReturnValue(
-        chain({ name: 'Old', category: OID }),
-      );
+      examModel.findById.mockReturnValue(chain({ name: 'Old', category: OID }));
       examModel.findOne.mockReturnValue(chain({ name: 'New' }));
       await expect(service.update(OID, { name: 'New' } as any)).rejects.toThrow(
         ConflictException,
@@ -274,7 +272,9 @@ describe('ExamsService', () => {
 
     it('throws NotFoundException', async () => {
       examModel.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

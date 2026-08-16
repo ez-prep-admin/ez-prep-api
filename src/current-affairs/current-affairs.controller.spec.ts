@@ -78,13 +78,7 @@ describe('CurrentAffairsController', () => {
 
   it('findAll includes the date in the message when filtered', async () => {
     service.findAll.mockResolvedValue({ data: [item], pagination });
-    const result = await controller.findAll(
-      1,
-      100,
-      '2026-08-14',
-      'ISRO',
-      true,
-    );
+    const result = await controller.findAll(1, 100, '2026-08-14', 'ISRO', true);
     expect(service.findAll).toHaveBeenCalledWith(
       1,
       100,

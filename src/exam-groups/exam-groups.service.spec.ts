@@ -96,7 +96,9 @@ describe('ExamGroupsService', () => {
 
     it('throws NotFoundException', async () => {
       model.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -114,7 +116,9 @@ describe('ExamGroupsService', () => {
       model.findByIdAndUpdate.mockReturnValue(
         chain(groupDoc({ name: 'Updated' })),
       );
-      await expect(service.update(OID, { name: 'Updated' })).resolves.toBeDefined();
+      await expect(
+        service.update(OID, { name: 'Updated' }),
+      ).resolves.toBeDefined();
     });
 
     it('throws ConflictException', async () => {
@@ -142,13 +146,17 @@ describe('ExamGroupsService', () => {
 
     it('throws NotFoundException', async () => {
       model.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('findActiveExamGroups', () => {
     it('returns active groups', async () => {
-      model.find.mockReturnValue(chain([groupDoc({ name: 'CGL', isActive: true })]));
+      model.find.mockReturnValue(
+        chain([groupDoc({ name: 'CGL', isActive: true })]),
+      );
       const result = await service.findActiveExamGroups();
       expect(result).toHaveLength(1);
     });

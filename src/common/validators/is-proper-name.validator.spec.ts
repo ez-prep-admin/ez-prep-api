@@ -38,9 +38,9 @@ describe('IsProperNameConstraint', () => {
   });
 
   it('should provide a default message', () => {
-    expect(constraint.defaultMessage({ value: 'bad!' } as ValidationArguments)).toContain(
-      "Name 'bad!' is not valid",
-    );
+    expect(
+      constraint.defaultMessage({ value: 'bad!' } as ValidationArguments),
+    ).toContain("Name 'bad!' is not valid");
   });
 
   it('should register the decorator', () => {

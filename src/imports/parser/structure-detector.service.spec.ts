@@ -177,7 +177,9 @@ describe('StructureDetectorService', () => {
   it('throws when choices have no message content', async () => {
     mockCreate.mockResolvedValue({ choices: [{}] });
     const service = buildService();
-    await expect(service.detectStructure('md')).rejects.toThrow(/empty response/);
+    await expect(service.detectStructure('md')).rejects.toThrow(
+      /empty response/,
+    );
   });
 
   it('normalizes labeled / mixed / end-of-page / marker / page-break aliases', async () => {
@@ -255,7 +257,9 @@ describe('StructureDetectorService', () => {
       choices: [{ message: { content: '' } }],
     });
     const service = buildService();
-    await expect(service.detectStructure('md')).rejects.toThrow(/empty response/);
+    await expect(service.detectStructure('md')).rejects.toThrow(
+      /empty response/,
+    );
   });
 
   it('throws on invalid JSON', async () => {

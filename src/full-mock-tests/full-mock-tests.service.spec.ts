@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { FullMockTestsService } from './full-mock-tests.service';
 import { Exam } from '../exams/schemas/exam.schema';
@@ -304,9 +301,9 @@ describe('FullMockTestsService', () => {
       await service.createDraft({ examId: EXAM_ID }, USER_ID);
 
       const stored = draftModel.create.mock.calls[0][0].questions;
-      expect(stored.map((q: { question: Types.ObjectId }) => q.question.toString())).toEqual(
-        [Q1, Q2],
-      );
+      expect(
+        stored.map((q: { question: Types.ObjectId }) => q.question.toString()),
+      ).toEqual([Q1, Q2]);
       expect(stored[0].position).toBe(0);
       expect(stored[1].position).toBe(1);
     });
@@ -330,15 +327,17 @@ describe('FullMockTestsService', () => {
       draftModel.findById.mockReturnValue(
         chainable(makeDraft({ status: 'DISCARDED' })),
       );
-      await expect(service.getDraft(DRAFT_ID)).rejects.toThrow(NotFoundException);
+      await expect(service.getDraft(DRAFT_ID)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('searchQuestions', () => {
     it('should validate ids', async () => {
-      await expect(
-        service.searchQuestions({ subjectId: 'x' }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.searchQuestions({ subjectId: 'x' })).rejects.toThrow(
+        BadRequestException,
+      );
       await expect(
         service.searchQuestions({ subjectId: SUB_ID, topicId: 'x' }),
       ).rejects.toThrow(BadRequestException);
@@ -371,9 +370,9 @@ describe('FullMockTestsService', () => {
       );
 
       draftModel.findById.mockReturnValue(chainable(makeDraft()));
-      await expect(
-        service.replaceQuestion(DRAFT_ID, 9, Q2),
-      ).rejects.toThrow(/No question at position/);
+      await expect(service.replaceQuestion(DRAFT_ID, 9, Q2)).rejects.toThrow(
+        /No question at position/,
+      );
     });
 
     it('should reject ineligible, mismatched, and duplicate questions', async () => {
@@ -450,9 +449,9 @@ describe('FullMockTestsService', () => {
 
   describe('publishDraft', () => {
     it('should reject invalid ids and non-review drafts', async () => {
-      await expect(
-        service.publishDraft('bad', {}, USER_ID),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.publishDraft('bad', {}, USER_ID)).rejects.toThrow(
+        BadRequestException,
+      );
       draftModel.findOneAndUpdate.mockResolvedValue(null);
       await expect(service.publishDraft(DRAFT_ID, {}, USER_ID)).rejects.toThrow(
         BadRequestException,
@@ -561,9 +560,9 @@ describe('FullMockTestsService', () => {
       await service.publishDraft(DRAFT_ID, { title: 'Paper 1' }, USER_ID);
 
       const payload = mockTestModel.create.mock.calls[0][0];
-      expect(payload.questionIds.map((id: Types.ObjectId) => id.toString())).toEqual(
-        [Q1, Q2],
-      );
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([Q1, Q2]);
       expect(payload.subjectConfig[0].questionStartIndex).toBe(0);
       expect(payload.subjectConfig[0].questionEndIndex).toBe(0);
       expect(payload.subjectConfig[1].questionStartIndex).toBe(1);
@@ -589,7 +588,10 @@ describe('FullMockTestsService', () => {
           topic: { value: plain.topic, enumerable: false },
           difficultyLevel: { value: plain.difficultyLevel, enumerable: false },
           position: { value: plain.position, enumerable: false },
-          marksPerQuestion: { value: plain.marksPerQuestion, enumerable: false },
+          marksPerQuestion: {
+            value: plain.marksPerQuestion,
+            enumerable: false,
+          },
           negativeMarking: { value: plain.negativeMarking, enumerable: false },
         });
         return doc;
@@ -618,9 +620,9 @@ describe('FullMockTestsService', () => {
       const result = await service.publishDraft(DRAFT_ID, {}, USER_ID);
       expect(result.mockTestId).toBe(TEST_ID);
       const payload = mockTestModel.create.mock.calls[0][0];
-      expect(payload.questionIds.map((id: Types.ObjectId) => id.toString())).toEqual(
-        [Q1],
-      );
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([Q1]);
     });
 
     it('should reject ineligible questions', async () => {
@@ -705,11 +707,20 @@ describe('FullMockTestsService', () => {
       mockTestModel.find.mockReturnValue(chainable([published]));
       mockTestsService.getUserAttemptActions.mockResolvedValue(
         new Map([
-          [TEST_ID, { action: UserAttemptAction.RESUME, resumeAttemptId: 'a1' }],
+          [
+            TEST_ID,
+            { action: UserAttemptAction.RESUME, resumeAttemptId: 'a1' },
+          ],
         ]),
       );
 
-      const result = await service.listPublished(EXAM_ID, 1, 10, USER_ID, false);
+      const result = await service.listPublished(
+        EXAM_ID,
+        1,
+        10,
+        USER_ID,
+        false,
+      );
       expect(result.data[0].userAttemptAction).toBe(UserAttemptAction.RESUME);
     });
 
