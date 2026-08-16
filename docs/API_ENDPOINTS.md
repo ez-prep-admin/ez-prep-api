@@ -104,6 +104,22 @@ All endpoints return responses in the following format:
 }
 ```
 
+## Admin Dashboard (Admin JWT required)
+
+Base path: `/admin/dashboard`
+
+- **GET** `/admin/dashboard` — summary counts for all dashboard cards
+- **GET** `/admin/dashboard/users` — non-admin learners (active/inactive, last 7/30 days, plan)
+- **GET** `/admin/dashboard/questions` — active questions by subject/topic and difficulty
+- **GET** `/admin/dashboard/failed-questions` — counts by failure stage and draft subject
+- **GET** `/admin/dashboard/mock-tests` — topic-wise papers grouped by exam
+- **GET** `/admin/dashboard/full-mock-tests` — published full-exam papers by exam; draft status counts
+- **GET** `/admin/dashboard/attempts` — attempts by exam (unique users, time consumed in seconds, allotted minutes, SUBMITTED/EXPIRED/in-progress)
+- **GET** `/admin/dashboard/exams` — active/inactive exams by category
+- **GET** `/admin/dashboard/subjects` — subjects with topic counts
+- **GET** `/admin/dashboard/topics` — topics grouped by subject
+- **GET** `/admin/dashboard/tags` — tags grouped by subject
+
 ## Sample Test Data
 The application includes sample users:
 - Admin: `admin@ezprep.com` (Admin role)
