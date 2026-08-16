@@ -8,6 +8,7 @@ import {
 } from './schemas/mock-test-attempt.schema';
 import { Question, QuestionSchema } from './schemas/question.schema';
 import { MockTestsModule } from '../mock-tests/mock-tests.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { MockTestsModule } from '../mock-tests/mock-tests.module';
       { name: Question.name, schema: QuestionSchema },
     ]),
     MockTestsModule, // Import to access MockTest model
+    AnalyticsModule, // Import to drop cached analytics when an attempt closes
   ],
   controllers: [MockTestAttemptsController],
   providers: [MockTestAttemptsService],

@@ -39,7 +39,17 @@ describe('AnalyticsController', () => {
       pagination: { total: 0 },
       currentUserRank: { rank: null },
     });
-    analyticsService.getRecentActivity.mockResolvedValue([]);
+    analyticsService.getRecentActivity.mockResolvedValue({
+      data: [],
+      pagination: {
+        total: 0,
+        page: 1,
+        limit: 10,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+    });
     analyticsService.getSubjectTopicBreakdown.mockResolvedValue({
       subjects: [],
     });
@@ -53,7 +63,7 @@ describe('AnalyticsController', () => {
       controller.getLeaderboard(user as any, 1, 10, 'e1', 's1'),
     ).resolves.toMatchObject({ currentUserRank: { rank: null } });
     await expect(
-      controller.getRecentActivity(user as any, 5),
+      controller.getRecentActivity(user as any, 1, 5),
     ).resolves.toMatchObject({ data: [] });
     await expect(
       controller.getSubjectTopicBreakdown(user as any),

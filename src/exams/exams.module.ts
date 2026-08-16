@@ -5,10 +5,14 @@ import { ExamsController } from './exams.controller';
 import { Exam, ExamSchema } from './schemas/exam.schema';
 import { CategoriesModule } from '../categories/categories.module';
 import { ExamGroupsModule } from '../exam-groups/exam-groups.module';
+import { Subject, SubjectSchema } from '../subjects/schemas/subject.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Exam.name, schema: ExamSchema }]),
+    MongooseModule.forFeature([
+      { name: Exam.name, schema: ExamSchema },
+      { name: Subject.name, schema: SubjectSchema },
+    ]),
     CategoriesModule, // Import to access Category model
     ExamGroupsModule, // Import to access ExamGroup model
   ],

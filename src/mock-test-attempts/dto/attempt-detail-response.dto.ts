@@ -153,6 +153,12 @@ export class AttemptDetailResponseDto {
   timeRemaining?: number;
 
   @ApiPropertyOptional({
+    description:
+      'Total time spent on the paper in seconds, summed across sections for session-wise papers (only for submitted or expired attempts)',
+  })
+  timeTaken?: number;
+
+  @ApiPropertyOptional({
     description: 'Final score (only for submitted attempts)',
   })
   score?: number;

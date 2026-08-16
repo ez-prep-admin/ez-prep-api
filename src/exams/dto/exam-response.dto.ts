@@ -8,6 +8,13 @@ export class ExamSubjectResponseDto {
   @Expose()
   subject: string;
 
+  @ApiPropertyOptional({
+    description: 'Subject display name (populated on GET by ID)',
+    example: 'Quantitative Aptitude',
+  })
+  @Expose()
+  name?: string;
+
   @ApiProperty({ description: 'Number of questions', example: 25 })
   @Expose()
   numberOfQuestions: number;

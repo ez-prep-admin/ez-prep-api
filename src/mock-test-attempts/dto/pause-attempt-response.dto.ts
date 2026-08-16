@@ -41,13 +41,22 @@ export class PauseAttemptResponseDto {
   status: string;
 
   @ApiProperty({
-    description: 'Time consumed so far (in seconds)',
+    description:
+      'Time consumed on the running timer (in seconds). For session-wise papers this is the current section only.',
     example: 450,
   })
   timeConsumed: number;
 
   @ApiProperty({
-    description: 'Time remaining (in seconds)',
+    description:
+      'Time consumed on the whole paper (in seconds), summed across sections for session-wise papers',
+    example: 450,
+  })
+  totalTimeConsumed: number;
+
+  @ApiProperty({
+    description:
+      'Time remaining on the running timer (in seconds). For session-wise papers this is the current section only.',
     example: 1350,
   })
   timeRemaining: number;

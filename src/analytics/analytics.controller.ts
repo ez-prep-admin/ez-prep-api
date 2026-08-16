@@ -121,13 +121,20 @@ export class AnalyticsController {
   @ApiOperation({
     summary: 'Get recent test activity',
     description:
-      'Returns the most recent completed test attempts for the authenticated user with detailed scores, marks breakdown (correct/incorrect/unanswered), time consumed, and populated subject/exam/topic details (including descriptions).',
+      'Returns paginated completed test attempts for the authenticated user with detailed scores, marks breakdown (correct/incorrect/unanswered), time consumed, and populated subject/exam/topic details (including descriptions).',
+  })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+    example: 1,
   })
   @ApiQuery({
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Number of recent activities to return (default: 10, max: 20)',
+    description: 'Items per page (default: 10, max: 20)',
     example: 10,
   })
   @ApiResponse({
@@ -138,10 +145,23 @@ export class AnalyticsController {
   })
   async getRecentActivity(
     @GetUser() user: UserResponseDto,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
-  ): Promise<{ message: string; data: RecentActivityItemDto[] }> {
-    const data = await this.analyticsService.getRecentActivity(user.id, limit);
-    return { message: 'Recent activity retrieved successfully', data };
+  ): Promise<{
+    message: string;
+    data: RecentActivityItemDto[];
+    pagination: PaginationMetaDto;
+  }> {
+    const result = await this.analyticsService.getRecentActivity(
+      user.id,
+      page,
+      limit,
+    );
+    return {
+      message: 'Recent activity retrieved successfully',
+      data: result.data,
+      pagination: result.pagination,
+    };
   }
 
   @Get('subject-topic-breakdown')

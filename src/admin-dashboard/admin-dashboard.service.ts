@@ -24,6 +24,7 @@ import {
   MockTestAttempt,
   MockTestAttemptDocument,
 } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
+import { EFFECTIVE_TIME_CONSUMED_EXPR } from '../common/aggregations/attempt-time.aggregation';
 import { Exam, ExamDocument } from '../exams/schemas/exam.schema';
 import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
 import { Topic, TopicDocument } from '../topics/schemas/topic.schema';
@@ -300,7 +301,7 @@ export class AdminDashboardService {
             },
           },
           uniqueUsers: { $addToSet: '$user' },
-          timeConsumedSeconds: { $sum: { $ifNull: ['$timeConsumed', 0] } },
+          timeConsumedSeconds: { $sum: EFFECTIVE_TIME_CONSUMED_EXPR },
         },
       },
     ]);
@@ -322,7 +323,7 @@ export class AdminDashboardService {
               $cond: [{ $in: ['$status', IN_PROGRESS_STATUSES] }, 1, 0],
             },
           },
-          timeConsumedSeconds: { $sum: { $ifNull: ['$timeConsumed', 0] } },
+          timeConsumedSeconds: { $sum: EFFECTIVE_TIME_CONSUMED_EXPR },
           allottedMinutes: { $sum: { $ifNull: ['$durationInMinutes', 0] } },
         },
       },

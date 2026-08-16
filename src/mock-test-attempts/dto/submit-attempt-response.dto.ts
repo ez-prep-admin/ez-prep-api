@@ -127,7 +127,8 @@ export class SubmitAttemptResponseDto {
   submittedAt: Date;
 
   @ApiProperty({
-    description: 'Time taken in seconds',
+    description:
+      'Time spent on the paper in seconds, summed across sections for session-wise papers and excluding paused time',
     example: 1500,
   })
   timeTaken: number;

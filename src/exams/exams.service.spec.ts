@@ -285,7 +285,9 @@ describe('ExamsService', () => {
           name: 'Mapped',
           category: { id: OID },
           examGroup: { _id: { toString: () => OID2 } },
-          subjects: [{ subject: { id: OID }, numberOfQuestions: 1 }],
+          subjects: [
+            { subject: { id: OID, name: 'Quantitative Aptitude' }, numberOfQuestions: 1 },
+          ],
         }),
       ),
     );
@@ -293,6 +295,7 @@ describe('ExamsService', () => {
     expect(result.category).toBe(OID);
     expect(result.examGroup).toBe(OID2);
     expect(result.subjects[0].subject).toBe(OID);
+    expect(result.subjects[0].name).toBe('Quantitative Aptitude');
   });
 
   it('stringifies leftover subject refs', async () => {

@@ -63,6 +63,13 @@ Body: `{ questionId, selectedOptionId }`. **204**.
 
 Session-wise: pauses the **current session** timer. Answers are kept. Cannot answer until resume.
 
+- `timeConsumed` / `timeRemaining` describe the **running timer** — the current section on session-wise papers
+- `totalTimeConsumed` is the whole paper, summed across sections
+- Time spent paused is never charged, and pausing repeatedly does not inflate the total
+- Refused with 400 when fewer than 10 seconds remain — submit or complete-session instead
+
+After pausing, drop any locally cached attempt payload: the client clock is stale and `GET /:id` is the source of truth on the next load.
+
 ---
 
 ## Resume — `GET /:attemptId/resume`
@@ -108,9 +115,11 @@ If session-wise and not on the last session: 400 — use complete-session.
 
 ## Detail / results — `GET /:id`
 
-Completed papers: score, pass/fail, keys only if `showResultsImmediately`.
+Completed papers: score, pass/fail, `timeTaken` (seconds spent on the paper — all sections, paused time excluded), keys only if `showResultsImmediately`.
 
-In-progress: same grouping fields as resume (`isSessionWise`, `sessions`, `sessionOrder` on questions). Prefer resume for taking the test (resume unpauses).
+In-progress: same grouping fields as resume (`isSessionWise`, `sessions`, `sessionOrder` on questions) plus `timeElapsed` / `timeRemaining`.
+
+This route is read-only, so use it on page load to learn the true `status` and remaining time — a `PAUSED` attempt stays paused. Call resume only when the student actually resumes.
 
 ---
 
