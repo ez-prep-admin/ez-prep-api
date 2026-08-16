@@ -37,6 +37,20 @@ export class AttemptSessionDto {
   })
   endIndex: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Frozen question IDs in this session, in display order. Prefer this over startIndex/endIndex.',
+    type: [String],
+    example: ['64f123456789abcdef123456'],
+  })
+  questionIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Number of questions in this session (questionIds.length)',
+    example: 25,
+  })
+  questionCount?: number;
+
   @ApiProperty({
     description:
       'LOCKED = not yet unlocked. IN_PROGRESS = current. PAUSED with the attempt. SUBMITTED/EXPIRED = finished.',

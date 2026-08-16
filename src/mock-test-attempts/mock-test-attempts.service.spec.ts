@@ -249,7 +249,11 @@ describe('MockTestAttemptsService', () => {
 
       expect(result.attemptId).toBe(ATTEMPT_ID);
       expect(result.questions).toHaveLength(2);
+      expect(result.questions.every(q => q.sessionOrder == null)).toBe(true);
       expect(attemptModel.create).toHaveBeenCalled();
+      const created = attemptModel.create.mock.calls[0][0];
+      expect(created.sessions).toBeUndefined();
+      expect(created.questions[0].sessionOrder).toBeUndefined();
     });
 
     it('should start a session-wise full exam with per-question marks', async () => {
@@ -303,6 +307,67 @@ describe('MockTestAttemptsService', () => {
 
       const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
       expect(result.mockTestData.isSessionWise).toBe(true);
+    });
+
+    it('should freeze session membership and return questions in locked session order', async () => {
+      const sub2 = '507f1f77bcf86cd799439019';
+      const test = makeTest({
+        isSessionWise: true,
+        questionIds: [new Types.ObjectId(Q1), new Types.ObjectId(Q2)],
+        subjectConfig: [
+          {
+            subject: new Types.ObjectId(SUB_ID),
+            name: 'Physics',
+            questionStartIndex: 0,
+            questionEndIndex: 0,
+            questionIds: [new Types.ObjectId(Q1)],
+            marksPerQuestion: 2,
+            hasNegativeMarking: true,
+            negativeMarksPerQuestion: 0.5,
+            sessionTime: 20,
+          },
+          {
+            subject: new Types.ObjectId(sub2),
+            name: 'Chem',
+            questionStartIndex: 1,
+            questionEndIndex: 1,
+            questionIds: [new Types.ObjectId(Q2)],
+            marksPerQuestion: 1,
+            hasNegativeMarking: false,
+            negativeMarksPerQuestion: 0,
+            sessionTime: 20,
+          },
+        ],
+      });
+      mockTestModel.findById.mockReturnValue(chainable(test));
+      attemptModel.findOne.mockReturnValue(chainable(null));
+      attemptModel.create.mockImplementation(async (doc: any) =>
+        makeAttempt({
+          isSessionWise: true,
+          currentSessionIndex: 0,
+          questions: doc.questions,
+          sessions: doc.sessions,
+        }),
+      );
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q2, 'b'), questionDoc(Q1)]),
+      );
+      imageUrlResolver.resolveMany.mockResolvedValue(Array(6).fill(null));
+
+      const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+
+      const created = attemptModel.create.mock.calls[0][0];
+      expect(created.questions[0].sessionOrder).toBe(0);
+      expect(created.questions[1].sessionOrder).toBe(1);
+      expect(created.sessions[0].questionIds.map(String)).toEqual([Q1]);
+      expect(created.sessions[1].questionIds.map(String)).toEqual([Q2]);
+
+      expect(result.questions.map(q => q._id)).toEqual([Q1, Q2]);
+      expect(result.questions[0].sessionOrder).toBe(0);
+      expect(result.questions[1].sessionOrder).toBe(1);
+      expect(result.mockTestData.sessions?.[0].questionIds).toEqual([Q1]);
+      expect(result.mockTestData.sessions?.[0].questionCount).toBe(1);
+      expect(result.mockTestData.sessions?.[1].questionCount).toBe(1);
     });
 
     it('should expire abandoned in-progress attempts then start a new one', async () => {
@@ -657,6 +722,45 @@ describe('MockTestAttemptsService', () => {
             timeConsumed: 0,
             startIndex: 0,
             endIndex: 0,
+            name: 'P',
+            order: 0,
+            subject: SUB_ID,
+          },
+        ],
+      });
+      attemptModel.findOne.mockReturnValue(chainable(sessionAttempt));
+      await expect(
+        service.updateAnswer(ATTEMPT_ID, USER_ID, {
+          questionId: Q2,
+          selectedOptionId: 'a',
+        }),
+      ).rejects.toThrow(/current session/);
+    });
+
+    it('should reject answers using frozen session questionIds even if indexes overlap', async () => {
+      const sessionAttempt = makeAttempt({
+        isSessionWise: true,
+        questions: [
+          {
+            question: { toString: () => Q1 },
+            selectedOption: null,
+            sessionOrder: 0,
+          },
+          {
+            question: { toString: () => Q2 },
+            selectedOption: null,
+            sessionOrder: 1,
+          },
+        ],
+        sessions: [
+          {
+            status: 'IN_PROGRESS',
+            durationInMinutes: 20,
+            startedAt: new Date(),
+            timeConsumed: 0,
+            startIndex: 0,
+            endIndex: 1,
+            questionIds: [new Types.ObjectId(Q1)],
             name: 'P',
             order: 0,
             subject: SUB_ID,

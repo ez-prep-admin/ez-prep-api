@@ -44,6 +44,12 @@ export class FullMockSubjectConfigDto {
     example: 24,
   })
   questionEndIndex: number;
+
+  @ApiPropertyOptional({
+    description: 'Question IDs in this subject block, in paper order',
+    type: [String],
+  })
+  questionIds?: string[];
 }
 
 export class FullMockTestListItemDto {
