@@ -27,9 +27,7 @@ function pendingImage(url: string) {
   };
 }
 
-function makeQuestion(
-  overrides: Partial<ImportQuestion> = {},
-): ImportQuestion {
+function makeQuestion(overrides: Partial<ImportQuestion> = {}): ImportQuestion {
   return {
     questionText: {
       en: { text: 'Stem', image: null },
@@ -121,7 +119,11 @@ describe('ImportImageStorageService', () => {
       questionText: {
         en: {
           text: 'Stem',
-          image: { key: 'x', bucket: MATHPIX_PENDING_BUCKET, region: 'external' },
+          image: {
+            key: 'x',
+            bucket: MATHPIX_PENDING_BUCKET,
+            region: 'external',
+          },
         },
         ml: { text: null, image: null },
       },

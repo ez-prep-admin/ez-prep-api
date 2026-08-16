@@ -54,7 +54,9 @@ describe('TagsController', () => {
 
   it('findOne wraps data', async () => {
     service.findOne.mockResolvedValue(tag);
-    await expect(controller.findOne('t1')).resolves.toMatchObject({ data: tag });
+    await expect(controller.findOne('t1')).resolves.toMatchObject({
+      data: tag,
+    });
   });
 
   it('update wraps data', async () => {

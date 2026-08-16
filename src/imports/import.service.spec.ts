@@ -10,8 +10,14 @@ import { ImportService } from './import.service';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
 import { AdaptiveParserStrategy } from './parser/strategies/adaptive-parser.strategy';
 import { DeepseekService } from './llm/deepseek.service';
-import { AiOutputValidator, AiOutputValidationError } from './validators/ai-output.validator';
-import { BusinessValidator, BusinessValidationError } from './validators/business.validator';
+import {
+  AiOutputValidator,
+  AiOutputValidationError,
+} from './validators/ai-output.validator';
+import {
+  BusinessValidator,
+  BusinessValidationError,
+} from './validators/business.validator';
 import { QuestionMapper } from './mapper/question.mapper';
 import { QuestionChunkerService } from './chunking/question-chunker.service';
 import {
@@ -169,9 +175,11 @@ describe('ImportService', () => {
     questionUploadModel.updateOne = jest.fn().mockResolvedValue({});
     questionUploadModel.countDocuments = jest.fn().mockResolvedValue(0);
     subjectModel.findById.mockReturnValue(subjectQuery());
-    questionChunker.chunkByTokenLimit.mockImplementation((questions: MatchedQuestion[]) => [
-      { chunkIndex: 0, questions, estimatedTokens: 50 },
-    ]);
+    questionChunker.chunkByTokenLimit.mockImplementation(
+      (questions: MatchedQuestion[]) => [
+        { chunkIndex: 0, questions, estimatedTokens: 50 },
+      ],
+    );
     questionChunker.chunk.mockImplementation((questions: MatchedQuestion[]) => [
       { chunkIndex: 0, questions, estimatedTokens: 50 },
     ]);
@@ -214,13 +222,22 @@ describe('ImportService', () => {
         { provide: BusinessValidator, useValue: businessValidator },
         { provide: QuestionMapper, useValue: questionMapper },
         { provide: QuestionChunkerService, useValue: questionChunker },
-        { provide: PersistQuestionValidator, useValue: persistQuestionValidator },
-        { provide: QuestionPersistenceService, useValue: questionPersistenceService },
+        {
+          provide: PersistQuestionValidator,
+          useValue: persistQuestionValidator,
+        },
+        {
+          provide: QuestionPersistenceService,
+          useValue: questionPersistenceService,
+        },
         { provide: FailedQuestionService, useValue: failedQuestionService },
         { provide: ImportImageStorageService, useValue: importImageStorage },
         { provide: S3Service, useValue: s3Service },
         { provide: MathpixService, useValue: mathpixService },
-        { provide: getModelToken(QuestionUpload.name), useValue: questionUploadModel },
+        {
+          provide: getModelToken(QuestionUpload.name),
+          useValue: questionUploadModel,
+        },
         { provide: getModelToken(Subject.name), useValue: subjectModel },
       ],
     }).compile();
@@ -616,9 +633,11 @@ describe('ImportService', () => {
     it('getFailedQuestion, deleteFailedQuestion, and importFailedQuestion', async () => {
       failedQuestionService.findByIdOrThrow.mockResolvedValue(failedDoc);
       questionUploadModel.findById.mockResolvedValue(makeUpload());
-      await expect(service.getFailedQuestion(FAILED_ID)).resolves.toMatchObject({
-        questionNumber: 1,
-      });
+      await expect(service.getFailedQuestion(FAILED_ID)).resolves.toMatchObject(
+        {
+          questionNumber: 1,
+        },
+      );
 
       failedQuestionService.deleteByIdOrThrow.mockResolvedValue(failedDoc);
       await expect(service.deleteFailedQuestion(FAILED_ID)).resolves.toEqual({
@@ -653,7 +672,10 @@ describe('ImportService', () => {
     it('uploadQuestionPdf rejects empty files and uploads to S3', async () => {
       await expect(
         service.uploadQuestionPdf(
-          { buffer: Buffer.alloc(0), originalname: 'a.pdf' } as Express.Multer.File,
+          {
+            buffer: Buffer.alloc(0),
+            originalname: 'a.pdf',
+          } as Express.Multer.File,
           {},
         ),
       ).rejects.toThrow(/empty/);
@@ -676,20 +698,26 @@ describe('ImportService', () => {
         mimetype: 'application/pdf',
       } as Express.Multer.File;
 
-      const result = await service.uploadQuestionPdf(file, {
-        title: 'NEET',
-        subjectId: SUBJECT_ID,
-        topicId: TOPIC_ID,
-        examIds: [SUBJECT_ID],
-        metadata: { year: '2024' },
-      }, SUBJECT_ID);
+      const result = await service.uploadQuestionPdf(
+        file,
+        {
+          title: 'NEET',
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          metadata: { year: '2024' },
+        },
+        SUBJECT_ID,
+      );
 
       expect(result.title).toBe('Paper');
       expect(result.status).toBe('uploaded');
     });
 
     it('getUploadDetails and listUploads', async () => {
-      questionUploadModel.findById.mockResolvedValue(makeUpload({ status: 'parsed' }));
+      questionUploadModel.findById.mockResolvedValue(
+        makeUpload({ status: 'parsed' }),
+      );
       const details = await service.getUploadDetails(UPLOAD_ID);
       expect(details.id).toBe(UPLOAD_ID);
 
@@ -984,16 +1012,16 @@ describe('ImportService', () => {
       failedQuestionService.findByIdOrThrow.mockRejectedValueOnce(
         new NotFoundException('gone'),
       );
-      await expect(service.importFailedQuestion(FAILED_ID, importQuestion())).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.importFailedQuestion(FAILED_ID, importQuestion()),
+      ).rejects.toThrow(NotFoundException);
 
       failedQuestionService.findByIdOrThrow.mockRejectedValueOnce(
         new BadRequestException('bad'),
       );
-      await expect(service.importFailedQuestion(FAILED_ID, importQuestion())).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.importFailedQuestion(FAILED_ID, importQuestion()),
+      ).rejects.toThrow(BadRequestException);
 
       failedQuestionService.findByIdOrThrow.mockResolvedValue({
         uploadId: new Types.ObjectId(UPLOAD_ID),

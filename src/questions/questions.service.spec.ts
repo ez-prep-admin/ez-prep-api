@@ -46,7 +46,10 @@ const questionDoc = (data: any = {}) => ({
     correctAnswer: 'a',
     subject: data.subject || { id: OID, name: 'QA' },
     topic: data.topic || OID,
-    exams: data.exams || [{ _id: { toString: () => OID2 }, name: 'SBI PO' }, null],
+    exams: data.exams || [
+      { _id: { toString: () => OID2 }, name: 'SBI PO' },
+      null,
+    ],
     tag: data.tag || { toString: () => OID },
     difficultyLevel: 'easy',
     source: 'MANUAL_INPUT',
@@ -176,7 +179,9 @@ describe('QuestionsService', () => {
 
     it('throws NotFoundException', async () => {
       questionModel.findOne.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -200,9 +205,9 @@ describe('QuestionsService', () => {
 
     it('throws NotFoundException', async () => {
       questionModel.findOneAndUpdate.mockReturnValue(chain(null));
-      await expect(service.update(OID, { explanation: { en: 'x' } })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update(OID, { explanation: { en: 'x' } }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -216,7 +221,9 @@ describe('QuestionsService', () => {
 
     it('throws NotFoundException', async () => {
       questionModel.findOneAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

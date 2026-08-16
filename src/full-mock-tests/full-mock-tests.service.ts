@@ -164,10 +164,7 @@ export class FullMockTestsService {
 
     const { questions, subjectNames } =
       await this.selectionService.generatePaper(exam);
-    const grouped = this.groupQuestionsBySubjectOrder(
-      questions,
-      exam.subjects,
-    );
+    const grouped = this.groupQuestionsBySubjectOrder(questions, exam.subjects);
     this.assertNoDuplicateQuestions(grouped);
 
     const draft = await this.draftModel.create({

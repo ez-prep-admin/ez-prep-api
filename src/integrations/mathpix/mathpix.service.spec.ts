@@ -1,8 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import {
-  BadRequestException,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { InternalServerErrorException } from '@nestjs/common';
 import axios from 'axios';
 import { MathpixService } from './mathpix.service';
 import { MathpixStatus } from './mathpix.types';
@@ -151,10 +148,14 @@ describe('MathpixService', () => {
       },
     });
 
-    const result = await build().convertPdfToMarkdown('https://s3/a.pdf', {}, {
-      maxAttempts: 2,
-      intervalMs: 1,
-    });
+    const result = await build().convertPdfToMarkdown(
+      'https://s3/a.pdf',
+      {},
+      {
+        maxAttempts: 2,
+        intervalMs: 1,
+      },
+    );
     expect(result.markdown).toBe('# paper');
     expect(result.pdfId).toBe('pdf-1');
   });
@@ -169,9 +170,13 @@ describe('MathpixService', () => {
       })
       .mockResolvedValueOnce({ data: '# mmd' });
 
-    const result = await build().convertPdfToMarkdown('https://s3/a.pdf', {
-      preferMmdOutput: true,
-    }, { maxAttempts: 2, intervalMs: 1 });
+    const result = await build().convertPdfToMarkdown(
+      'https://s3/a.pdf',
+      {
+        preferMmdOutput: true,
+      },
+      { maxAttempts: 2, intervalMs: 1 },
+    );
     expect(result.markdown).toBe('# mmd');
   });
 

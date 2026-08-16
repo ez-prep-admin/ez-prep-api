@@ -112,7 +112,7 @@ export class SafeQuestionDto {
 
   @ApiPropertyOptional({
     description:
-      'Session-wise only: which session this question belongs to (same as sessions[].order). Omitted for topic-wise papers.',
+      'Present on full-exam papers that have subject blocks. Same number as sessions[].order on session-wise papers. Omitted for topic-wise papers. Do not group by live question.subject.',
     example: 0,
   })
   sessionOrder?: number;
@@ -180,7 +180,8 @@ export class AttemptTestMetadataDto {
   title: string;
 
   @ApiProperty({
-    description: 'Duration in minutes',
+    description:
+      'Paper duration in minutes. Topic-wise / mixed: this is the live timer. Session-wise: this is the SUM of subject session times — the live timer is sessions[currentSessionIndex].durationInMinutes.',
     example: 30,
   })
   durationInMinutes: number;
@@ -234,18 +235,21 @@ export class AttemptTestMetadataDto {
   topic?: TopicSummaryDto;
 
   @ApiPropertyOptional({
-    description: 'True when this paper is a session-wise full exam',
+    description:
+      'True when the student must finish one subject before the next (per-subject timers). False/omitted: one paper timer, show all questions. Branch the take-test UI on this flag.',
   })
   isSessionWise?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Session blocks for session-wise full exams',
+    description:
+      'Session-wise only (omitted otherwise). Current subject is the item with status IN_PROGRESS (or index currentSessionIndex). Prefer questionIds over startIndex/endIndex.',
     type: [AttemptSessionDto],
   })
   sessions?: AttemptSessionDto[];
 
   @ApiPropertyOptional({
-    description: 'Index of the active session (session-wise only)',
+    description:
+      'Session-wise only. Index of the active session. Timer fields on resume apply to this session.',
   })
   currentSessionIndex?: number;
 }
@@ -265,7 +269,7 @@ export class StartAttemptResponseDto {
 
   @ApiProperty({
     description:
-      'Questions without correct answers or explanations. Session-wise papers are grouped into contiguous subject blocks in exam order. Each question includes sessionOrder. Topic-wise papers omit sessionOrder.',
+      'Questions without keys/explanations, in locked paper order. Session-wise: full paper, contiguous subject blocks, each item has sessionOrder — show only the current session. Topic-wise: omit sessionOrder, show all.',
     type: [SafeQuestionDto],
   })
   questions: SafeQuestionDto[];

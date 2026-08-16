@@ -106,14 +106,18 @@ describe('UsersController', () => {
 
   it('findOne wraps the service result', async () => {
     mockUsersService.findOne.mockResolvedValue(user);
-    await expect(controller.findOne('u1')).resolves.toMatchObject({ data: user });
+    await expect(controller.findOne('u1')).resolves.toMatchObject({
+      data: user,
+    });
   });
 
   it('update wraps the service result', async () => {
     mockUsersService.update.mockResolvedValue(user);
-    await expect(controller.update('u1', { name: 'X' })).resolves.toMatchObject({
-      data: user,
-    });
+    await expect(controller.update('u1', { name: 'X' })).resolves.toMatchObject(
+      {
+        data: user,
+      },
+    );
   });
 
   it('updateSubscription wraps the service result', async () => {
@@ -141,7 +145,9 @@ describe('UsersController', () => {
 
   it('restore wraps the service result', async () => {
     mockUsersService.restore.mockResolvedValue(user);
-    await expect(controller.restore('u1')).resolves.toMatchObject({ data: user });
+    await expect(controller.restore('u1')).resolves.toMatchObject({
+      data: user,
+    });
   });
 
   it('hardDelete delegates to the service', async () => {

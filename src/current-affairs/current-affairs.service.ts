@@ -27,9 +27,7 @@ export class CurrentAffairsService {
     private readonly imageUrlResolver: ImageUrlResolver,
   ) {}
 
-  async create(
-    dto: CreateCurrentAffairDto,
-  ): Promise<CurrentAffairResponseDto> {
+  async create(dto: CreateCurrentAffairDto): Promise<CurrentAffairResponseDto> {
     const sortOrder = await this.nextSortOrder(dto.date);
     const storedImage = this.toStoredImage(dto.image);
     const item = await this.currentAffairModel.create({

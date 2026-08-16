@@ -61,11 +61,13 @@ describe('QuestionMapper', () => {
 
   it('maps image options when the source option has an image', () => {
     const extractor = {
-      extractOptionContent: jest.fn().mockImplementation((_src, label: string) =>
-        label === 'a'
-          ? { text: 'diagram', image, images: [image] }
-          : { text: '', image: null, images: [] },
-      ),
+      extractOptionContent: jest
+        .fn()
+        .mockImplementation((_src, label: string) =>
+          label === 'a'
+            ? { text: 'diagram', image, images: [image] }
+            : { text: '', image: null, images: [] },
+        ),
       buildQuestionContent: jest.fn().mockReturnValue({
         text: 'Pick the diagram',
         image: null,

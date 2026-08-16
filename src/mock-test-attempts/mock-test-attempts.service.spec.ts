@@ -245,11 +245,16 @@ describe('MockTestAttemptsService', () => {
         chainable([questionDoc(Q1), questionDoc(Q2, 'b')]),
       );
 
-      const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      const result = await service.startAttempt(
+        { mockTestId: TEST_ID },
+        USER_ID,
+      );
 
       expect(result.attemptId).toBe(ATTEMPT_ID);
       expect(result.questions).toHaveLength(2);
       expect(result.questions.every(q => q.sessionOrder == null)).toBe(true);
+      expect(result.mockTestData.sessions).toBeUndefined();
+      expect(result.mockTestData.currentSessionIndex).toBeUndefined();
       expect(attemptModel.create).toHaveBeenCalled();
       const created = attemptModel.create.mock.calls[0][0];
       expect(created.sessions).toBeUndefined();
@@ -305,7 +310,10 @@ describe('MockTestAttemptsService', () => {
       );
       questionModel.find.mockReturnValue(chainable([questionDoc()]));
 
-      const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      const result = await service.startAttempt(
+        { mockTestId: TEST_ID },
+        USER_ID,
+      );
       expect(result.mockTestData.isSessionWise).toBe(true);
     });
 
@@ -354,7 +362,10 @@ describe('MockTestAttemptsService', () => {
       );
       imageUrlResolver.resolveMany.mockResolvedValue(Array(6).fill(null));
 
-      const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      const result = await service.startAttempt(
+        { mockTestId: TEST_ID },
+        USER_ID,
+      );
 
       const created = attemptModel.create.mock.calls[0][0];
       expect(created.questions[0].sessionOrder).toBe(0);
@@ -380,7 +391,10 @@ describe('MockTestAttemptsService', () => {
       attemptModel.findOne.mockReturnValue(chainable(expired));
       attemptModel.create.mockResolvedValue(makeAttempt());
 
-      const result = await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      const result = await service.startAttempt(
+        { mockTestId: TEST_ID },
+        USER_ID,
+      );
       expect(expired.status).toBe('EXPIRED');
       expect(expired.save).toHaveBeenCalled();
       expect(result.attemptId).toBe(ATTEMPT_ID);
@@ -582,6 +596,62 @@ describe('MockTestAttemptsService', () => {
       expect(attempt.status).toBe('IN_PROGRESS');
       expect(result.timeConsumed).toBe(40);
       expect(result.pauseCount).toBeUndefined();
+      expect(result.mockTestData.isSessionWise).toBe(true);
+      expect(result.sessions?.[0].questionCount).toBe(2);
+    });
+
+    it('should return questions in locked order with sessionOrder', async () => {
+      const attempt = makeAttempt({
+        isSessionWise: true,
+        questions: [
+          {
+            question: { toString: () => Q1 },
+            selectedOption: 'a',
+            sessionOrder: 0,
+          },
+          {
+            question: { toString: () => Q2 },
+            selectedOption: null,
+            sessionOrder: 1,
+          },
+        ],
+        sessions: [
+          {
+            subject: SUB_ID,
+            name: 'P',
+            order: 0,
+            durationInMinutes: 20,
+            startIndex: 0,
+            endIndex: 0,
+            questionIds: [new Types.ObjectId(Q1)],
+            status: 'IN_PROGRESS',
+            startedAt: new Date(),
+            timeConsumed: 0,
+          },
+          {
+            subject: SUB_ID,
+            name: 'C',
+            order: 1,
+            durationInMinutes: 20,
+            startIndex: 1,
+            endIndex: 1,
+            questionIds: [new Types.ObjectId(Q2)],
+            status: 'LOCKED',
+            timeConsumed: 0,
+          },
+        ],
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q2, 'b'), questionDoc(Q1)]),
+      );
+      imageUrlResolver.resolveMany.mockResolvedValue(Array(6).fill(null));
+
+      const result = await service.resumeAttempt(ATTEMPT_ID, USER_ID);
+      expect(result.questions.map(q => q._id)).toEqual([Q1, Q2]);
+      expect(result.questions[0].sessionOrder).toBe(0);
+      expect(result.questions[1].sessionOrder).toBe(1);
+      expect(result.sessions?.[0].questionIds).toEqual([Q1]);
     });
 
     it('should 404 and reject invalid ids', async () => {
@@ -973,13 +1043,13 @@ describe('MockTestAttemptsService', () => {
         BadRequestException,
       );
       attemptModel.findOne.mockReturnValue(chainable(null));
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(NotFoundException);
       attemptModel.findOne.mockReturnValue(chainable(makeAttempt()));
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        /not session-wise/,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(/not session-wise/);
     });
 
     it('should reject paused, finished, locked sessions', async () => {
@@ -992,9 +1062,9 @@ describe('MockTestAttemptsService', () => {
           }),
         ),
       );
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        /Resume/,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(/Resume/);
 
       attemptModel.findOne.mockReturnValue(
         chainable(
@@ -1005,9 +1075,9 @@ describe('MockTestAttemptsService', () => {
           }),
         ),
       );
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        /status/,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(/status/);
 
       attemptModel.findOne.mockReturnValue(
         chainable(
@@ -1031,9 +1101,9 @@ describe('MockTestAttemptsService', () => {
           }),
         ),
       );
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        /locked/,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(/locked/);
 
       attemptModel.findOne.mockReturnValue(
         chainable(
@@ -1056,9 +1126,9 @@ describe('MockTestAttemptsService', () => {
           }),
         ),
       );
-      await expect(service.completeSession(ATTEMPT_ID, USER_ID)).rejects.toThrow(
-        /No active session/,
-      );
+      await expect(
+        service.completeSession(ATTEMPT_ID, USER_ID),
+      ).rejects.toThrow(/No active session/);
     });
 
     it('should unlock the next session', async () => {

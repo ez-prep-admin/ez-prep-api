@@ -198,7 +198,9 @@ describe('AuthService', () => {
     it('forbids bootstrap after an admin already exists', async () => {
       mockUsersService.countPasswordAdmins.mockResolvedValue(1);
 
-      await expect(service.createAdmin(dto)).rejects.toThrow(ForbiddenException);
+      await expect(service.createAdmin(dto)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('allows an existing admin to create another', async () => {

@@ -51,7 +51,9 @@ const tagDoc = (data: any) => ({
 
 describe('TagsService', () => {
   let service: TagsService;
-  const tagModel: any = jest.fn().mockImplementation(() => tagDoc({ name: 'Easy' }));
+  const tagModel: any = jest
+    .fn()
+    .mockImplementation(() => tagDoc({ name: 'Easy' }));
   tagModel.findOne = jest.fn();
   tagModel.findById = jest.fn();
   tagModel.findByIdAndUpdate = jest.fn();
@@ -127,7 +129,9 @@ describe('TagsService', () => {
 
     it('throws NotFoundException', async () => {
       tagModel.findById.mockReturnValue(chain(null));
-      await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -180,15 +184,17 @@ describe('TagsService', () => {
 
     it('throws NotFoundException when update returns null', async () => {
       tagModel.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.update(OID, { description: 'x' } as any)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update(OID, { description: 'x' } as any),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('remove', () => {
     it('soft deletes a tag', async () => {
-      tagModel.findByIdAndUpdate.mockReturnValue(chain(tagDoc({ isDeleted: true })));
+      tagModel.findByIdAndUpdate.mockReturnValue(
+        chain(tagDoc({ isDeleted: true })),
+      );
       await expect(service.remove(OID)).resolves.toEqual({
         message: 'Tag deleted successfully',
       });
@@ -196,7 +202,9 @@ describe('TagsService', () => {
 
     it('throws NotFoundException', async () => {
       tagModel.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.remove('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

@@ -224,7 +224,9 @@ describe('PersistQuestionValidator', () => {
       })),
     };
 
-    await expect(validator.validateQuestion(question, 0)).resolves.toBeDefined();
+    await expect(
+      validator.validateQuestion(question, 0),
+    ).resolves.toBeDefined();
   });
 
   it('rethrows NotFoundException when subject is missing', async () => {

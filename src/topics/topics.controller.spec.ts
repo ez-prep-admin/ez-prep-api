@@ -43,7 +43,9 @@ describe('TopicsController', () => {
 
   it('findOne wraps data', async () => {
     service.findOne.mockResolvedValue(topic);
-    await expect(controller.findOne('t1')).resolves.toMatchObject({ data: topic });
+    await expect(controller.findOne('t1')).resolves.toMatchObject({
+      data: topic,
+    });
   });
 
   it('update wraps data', async () => {
@@ -55,6 +57,8 @@ describe('TopicsController', () => {
 
   it('remove wraps data', async () => {
     service.remove.mockResolvedValue(topic);
-    await expect(controller.remove('t1')).resolves.toMatchObject({ data: topic });
+    await expect(controller.remove('t1')).resolves.toMatchObject({
+      data: topic,
+    });
   });
 });

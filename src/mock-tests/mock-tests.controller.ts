@@ -45,14 +45,11 @@ export class MockTestsController {
     summary: 'Get all mock tests with pagination and search',
     description: `
     Retrieves a paginated list of **topic-wise** mock tests (\`paperType: TOPIC_WISE\`).
-    Full-exam papers are excluded — use \`GET /full-mock-tests?examId=\` for those.
+    Full-exam papers are excluded — use \`GET /full-mock-tests\` for those.
 
-    Supports:
-    - Pagination with configurable page size
-    - Search by title or description
-    - Sorted by newest first
-    
-    All query parameters are optional. Default: page=1, limit=10
+    Each row includes \`userAttemptAction\` (\`START\` | \`RESUME\` | \`RETAKE\`).
+    Take the test with \`POST /mock-test-attempts/start\` (or resume if RESUME).
+    Topic-wise papers always use a single timer and \`POST .../submit\` (no sessions/complete).
     `,
   })
   @ApiQuery({

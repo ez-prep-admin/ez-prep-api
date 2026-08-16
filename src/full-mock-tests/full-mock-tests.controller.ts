@@ -131,6 +131,7 @@ Samples a complete paper from the question bank to match the exam blueprint:
 - Topic split inside a subject uses inventory + usage-weighted sampling
 
 The result is a **draft** in \`fullmocktestdrafts\` (status \`REVIEW\`).
+Questions are stored in **exam subject order** (contiguous blocks).
 Nothing is written to \`mocktests\` until publish.
 
 Correct answers and explanations are **not** returned.
@@ -330,8 +331,11 @@ Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`DUPLICATE_QUESTION\
 Writes the paper into \`mocktests\` with \`paperType: FULL_EXAM\`, then increments
 \`fullMockUsageCount\` / \`lastUsedInFullMockAt\` on every question.
 
-Students then see it on \`GET /full-mock-tests?examId=\` and take it with the
-existing \`/mock-test-attempts\` APIs.
+Questions are regrouped into contiguous subject blocks. Each \`subjectConfig\` row
+stores \`questionIds\` plus start/end indexes.
+
+Students then see it on \`GET /full-mock-tests\` and take it with \`POST /mock-test-attempts/start\`.
+Session-wise papers use per-subject timers and \`POST /mock-test-attempts/{id}/sessions/complete\`.
 
 Draft must be \`REVIEW\`. After success the draft becomes \`PUBLISHED\`.
 Topic-wise \`/mock-tests\` lists never include this paper.
@@ -394,17 +398,16 @@ Published drafts cannot be discarded (delete the mock test instead if needed).
   @ApiOperation({
     summary: 'List published full mock tests',
     description: `
-Student (or any authenticated user) list of **published** \`paperType: FULL_EXAM\`
-papers.
+Student (or any authenticated user) catalog of **published** \`paperType: FULL_EXAM\` papers.
 
-- \`examId\` is optional. Omit it to list across all exams (admin published table).
-- Students only see active papers. Admins also see inactive ones.
-- Includes \`userAttemptAction\` (\`START\` | \`RESUME\` | \`RETAKE\`) and \`resumeAttemptId\`
-- Includes \`isSessionWise\`, \`totalMarks\`, and \`subjectConfig\`
+How to take the test:
+- \`userAttemptAction === START\` or \`RETAKE\` → \`POST /mock-test-attempts/start\` with this row's \`id\`
+- \`userAttemptAction === RESUME\` → \`GET /mock-test-attempts/{resumeAttemptId}/resume\` (do not start again)
+- Then follow mock-test-attempts: if \`isSessionWise\`, one subject at a time + \`POST .../sessions/complete\`
 
-Topic-wise papers are **not** included. Use \`GET /mock-tests/exam/:examId\` for those.
+Also on each row: \`isSessionWise\`, \`subjectConfig\` (\`questionIds\`, \`numberOfQuestions\`). Topic-wise papers are not included (\`GET /mock-tests\`).
 
-Start the test with \`POST /mock-test-attempts/start\` and the returned \`id\`.
+Students only see active papers. Admins also see inactive ones. \`examId\` is optional.
     `,
   })
   @ApiQuery({
@@ -454,11 +457,11 @@ Start the test with \`POST /mock-test-attempts/start\` and the returned \`id\`.
   @ApiOperation({
     summary: 'Get one published full mock test',
     description: `
-Returns a single \`FULL_EXAM\` paper. 404 if the id is a topic-wise mock test
-or does not exist.
+Returns a single published \`FULL_EXAM\` paper (404 if the id is topic-wise).
 
-Includes \`userAttemptAction\` / \`resumeAttemptId\` for the caller.
-Question IDs are not exposed (start an attempt to receive the paper).
+Includes \`userAttemptAction\` / \`resumeAttemptId\` and \`subjectConfig\` (question counts and \`questionIds\` per subject). Question stems are not returned here — start or resume an attempt to get the paper.
+
+Take-test: \`POST /mock-test-attempts/start\` or \`GET /mock-test-attempts/{id}/resume\` as indicated by \`userAttemptAction\`.
     `,
   })
   @ApiParam({ name: 'id', description: 'Published full mock test ID' })

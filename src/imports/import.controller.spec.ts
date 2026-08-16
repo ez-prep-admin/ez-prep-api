@@ -70,12 +70,16 @@ describe('ImportController', () => {
       uploadId: 'u1',
       status: 'parsing',
     });
-    const result = await controller.parseQuestionPdf('u1', { maxPollingAttempts: 10 });
+    const result = await controller.parseQuestionPdf('u1', {
+      maxPollingAttempts: 10,
+    });
     expect(result.message).toBe('started');
   });
 
   it('parseUploadMarkdown returns parser output', async () => {
-    importService.parseUploadMarkdown.mockResolvedValue({ parserName: 'adaptive' });
+    importService.parseUploadMarkdown.mockResolvedValue({
+      parserName: 'adaptive',
+    });
     const result = await controller.parseUploadMarkdown('u1');
     expect(result.data.parserName).toBe('adaptive');
   });
@@ -93,7 +97,9 @@ describe('ImportController', () => {
     await expect(controller.enrichUpload('u1', {})).resolves.toMatchObject({
       message: 'enriching',
     });
-    await expect(controller.enrichQuestions({} as never)).resolves.toMatchObject({
+    await expect(
+      controller.enrichQuestions({} as never),
+    ).resolves.toMatchObject({
       message: 'ok',
     });
   });
@@ -129,7 +135,9 @@ describe('ImportController', () => {
       data: { id: 'f1' },
     });
     await expect(
-      controller.importFailedQuestion('f1', { question: { stem: 'x' } } as never),
+      controller.importFailedQuestion('f1', {
+        question: { stem: 'x' },
+      } as never),
     ).resolves.toMatchObject({
       data: { questionId: 'q1' },
     });
@@ -139,7 +147,9 @@ describe('ImportController', () => {
     await expect(controller.getUploadDetails('u1')).resolves.toMatchObject({
       data: { id: 'u1' },
     });
-    await expect(controller.listUploads({ page: 1 } as never)).resolves.toMatchObject({
+    await expect(
+      controller.listUploads({ page: 1 } as never),
+    ).resolves.toMatchObject({
       data: { uploads: [] },
     });
   });

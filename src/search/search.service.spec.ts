@@ -89,14 +89,20 @@ describe('SearchService', () => {
 
   it('should fall back to _id when id is missing and clamp limit', async () => {
     categoryModel.find.mockReturnValue(
-      chainable([{ _id: { toString: () => 'cat1' }, name: 'A', shortName: 'A' }]),
+      chainable([
+        { _id: { toString: () => 'cat1' }, name: 'A', shortName: 'A' },
+      ]),
     );
     examModel.find.mockReturnValue(
       chainable([
         {
           _id: { toString: () => 'exam1' },
           name: 'Exam',
-          category: { _id: { toString: () => 'c1' }, name: 'C', shortName: 'C' },
+          category: {
+            _id: { toString: () => 'c1' },
+            name: 'C',
+            shortName: 'C',
+          },
           examGroup: { _id: { toString: () => 'g1' }, name: 'G' },
         },
       ]),

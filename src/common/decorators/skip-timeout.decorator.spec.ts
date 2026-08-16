@@ -1,8 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import {
-  SKIP_TIMEOUT_KEY,
-  SkipTimeout,
-} from './skip-timeout.decorator';
+import { SKIP_TIMEOUT_KEY, SkipTimeout } from './skip-timeout.decorator';
 
 jest.mock('@nestjs/common', () => {
   const actual = jest.requireActual('@nestjs/common');

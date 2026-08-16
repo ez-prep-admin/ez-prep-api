@@ -20,19 +20,22 @@ export class AttemptSessionDto {
   order: number;
 
   @ApiProperty({
-    description: 'Session timer in minutes (from exam subject sessionTime)',
-    example: 60,
+    description:
+      'Live timer for THIS session in minutes. Session-wise UI must use this, not mockTestData.durationInMinutes.',
+    example: 15,
   })
   durationInMinutes: number;
 
   @ApiProperty({
-    description: 'Inclusive start index into attempt.questions',
+    description:
+      'Inclusive start index into the locked questions array. Kept for compatibility. Frontend should use questionIds / sessionOrder, not these indexes.',
     example: 0,
   })
   startIndex: number;
 
   @ApiProperty({
-    description: 'Inclusive end index into attempt.questions',
+    description:
+      'Inclusive end index into the locked questions array. Kept for compatibility. Frontend should use questionIds / sessionOrder, not these indexes.',
     example: 24,
   })
   endIndex: number;

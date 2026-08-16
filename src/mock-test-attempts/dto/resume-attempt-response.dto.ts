@@ -45,7 +45,7 @@ class ResumeQuestionDto {
 
   @ApiPropertyOptional({
     description:
-      'Session-wise only: which session this question belongs to (sessions[].order)',
+      'Which subject block this question belongs to (sessions[].order when session-wise). Omitted for topic-wise papers.',
     example: 0,
   })
   sessionOrder?: number;
@@ -62,14 +62,15 @@ export class ResumeAttemptResponseDto {
   attemptId: string;
 
   @ApiProperty({
-    description: 'Mock test metadata with exam, subject, and topic details',
+    description:
+      'Same frozen config as start. Session-wise: isSessionWise, sessions, currentSessionIndex. Duration on the paper is the sum; live timer is the current session.',
     type: AttemptTestMetadataDto,
   })
   mockTestData: AttemptTestMetadataDto;
 
   @ApiProperty({
     description:
-      'Questions with options and selected answers (NO correct answers or explanations)',
+      'Questions with options and selected answers (no keys). Session-wise: grouped by session in exam order; each item has sessionOrder. Topic-wise: sessionOrder omitted.',
     type: [ResumeQuestionDto],
   })
   questions: ResumeQuestionDto[];
@@ -97,7 +98,7 @@ export class ResumeAttemptResponseDto {
 
   @ApiPropertyOptional({
     description:
-      'Session blocks for session-wise full exams (omit for topic-wise / mixed)',
+      'Session-wise only (also duplicated under mockTestData.sessions). Omitted for topic-wise.',
     type: [AttemptSessionDto],
   })
   sessions?: AttemptSessionDto[];

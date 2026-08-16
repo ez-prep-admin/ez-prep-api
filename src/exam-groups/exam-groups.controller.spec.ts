@@ -76,7 +76,9 @@ describe('ExamGroupsController', () => {
 
   it('findOne wraps data', async () => {
     service.findOne.mockResolvedValue(group);
-    await expect(controller.findOne('g1')).resolves.toMatchObject({ data: group });
+    await expect(controller.findOne('g1')).resolves.toMatchObject({
+      data: group,
+    });
   });
 
   it('update wraps data', async () => {
@@ -88,6 +90,8 @@ describe('ExamGroupsController', () => {
 
   it('remove wraps data', async () => {
     service.remove.mockResolvedValue(group);
-    await expect(controller.remove('g1')).resolves.toMatchObject({ data: group });
+    await expect(controller.remove('g1')).resolves.toMatchObject({
+      data: group,
+    });
   });
 });

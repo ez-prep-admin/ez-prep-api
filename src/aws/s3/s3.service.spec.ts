@@ -1,7 +1,4 @@
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { S3Service } from './s3.service';
 import { AwsConfigService } from '../config/aws.config';
 

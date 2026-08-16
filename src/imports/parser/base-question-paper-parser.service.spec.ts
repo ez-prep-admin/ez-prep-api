@@ -21,9 +21,7 @@ class TestPaperParser extends BaseQuestionPaperParser {
       isQuestionStart: (line: string) => /^\d+\./.test(line.trim()),
       parseQuestionStart: (line: string) => {
         const match = line.trim().match(/^(\d+)\.\s*(.*)$/);
-        return match
-          ? { number: Number(match[1]), content: match[2] }
-          : null;
+        return match ? { number: Number(match[1]), content: match[2] } : null;
       },
     };
   }

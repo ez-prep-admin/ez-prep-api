@@ -1,5 +1,11 @@
 # Mock Test Pause/Resume API Documentation
 
+For **session-wise full mocks** (per-subject timers, `sessions/complete`, `sessionOrder`), use **`docs/MOCK-TEST-ATTEMPTS.md`**. That is the student-app contract.
+
+This file documents pause/resume time accounting for the original **single-timer** (topic-wise / mixed) flow. Session-wise papers reuse pause/resume, but the clock is the **current session**, not `durationInMinutes` on the paper.
+
+---
+
 ## Overview
 
 The pause/resume functionality allows users to pause an in-progress mock test attempt and resume it later, with accurate time tracking across multiple pause/resume cycles. This feature provides flexibility for users who cannot complete exams in one sitting due to interruptions, network issues, or other constraints.

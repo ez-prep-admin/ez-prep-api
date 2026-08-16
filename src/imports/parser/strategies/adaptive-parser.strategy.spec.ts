@@ -58,9 +58,7 @@ describe('AdaptiveParserStrategy', () => {
   });
 
   it('throws if getBoundaryStrategy is used before parse', () => {
-    expect(() => strategy.getBoundaryStrategy()).toThrow(
-      /not initialized/,
-    );
+    expect(() => strategy.getBoundaryStrategy()).toThrow(/not initialized/);
   });
 
   it('parses a document using detected structure', async () => {
@@ -117,9 +115,9 @@ describe('AdaptiveParserStrategy', () => {
     );
 
     expect(result.warnings.some(w => w.code === 'LOW_CONFIDENCE')).toBe(true);
-    expect(
-      result.warnings.some(w => w.message.includes('odd layout')),
-    ).toBe(true);
+    expect(result.warnings.some(w => w.message.includes('odd layout'))).toBe(
+      true,
+    );
   });
 
   it('returns a parse error instead of throwing when detection fails', async () => {

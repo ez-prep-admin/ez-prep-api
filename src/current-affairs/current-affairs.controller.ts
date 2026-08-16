@@ -115,7 +115,8 @@ When \`date\` is set, results are ordered by \`sortOrder\` then \`createdAt\`. O
     name: 'limit',
     required: false,
     type: Number,
-    description: 'Page size (1–100). Default 10. Use 100 for a full day in the user app.',
+    description:
+      'Page size (1–100). Default 10. Use 100 for a full day in the user app.',
     example: 10,
   })
   @ApiQuery({
@@ -146,7 +147,8 @@ When \`date\` is set, results are ordered by \`sortOrder\` then \`createdAt\`. O
     type: CurrentAffairsListApiResponseDto,
   })
   @ApiBadRequestResponse({
-    description: 'Invalid `date` query (must be a real YYYY-MM-DD calendar date)',
+    description:
+      'Invalid `date` query (must be a real YYYY-MM-DD calendar date)',
   })
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,

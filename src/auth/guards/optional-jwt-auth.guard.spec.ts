@@ -28,9 +28,9 @@ describe('OptionalJwtAuthGuard', () => {
   });
 
   it('handleRequest throws errors and returns user or null', () => {
-    expect(() =>
-      guard.handleRequest(new Error('bad'), null as never),
-    ).toThrow('bad');
+    expect(() => guard.handleRequest(new Error('bad'), null as never)).toThrow(
+      'bad',
+    );
     expect(guard.handleRequest(null, { id: '1' })).toEqual({ id: '1' });
     expect(guard.handleRequest(null, null as never)).toBeNull();
   });

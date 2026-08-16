@@ -44,11 +44,11 @@ describe('custom errors', () => {
     expect(new InvalidOperationError('nope').getStatus()).toBe(
       HttpStatus.BAD_REQUEST,
     );
-    expect(new UnauthorizedAccessError().getStatus()).toBe(HttpStatus.FORBIDDEN);
-    expect(new AuthenticationError().getStatus()).toBe(HttpStatus.UNAUTHORIZED);
-    expect(new RateLimitError().getStatus()).toBe(
-      HttpStatus.TOO_MANY_REQUESTS,
+    expect(new UnauthorizedAccessError().getStatus()).toBe(
+      HttpStatus.FORBIDDEN,
     );
+    expect(new AuthenticationError().getStatus()).toBe(HttpStatus.UNAUTHORIZED);
+    expect(new RateLimitError().getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
     expect(new ExternalServiceError('S3').getResponse()).toEqual(
       expect.objectContaining({ message: 'S3 is currently unavailable' }),
     );
@@ -61,7 +61,9 @@ describe('custom errors', () => {
     const without = new ValidationError('bad').getResponse() as any;
     expect(without.details).toBeUndefined();
 
-    const withDetails = new ValidationError('bad', [{ field: 'x' }]).getResponse() as any;
+    const withDetails = new ValidationError('bad', [
+      { field: 'x' },
+    ]).getResponse() as any;
     expect(withDetails.details).toEqual([{ field: 'x' }]);
   });
 });

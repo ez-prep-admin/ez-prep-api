@@ -33,7 +33,10 @@ export class MockTestSubjectConfig {
   @Prop({ required: true, min: 0 })
   questionEndIndex: number;
 
-  @Prop({ type: [{ type: Types.ObjectId, ref: 'Question' }], default: undefined })
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Question' }],
+    default: undefined,
+  })
   questionIds?: Types.ObjectId[];
 }
 

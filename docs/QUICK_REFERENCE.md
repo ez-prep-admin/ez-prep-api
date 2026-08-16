@@ -46,6 +46,20 @@ Response: 201 Created
 Notes:
 - Initializes: startedAt, timeConsumed=0, status=IN_PROGRESS
 - Returns questions WITHOUT correct answers
+- Topic-wise: no `sessions`, no `sessionOrder`
+- Session-wise full mocks: `isSessionWise`, `sessions[]` (`questionIds`, `questionCount`), each question has `sessionOrder`. Show only the current session. See `docs/MOCK-TEST-ATTEMPTS.md`.
+
+---
+
+## 1b. Complete session (session-wise only)
+```bash
+POST /:attemptId/sessions/complete
+
+Response 200:
+- paperCompleted: false → `nextSession` is resume-shaped (full questions array; filter by new currentSessionIndex)
+- paperCompleted: true → `results` (same as submit); do not submit again
+
+Resume first if paused. Do not use this for topic-wise / mixed papers.
 ```
 
 ---
@@ -144,9 +158,10 @@ Response: 200 OK
 
 Notes:
 - Works for both PAUSED and IN_PROGRESS status
-- If PAUSED: resets startedAt, preserves timeConsumed
-- Returns questions with user's answers, NO correct answers
-- Use for page reload/reconnect scenarios
+- If PAUSED: this call **unpauses** (not read-only). Resets startedAt, preserves timeConsumed
+- Returns questions with user's answers, NO correct answers; session-wise includes `sessionOrder` / `sessions[].questionIds`
+- Use for page reload/reconnect, and when catalog `userAttemptAction` is RESUME
+- Completed attempts: use GET /:id instead
 ```
 
 ---

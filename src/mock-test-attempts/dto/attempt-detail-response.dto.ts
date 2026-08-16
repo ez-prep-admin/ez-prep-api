@@ -55,7 +55,7 @@ class AttemptQuestionDto {
 
   @ApiPropertyOptional({
     description:
-      'Session-wise only: which session this question belongs to (sessions[].order)',
+      'Which subject block this question belongs to (sessions[].order when session-wise). Omitted for topic-wise papers.',
     example: 0,
   })
   sessionOrder?: number;
@@ -140,7 +140,8 @@ export class AttemptDetailResponseDto {
   test: TestMetadataDto;
 
   @ApiProperty({
-    description: 'Questions with options and selected answers',
+    description:
+      'Questions with options and selected answers. Session-wise: grouped by session; each item has sessionOrder. Topic-wise: sessionOrder omitted.',
     type: [AttemptQuestionDto],
   })
   questions: AttemptQuestionDto[];
@@ -181,12 +182,22 @@ export class AttemptDetailResponseDto {
   })
   isPassed?: boolean;
 
-  @ApiPropertyOptional({ type: [AttemptSessionDto] })
+  @ApiPropertyOptional({
+    description:
+      'Session-wise only. Prefer sessions[].questionIds and question.sessionOrder over startIndex/endIndex.',
+    type: [AttemptSessionDto],
+  })
   sessions?: AttemptSessionDto[];
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'Index of the active session (session-wise only)',
+    example: 0,
+  })
   currentSessionIndex?: number;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description: 'True when this attempt is a session-wise full exam',
+    example: true,
+  })
   isSessionWise?: boolean;
 }

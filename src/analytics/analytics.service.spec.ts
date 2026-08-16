@@ -32,9 +32,7 @@ function dashboardRaw(overrides: Record<string, unknown> = {}) {
       },
     ],
     streakDates: [],
-    accuracy: [
-      { totalCorrect: 80, totalAnswered: 100, totalUnanswered: 5 },
-    ],
+    accuracy: [{ totalCorrect: 80, totalAnswered: 100, totalUnanswered: 5 }],
     subjectPerformance: [
       {
         _id: oid(SUB_ID),
@@ -142,7 +140,11 @@ describe('AnalyticsService', () => {
 
   describe('getLeaderboard', () => {
     it('should return cached leaderboard', async () => {
-      cache.get.mockResolvedValue({ data: [], pagination: {}, currentUserRank: {} });
+      cache.get.mockResolvedValue({
+        data: [],
+        pagination: {},
+        currentUserRank: {},
+      });
       await service.getLeaderboard(USER_ID, 1, 10);
       expect(attemptModel.aggregate).not.toHaveBeenCalled();
     });
@@ -308,9 +310,9 @@ describe('AnalyticsService', () => {
             scores: [50, 50, 50, 50, 50],
           },
         ]);
-      expect((await service.getSubjectTopicBreakdown(USER_ID)).subjects[0].trend).toBe(
-        'stable',
-      );
+      expect(
+        (await service.getSubjectTopicBreakdown(USER_ID)).subjects[0].trend,
+      ).toBe('stable');
 
       attemptModel.aggregate
         .mockResolvedValueOnce([
@@ -330,9 +332,9 @@ describe('AnalyticsService', () => {
             scores: [10, 10, 10, 10, 10, 90, 90, 90, 90, 90],
           },
         ]);
-      expect((await service.getSubjectTopicBreakdown(USER_ID)).subjects[0].trend).toBe(
-        'declining',
-      );
+      expect(
+        (await service.getSubjectTopicBreakdown(USER_ID)).subjects[0].trend,
+      ).toBe('declining');
 
       attemptModel.aggregate
         .mockResolvedValueOnce([
@@ -355,7 +357,11 @@ describe('AnalyticsService', () => {
 
   describe('getUserBadges', () => {
     it('should return cached badges', async () => {
-      cache.get.mockResolvedValue({ badges: [], earnedCount: 0, totalCount: 0 });
+      cache.get.mockResolvedValue({
+        badges: [],
+        earnedCount: 0,
+        totalCount: 0,
+      });
       await service.getUserBadges(USER_ID);
       expect(attemptModel.aggregate).not.toHaveBeenCalled();
     });
@@ -372,7 +378,9 @@ describe('AnalyticsService', () => {
         if (key.startsWith('analytics:badges')) return undefined;
         return undefined;
       });
-      attemptModel.aggregate.mockResolvedValue([dashboardRaw({ streakDates: dates })]);
+      attemptModel.aggregate.mockResolvedValue([
+        dashboardRaw({ streakDates: dates }),
+      ]);
       attemptModel.findOne.mockReturnValue({
         select: jest.fn().mockReturnValue({
           lean: jest.fn().mockReturnValue({

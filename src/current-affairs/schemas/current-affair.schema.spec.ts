@@ -8,7 +8,11 @@ describe('CurrentAffairSchema', () => {
   it('exposes an id virtual from _id', () => {
     const virtuals = CurrentAffairSchema.virtuals as Record<
       string,
-      { getters: Array<(this: { _id: { toHexString: () => string } }) => string> }
+      {
+        getters: Array<
+          (this: { _id: { toHexString: () => string } }) => string
+        >;
+      }
     >;
     const getter = virtuals.id.getters[0];
     expect(
