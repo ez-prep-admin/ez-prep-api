@@ -90,6 +90,12 @@ export class MockTestAttemptsService {
     };
   }
 
+  private getTotalPossibleScore(attempt: MockTestAttemptDocument): number {
+    return attempt.questions.reduce((sum, question) => {
+      return sum + (question.marksPerQuestion ?? attempt.marksPerQuestion);
+    }, 0);
+  }
+
   private sessionFields(attempt: MockTestAttemptDocument) {
     if (!attempt.isSessionWise) {
       return {};
@@ -828,6 +834,7 @@ export class MockTestAttemptsService {
     // Step 11: Add results for submitted attempts
     if (isSubmitted) {
       response.score = attempt.score;
+      response.totalScore = this.getTotalPossibleScore(attempt);
       response.submittedAt = attempt.submittedAt;
       response.timeTaken = this.getCompletedTimeTaken(attempt);
 
@@ -1479,9 +1486,7 @@ export class MockTestAttemptsService {
     await this.refreshAnalytics(userId);
 
     // Step 9: Prepare response
-    const totalPossibleScore = attempt.questions.reduce((sum, q) => {
-      return sum + (q.marksPerQuestion ?? attempt.marksPerQuestion);
-    }, 0);
+    const totalPossibleScore = this.getTotalPossibleScore(attempt);
     const passed = attempt.passingScore
       ? totalScore >= attempt.passingScore
       : false;
