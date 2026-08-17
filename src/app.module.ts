@@ -20,6 +20,7 @@ import { TagsModule } from './tags/tags.module';
 import { QuestionsModule } from './questions/questions.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AdminDashboardModule } from './admin-dashboard/admin-dashboard.module';
+import { AdminUsersModule } from './admin-users/admin-users.module';
 import { SearchModule } from './search/search.module';
 import { ImportModule } from './imports/import.module';
 import { CurrentAffairsModule } from './current-affairs/current-affairs.module';
@@ -99,6 +100,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     QuestionsModule,
     AnalyticsModule,
     AdminDashboardModule,
+    AdminUsersModule,
     SearchModule,
     ImportModule,
     CurrentAffairsModule,
