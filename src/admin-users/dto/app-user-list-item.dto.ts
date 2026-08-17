@@ -38,7 +38,8 @@ export class AppUserTargetExamDto {
 /**
  * Learner card payload for the admin users directory.
  * Intentionally omits admin-only fields (username, passwordHash) and
- * leaves room for future analytics / subscription / edit endpoints.
+ * never includes a full email or phone number — those are masked at
+ * serialization time. Search still matches the stored values.
  */
 export class AppUserListItemDto {
   @ApiProperty({ example: '64f123456789abcdef123456' })
@@ -47,10 +48,18 @@ export class AppUserListItemDto {
   @ApiProperty({ example: 'Anita Sharma' })
   name: string;
 
-  @ApiProperty({ example: 'anita@example.com' })
+  @ApiProperty({
+    example: 'a***@gmail.com',
+    description:
+      'Masked email: first letter of the local part plus the full domain. The rest of the local part is never returned; search still matches the stored value.',
+  })
   email: string;
 
-  @ApiPropertyOptional({ example: '+919876543210' })
+  @ApiPropertyOptional({
+    example: '+91**********',
+    description:
+      'Masked phone number: country code (e.g. +91) is kept and the subscriber digits are hidden. Search still matches the stored value.',
+  })
   phoneNumber?: string;
 
   @ApiPropertyOptional()
