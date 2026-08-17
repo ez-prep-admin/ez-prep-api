@@ -26,6 +26,34 @@ describe('CreateCurrentAffairDto', () => {
     expect(await validate(dto)).toHaveLength(0);
   });
 
+  it('accepts a payload without a description', async () => {
+    const dto = plainToInstance(CreateCurrentAffairDto, {
+      title: 'Satellite launch',
+      date: '2026-08-14',
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts an empty description', async () => {
+    const dto = plainToInstance(CreateCurrentAffairDto, {
+      title: 'Satellite launch',
+      description: '   ',
+      date: '2026-08-14',
+    });
+    expect(dto.description).toBe('');
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('rejects a short description when one is provided', async () => {
+    const dto = plainToInstance(CreateCurrentAffairDto, {
+      title: 'Satellite launch',
+      description: 'A',
+      date: '2026-08-14',
+    });
+    const errors = await validate(dto);
+    expect(errors.some(error => error.property === 'description')).toBe(true);
+  });
+
   it('rejects an impossible calendar date', async () => {
     const dto = plainToInstance(CreateCurrentAffairDto, {
       title: 'Satellite launch',

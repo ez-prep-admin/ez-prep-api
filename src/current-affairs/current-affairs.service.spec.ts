@@ -111,6 +111,24 @@ describe('CurrentAffairsService', () => {
       expect(imageUrlResolver.resolve).toHaveBeenCalled();
     });
 
+    it('creates an item without a description', async () => {
+      model.findOne.mockReturnValue(chain(null));
+      model.create.mockResolvedValue(doc({ description: undefined }));
+
+      await service.create({
+        title: 'Satellite launch',
+        date: '2026-08-14',
+      } as any);
+
+      expect(model.create).toHaveBeenCalledWith({
+        title: 'Satellite launch',
+        description: undefined,
+        memoryTrick: undefined,
+        dateKey: '2026-08-14',
+        sortOrder: 0,
+      });
+    });
+
     it('appends after the last sortOrder for that date', async () => {
       model.findOne.mockReturnValue(chain({ sortOrder: 4 }));
       model.create.mockResolvedValue(doc({ sortOrder: 5 }));

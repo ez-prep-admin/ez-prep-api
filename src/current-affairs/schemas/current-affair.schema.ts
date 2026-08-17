@@ -36,8 +36,8 @@ export class CurrentAffair {
   @Prop({ required: true, trim: true, maxlength: 200 })
   title: string;
 
-  @Prop({ required: true, trim: true, maxlength: 5000 })
-  description: string;
+  @Prop({ trim: true, maxlength: 5000 })
+  description?: string;
 
   @Prop({ trim: true, maxlength: 1000 })
   memoryTrick?: string;

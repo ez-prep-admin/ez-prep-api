@@ -71,7 +71,7 @@ Requires admin JWT.
   })
   @ApiBadRequestResponse({
     description:
-      'Validation failed (missing title/description/date, invalid calendar date such as 2026-02-31, or invalid image metadata)',
+      'Validation failed (missing title/date, invalid calendar date such as 2026-02-31, or invalid image metadata)',
   })
   @ApiUnauthorizedResponse({
     description: 'Missing or invalid JWT',

@@ -135,7 +135,10 @@ export class AdminDashboardService {
       await Promise.all([
         this.userModel.countDocuments(LEARNER),
         this.userModel.countDocuments({ ...LEARNER, isActive: true }),
-        this.userModel.countDocuments({ ...LEARNER, createdAt: { $gte: last7 } }),
+        this.userModel.countDocuments({
+          ...LEARNER,
+          createdAt: { $gte: last7 },
+        }),
         this.userModel.countDocuments({
           ...LEARNER,
           createdAt: { $gte: last30 },
@@ -261,7 +264,12 @@ export class AdminDashboardService {
       this.mockTestModel.countDocuments(match),
       this.groupByExam(this.mockTestModel, match),
       this.draftModel.aggregate<{ _id: string; count: number }>([
-        { $group: { _id: { $ifNull: ['$status', 'unknown'] }, count: { $sum: 1 } } },
+        {
+          $group: {
+            _id: { $ifNull: ['$status', 'unknown'] },
+            count: { $sum: 1 },
+          },
+        },
         { $sort: { count: -1 } },
       ]),
     ]);
