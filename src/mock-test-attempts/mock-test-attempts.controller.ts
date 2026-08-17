@@ -30,6 +30,7 @@ import { AttemptDetailResponseDto } from './dto/attempt-detail-response.dto';
 import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { CompleteSessionResponseDto } from './dto/complete-session-response.dto';
+import { SkipTimeout } from '../common/decorators/skip-timeout.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -228,7 +229,8 @@ Freezes the clock and keeps all saved answers. Cannot answer until resume.
 
 - Topic-wise / mixed: pauses the paper timer
 - Session-wise: pauses the **current session** timer only
-- Adds a 10s grace to consumed time (network). If no time remains, pause is refused — submit or complete-session instead
+- \`timeConsumed\` / \`timeRemaining\` describe the **running timer** (current section when session-wise); \`totalTimeConsumed\` is the whole paper. Paused wall-clock time is never charged
+- Refused when less than 10s remain (network grace) — submit or complete-session instead
 - Continue with \`GET /mock-test-attempts/{attemptId}/resume\` (that call unpauses)
     `,
   })
@@ -419,14 +421,15 @@ Response matches start, plus \`selectedOption\` on answered questions and \`time
   }
 
   @Get(':id')
+  @SkipTimeout()
   @ApiOperation({
     summary: 'Get attempt detail or results',
     description: `
 Owner-only. For taking an in-progress test, prefer \`GET .../resume\` (resume unpauses). This route is the results / inspection endpoint.
 
-IN_PROGRESS / PAUSED: selected answers, time remaining, session fields when session-wise (\`sessionOrder\`, \`sessions[].questionIds\`). No keys.
+IN_PROGRESS / PAUSED: selected answers, \`timeElapsed\` / \`timeRemaining\` for the running timer, session fields when session-wise (\`sessionOrder\`, \`sessions[].questionIds\`). No keys. Safe to poll on reload: it does **not** unpause, so \`status: PAUSED\` can be trusted to render the paused state.
 
-SUBMITTED / EXPIRED: score, counts, \`isPassed\`. Per-question keys and explanations only if \`showResultsImmediately\`.
+SUBMITTED / EXPIRED: score, counts, \`isPassed\`, and \`timeTaken\` — total seconds spent on the paper, summed across sections for session-wise papers and excluding paused time. Per-question keys and explanations only if \`showResultsImmediately\`.
     `,
   })
   @ApiResponse({

@@ -184,59 +184,76 @@ describe('AnalyticsService', () => {
 
   describe('getRecentActivity', () => {
     it('should return cached activity', async () => {
-      cache.get.mockResolvedValue([]);
-      await service.getRecentActivity(USER_ID, 10);
+      cache.get.mockResolvedValue({
+        data: [],
+        pagination: {
+          total: 0,
+          page: 1,
+          limit: 10,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      });
+      await service.getRecentActivity(USER_ID, 1, 10);
       expect(attemptModel.aggregate).not.toHaveBeenCalled();
     });
 
     it('should map activity with and without related docs', async () => {
       attemptModel.aggregate.mockResolvedValue([
         {
-          _id: oid(ATTEMPT_ID),
-          testTitle: 'T',
-          score: 8,
-          totalQuestions: 10,
-          marksPerQuestion: 1,
-          negativeMarking: 0,
-          timeConsumed: 120,
-          submittedAt: new Date('2024-01-01'),
-          status: 'SUBMITTED',
-          questions: [
-            { isCorrect: true, selectedOption: 'a' },
-            { isCorrect: false, selectedOption: 'b' },
-            { isCorrect: false, selectedOption: null },
+          data: [
+            {
+              _id: oid(ATTEMPT_ID),
+              testTitle: 'T',
+              score: 8,
+              totalQuestions: 10,
+              marksPerQuestion: 1,
+              negativeMarking: 0,
+              timeConsumed: 120,
+              submittedAt: new Date('2024-01-01'),
+              status: 'SUBMITTED',
+              questions: [
+                { isCorrect: true, selectedOption: 'a' },
+                { isCorrect: false, selectedOption: 'b' },
+                { isCorrect: false, selectedOption: null },
+              ],
+              subjectId: oid(SUB_ID),
+              subjectName: 'Physics',
+              subjectDescription: 's',
+              examId: oid(EXAM_ID),
+              examName: 'NEET',
+              examDescription: 'e',
+              topicId: oid(TOP_ID),
+              topicName: 'Optics',
+              topicDescription: 't',
+            },
+            {
+              _id: oid(OTHER_ID),
+              testTitle: 'Empty',
+              score: 0,
+              totalQuestions: 0,
+              marksPerQuestion: 1,
+              timeConsumed: 0,
+              submittedAt: new Date('2024-01-02'),
+              status: 'EXPIRED',
+              questions: [],
+              subjectId: null,
+              examId: null,
+              topicId: null,
+            },
           ],
-          subjectId: oid(SUB_ID),
-          subjectName: 'Physics',
-          subjectDescription: 's',
-          examId: oid(EXAM_ID),
-          examName: 'NEET',
-          examDescription: 'e',
-          topicId: oid(TOP_ID),
-          topicName: 'Optics',
-          topicDescription: 't',
-        },
-        {
-          _id: oid(OTHER_ID),
-          testTitle: 'Empty',
-          score: 0,
-          totalQuestions: 0,
-          marksPerQuestion: 1,
-          timeConsumed: 0,
-          submittedAt: new Date('2024-01-02'),
-          status: 'EXPIRED',
-          questions: [],
-          subjectId: null,
-          examId: null,
-          topicId: null,
+          total: [{ count: 2 }],
         },
       ]);
 
-      const result = await service.getRecentActivity(USER_ID, 99);
-      expect(result[0].correctAnswers).toBe(1);
-      expect(result[0].subject?.name).toBe('Physics');
-      expect(result[1].scorePercent).toBe(0);
-      expect(result[1].subject).toBeNull();
+      const result = await service.getRecentActivity(USER_ID, 1, 99);
+      expect(result.data[0].correctAnswers).toBe(1);
+      expect(result.data[0].subject?.name).toBe('Physics');
+      expect(result.data[1].scorePercent).toBe(0);
+      expect(result.data[1].subject).toBeNull();
+      expect(result.pagination.total).toBe(2);
+      expect(result.pagination.limit).toBe(20);
     });
   });
 
@@ -552,7 +569,8 @@ describe('AnalyticsService', () => {
   describe('invalidateDashboardCache', () => {
     it('should delete known keys', async () => {
       await service.invalidateDashboardCache(USER_ID);
-      expect(cache.del).toHaveBeenCalledTimes(6);
+      // dashboard + 20 recent-activity page keys + 2 legacy + subject/badges/ai
+      expect(cache.del).toHaveBeenCalledTimes(26);
     });
   });
 });

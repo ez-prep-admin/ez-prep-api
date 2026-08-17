@@ -38,6 +38,7 @@ import {
 } from './dto/ai-insights.dto';
 import { BADGE_CATALOG } from './constants/badges.constant';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
+import { EFFECTIVE_TIME_CONSUMED_EXPR } from '../common/aggregations/attempt-time.aggregation';
 
 /** Statuses that represent a test that has been scored and counts as "completed" */
 const COMPLETED_STATUSES = ['SUBMITTED', 'EXPIRED'];
@@ -197,7 +198,7 @@ export class AnalyticsService {
                   $sum: {
                     $cond: [
                       { $in: ['$status', COMPLETED_STATUSES] },
-                      '$timeConsumed',
+                      EFFECTIVE_TIME_CONSUMED_EXPR,
                       0,
                     ],
                   },
@@ -633,83 +634,102 @@ export class AnalyticsService {
 
   async getRecentActivity(
     userId: string,
+    page: number = 1,
     limit: number = 10,
-  ): Promise<RecentActivityItemDto[]> {
+  ): Promise<{ data: RecentActivityItemDto[]; pagination: PaginationMetaDto }> {
+    const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 20);
-    const cacheKey = `analytics:recent-activity:${userId}:${validLimit}`;
-    const cached =
-      await this.cacheManager.get<RecentActivityItemDto[]>(cacheKey);
+    const skip = (validPage - 1) * validLimit;
+    const cacheKey = `analytics:recent-activity:${userId}:${validPage}:${validLimit}`;
+    const cached = await this.cacheManager.get<{
+      data: RecentActivityItemDto[];
+      pagination: PaginationMetaDto;
+    }>(cacheKey);
     if (cached) {
       return cached;
     }
 
+    const matchStage = {
+      $match: {
+        user: new Types.ObjectId(userId),
+        status: { $in: COMPLETED_STATUSES },
+        submittedAt: { $exists: true },
+      },
+    };
+
+    const projectStage: PipelineStage = {
+      $project: {
+        testTitle: 1,
+        score: 1,
+        totalQuestions: 1,
+        marksPerQuestion: 1,
+        negativeMarking: 1,
+        timeConsumed: EFFECTIVE_TIME_CONSUMED_EXPR,
+        submittedAt: 1,
+        status: 1,
+        questions: 1,
+        subjectId: '$subject',
+        subjectName: { $arrayElemAt: ['$subjectDoc.name', 0] },
+        subjectDescription: { $arrayElemAt: ['$subjectDoc.description', 0] },
+        examId: '$exam',
+        examName: { $arrayElemAt: ['$examDoc.name', 0] },
+        examDescription: { $arrayElemAt: ['$examDoc.description', 0] },
+        topicId: '$topic',
+        topicName: { $arrayElemAt: ['$topicDoc.name', 0] },
+        topicDescription: { $arrayElemAt: ['$topicDoc.description', 0] },
+      },
+    };
+
     const pipeline: PipelineStage[] = [
-      {
-        $match: {
-          user: new Types.ObjectId(userId),
-          status: { $in: COMPLETED_STATUSES },
-          submittedAt: { $exists: true },
-        },
-      },
+      matchStage,
       { $sort: { submittedAt: -1 } },
-      { $limit: validLimit },
       {
-        $lookup: {
-          from: 'subjects',
-          localField: 'subject',
-          foreignField: '_id',
-          as: 'subjectDoc',
-        },
-      },
-      {
-        $lookup: {
-          from: 'exams',
-          localField: 'exam',
-          foreignField: '_id',
-          as: 'examDoc',
-        },
-      },
-      {
-        $lookup: {
-          from: 'topics',
-          localField: 'topic',
-          foreignField: '_id',
-          as: 'topicDoc',
-        },
-      },
-      {
-        $project: {
-          testTitle: 1,
-          score: 1,
-          totalQuestions: 1,
-          marksPerQuestion: 1,
-          negativeMarking: 1,
-          timeConsumed: 1,
-          submittedAt: 1,
-          status: 1,
-          questions: 1,
-          subjectId: '$subject',
-          subjectName: { $arrayElemAt: ['$subjectDoc.name', 0] },
-          subjectDescription: { $arrayElemAt: ['$subjectDoc.description', 0] },
-          examId: '$exam',
-          examName: { $arrayElemAt: ['$examDoc.name', 0] },
-          examDescription: { $arrayElemAt: ['$examDoc.description', 0] },
-          topicId: '$topic',
-          topicName: { $arrayElemAt: ['$topicDoc.name', 0] },
-          topicDescription: { $arrayElemAt: ['$topicDoc.description', 0] },
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: validLimit },
+            {
+              $lookup: {
+                from: 'subjects',
+                localField: 'subject',
+                foreignField: '_id',
+                as: 'subjectDoc',
+              },
+            },
+            {
+              $lookup: {
+                from: 'exams',
+                localField: 'exam',
+                foreignField: '_id',
+                as: 'examDoc',
+              },
+            },
+            {
+              $lookup: {
+                from: 'topics',
+                localField: 'topic',
+                foreignField: '_id',
+                as: 'topicDoc',
+              },
+            },
+            projectStage,
+          ],
+          total: [{ $count: 'count' }],
         },
       },
     ];
 
-    const raw =
-      await this.mockTestAttemptModel.aggregate<RecentActivityAggResult>(
-        pipeline,
-      );
+    const [facet] = await this.mockTestAttemptModel.aggregate<{
+      data: RecentActivityAggResult[];
+      total: Array<{ count: number }>;
+    }>(pipeline);
 
-    const result: RecentActivityItemDto[] = raw.map(item => {
+    const total = facet?.total?.[0]?.count ?? 0;
+    const totalPages = total > 0 ? Math.ceil(total / validLimit) : 0;
+
+    const data: RecentActivityItemDto[] = (facet?.data ?? []).map(item => {
       const totalPossible = item.totalQuestions * item.marksPerQuestion;
 
-      // Calculate answer statistics
       let correctCount = 0;
       let incorrectCount = 0;
       let unansweredCount = 0;
@@ -737,7 +757,8 @@ export class AnalyticsService {
         incorrectAnswers: incorrectCount,
         unansweredQuestions: unansweredCount,
         totalQuestions: item.totalQuestions,
-        timeConsumedMinutes: Math.round((item.timeConsumed / 60) * 10) / 10,
+        timeConsumedMinutes:
+          Math.round(((item.timeConsumed || 0) / 60) * 10) / 10,
         submittedAt: item.submittedAt.toISOString(),
         status: item.status,
         subject: item.subjectId
@@ -764,6 +785,16 @@ export class AnalyticsService {
       };
     });
 
+    const pagination: PaginationMetaDto = {
+      total,
+      page: validPage,
+      limit: validLimit,
+      totalPages,
+      hasNextPage: validPage < totalPages,
+      hasPrevPage: validPage > 1,
+    };
+
+    const result = { data, pagination };
     await this.cacheManager.set(cacheKey, result, RECENT_ACTIVITY_CACHE_TTL_MS);
     return result;
   }
@@ -999,7 +1030,7 @@ export class AnalyticsService {
           $and: [
             {
               $lt: [
-                '$timeConsumed',
+                EFFECTIVE_TIME_CONSUMED_EXPR,
                 { $multiply: ['$durationInMinutes', 30] }, // 50% of duration in seconds
               ],
             },
@@ -1116,8 +1147,17 @@ export class AnalyticsService {
   // ---------------------------------------------------------------------------
 
   async invalidateDashboardCache(userId: string): Promise<void> {
+    const recentActivityKeys = [10, 20].flatMap(limit =>
+      Array.from(
+        { length: 10 },
+        (_, i) => `analytics:recent-activity:${userId}:${i + 1}:${limit}`,
+      ),
+    );
+
     await Promise.all([
       this.cacheManager.del(`analytics:dashboard:${userId}`),
+      ...recentActivityKeys.map(key => this.cacheManager.del(key)),
+      // Legacy unpaged cache keys (pre-pagination)
       this.cacheManager.del(`analytics:recent-activity:${userId}:10`),
       this.cacheManager.del(`analytics:recent-activity:${userId}:20`),
       this.cacheManager.del(`analytics:subject-topic:${userId}`),

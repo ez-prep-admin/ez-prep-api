@@ -11,6 +11,7 @@ import { MockTestAttempt } from './schemas/mock-test-attempt.schema';
 import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { Question } from './schemas/question.schema';
 import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 const TEST_ID = '507f1f77bcf86cd799439011';
 const USER_ID = '507f1f77bcf86cd799439012';
@@ -83,6 +84,7 @@ function makeAttempt(overrides: Record<string, unknown> = {}) {
   const attempt: any = {
     id: ATTEMPT_ID,
     _id: new Types.ObjectId(ATTEMPT_ID),
+    user: { toString: () => USER_ID },
     testTitle: 'Paper',
     status: 'IN_PROGRESS',
     durationInMinutes: 10,
@@ -157,6 +159,9 @@ describe('MockTestAttemptsService', () => {
   const imageUrlResolver = {
     resolveMany: jest.fn().mockResolvedValue([null, null, null]),
   };
+  const analyticsService = {
+    invalidateDashboardCache: jest.fn().mockResolvedValue(undefined),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -169,6 +174,7 @@ describe('MockTestAttemptsService', () => {
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
         { provide: getModelToken(Question.name), useValue: questionModel },
         { provide: ImageUrlResolver, useValue: imageUrlResolver },
+        { provide: AnalyticsService, useValue: analyticsService },
       ],
     }).compile();
 
@@ -182,6 +188,7 @@ describe('MockTestAttemptsService', () => {
     mockTestModel.findById.mockReset();
     questionModel.find.mockReset();
     imageUrlResolver.resolveMany.mockResolvedValue([null, null, null]);
+    analyticsService.invalidateDashboardCache.mockResolvedValue(undefined);
     attemptModel.updateOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({}),
     });
@@ -1195,6 +1202,262 @@ describe('MockTestAttemptsService', () => {
       const result = await service.completeSession(ATTEMPT_ID, USER_ID);
       expect(result.paperCompleted).toBe(true);
       expect(result.results).toBeDefined();
+    });
+  });
+
+  describe('time tracking', () => {
+    const minutesAgo = (mins: number) => new Date(Date.now() - mins * 60_000);
+    const secondsAgo = (secs: number) => new Date(Date.now() - secs * 1000);
+
+    function sessionAttempt(
+      sessions: Array<Record<string, unknown>>,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return makeAttempt({
+        isSessionWise: true,
+        currentSessionIndex: 0,
+        durationInMinutes: sessions.reduce(
+          (sum, s) => sum + (s.durationInMinutes as number),
+          0,
+        ),
+        sessions: sessions.map((session, order) => ({
+          subject: SUB_ID,
+          name: `S${order}`,
+          order,
+          startIndex: order,
+          endIndex: order,
+          status: 'LOCKED',
+          timeConsumed: 0,
+          ...session,
+        })),
+        ...overrides,
+      });
+    }
+
+    it('stores the time actually consumed on pause, without a grace bonus', async () => {
+      const attempt = makeAttempt({
+        durationInMinutes: 10,
+        startedAt: secondsAgo(120),
+        timeConsumed: 0,
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+
+      const result = await service.pauseAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(result.timeConsumed).toBeGreaterThanOrEqual(120);
+      expect(result.timeConsumed).toBeLessThan(125);
+      expect(attempt.timeConsumed).toBe(result.timeConsumed);
+      expect(result.timeRemaining).toBe(600 - result.timeConsumed);
+    });
+
+    it('keeps accumulating across pause and resume cycles', async () => {
+      // First leg: 2 minutes, then paused
+      const attempt = makeAttempt({
+        durationInMinutes: 10,
+        startedAt: secondsAgo(120),
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      const firstPause = await service.pauseAttempt(ATTEMPT_ID, USER_ID);
+
+      // Paused for a while: the frozen time must not grow
+      attempt.startedAt = minutesAgo(60);
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+      const resumed = await service.resumeAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(attempt.timeConsumed).toBe(firstPause.timeConsumed);
+      expect(resumed.timeElapsed).toBeLessThan(firstPause.timeConsumed + 5);
+      expect(resumed.timeRemaining).toBeGreaterThan(400);
+      // Second leg starts from now, so the paused hour is not charged
+      expect(attempt.startedAt.getTime()).toBeGreaterThan(
+        Date.now() - 5 * 1000,
+      );
+
+      // Second leg: another minute, then paused again
+      attempt.startedAt = secondsAgo(60);
+      const secondPause = await service.pauseAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(secondPause.timeConsumed).toBeGreaterThanOrEqual(180);
+      expect(secondPause.timeConsumed).toBeLessThan(190);
+    });
+
+    it('persists the paper time on submit so analytics can read it', async () => {
+      const attempt = makeAttempt({
+        durationInMinutes: 10,
+        startedAt: secondsAgo(300),
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2, 'b')]),
+      );
+
+      const result = await service.submitAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(result.timeTaken).toBeGreaterThanOrEqual(300);
+      expect(result.timeTaken).toBeLessThan(310);
+      expect(attempt.timeConsumed).toBe(result.timeTaken);
+      expect(attempt.status).toBe('SUBMITTED');
+    });
+
+    it('drops cached analytics when an attempt is submitted', async () => {
+      const attempt = makeAttempt({ startedAt: secondsAgo(60) });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      await service.submitAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(analyticsService.invalidateDashboardCache).toHaveBeenCalledWith(
+        USER_ID,
+      );
+    });
+
+    it('caps the paper time when an abandoned attempt expires', async () => {
+      const attempt = makeAttempt({
+        durationInMinutes: 10,
+        startedAt: minutesAgo(600),
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      await service.findOne(ATTEMPT_ID, USER_ID);
+
+      expect(attempt.status).toBe('EXPIRED');
+      expect(attempt.timeConsumed).toBe(600);
+    });
+
+    it('reports the paper time for a submitted attempt', async () => {
+      const attempt = makeAttempt({
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+        timeConsumed: 412,
+      });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      const result = await service.findOne(ATTEMPT_ID, USER_ID);
+
+      expect(result.timeTaken).toBe(412);
+    });
+
+    it('falls back to the section timers for attempts closed before the total was stored', async () => {
+      const attempt = sessionAttempt(
+        [
+          { durationInMinutes: 20, status: 'SUBMITTED', timeConsumed: 900 },
+          { durationInMinutes: 20, status: 'SUBMITTED', timeConsumed: 600 },
+        ],
+        {
+          status: 'SUBMITTED',
+          currentSessionIndex: 1,
+          submittedAt: new Date(),
+          timeConsumed: 0,
+        },
+      );
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      const result = await service.findOne(ATTEMPT_ID, USER_ID);
+
+      expect(result.timeTaken).toBe(1500);
+    });
+
+    it('runs the section timer, not the paper timer, on a session-wise pause', async () => {
+      const attempt = sessionAttempt([
+        {
+          durationInMinutes: 20,
+          status: 'SUBMITTED',
+          timeConsumed: 1200,
+          submittedAt: minutesAgo(5),
+        },
+        { durationInMinutes: 30, status: 'IN_PROGRESS', startedAt: secondsAgo(60) },
+      ]);
+      attempt.currentSessionIndex = 1;
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+
+      const result = await service.pauseAttempt(ATTEMPT_ID, USER_ID);
+
+      // Section timer: one minute into a 30 minute section
+      expect(result.timeConsumed).toBeGreaterThanOrEqual(60);
+      expect(result.timeConsumed).toBeLessThan(70);
+      expect(result.timeRemaining).toBe(1800 - result.timeConsumed);
+      // Paper total: the finished section plus the current one
+      expect(result.totalTimeConsumed).toBe(1200 + result.timeConsumed);
+      expect(attempt.timeConsumed).toBe(result.totalTimeConsumed);
+      expect(attempt.sessions[1].timeConsumed).toBe(result.timeConsumed);
+    });
+
+    it('adds up every section when a session-wise paper is completed', async () => {
+      const attempt = sessionAttempt([
+        {
+          durationInMinutes: 20,
+          status: 'SUBMITTED',
+          timeConsumed: 1100,
+          submittedAt: minutesAgo(10),
+        },
+        {
+          durationInMinutes: 20,
+          status: 'SUBMITTED',
+          timeConsumed: 1200,
+          submittedAt: minutesAgo(5),
+        },
+        {
+          durationInMinutes: 20,
+          status: 'IN_PROGRESS',
+          startedAt: secondsAgo(300),
+        },
+      ]);
+      attempt.currentSessionIndex = 2;
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      attemptModel.findById.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2, 'b')]),
+      );
+
+      const result = await service.completeSession(ATTEMPT_ID, USER_ID);
+
+      expect(result.paperCompleted).toBe(true);
+      expect(result.results?.timeTaken).toBeGreaterThanOrEqual(2600);
+      expect(result.results?.timeTaken).toBeLessThan(2620);
+      expect(attempt.timeConsumed).toBe(result.results?.timeTaken);
+    });
+
+    it('carries finished sections forward when the next section opens', async () => {
+      const attempt = sessionAttempt([
+        {
+          durationInMinutes: 20,
+          status: 'IN_PROGRESS',
+          startedAt: secondsAgo(600),
+        },
+        { durationInMinutes: 20 },
+      ]);
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      await service.completeSession(ATTEMPT_ID, USER_ID);
+
+      expect(attempt.sessions[0].timeConsumed).toBeGreaterThanOrEqual(600);
+      expect(attempt.sessions[1].timeConsumed).toBe(0);
+      expect(attempt.timeConsumed).toBe(attempt.sessions[0].timeConsumed);
+      expect(attempt.currentSessionIndex).toBe(1);
+    });
+
+    it('caps an expired section at its own duration', async () => {
+      const attempt = sessionAttempt([
+        {
+          durationInMinutes: 5,
+          status: 'IN_PROGRESS',
+          startedAt: minutesAgo(120),
+        },
+        { durationInMinutes: 5 },
+      ]);
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+
+      await service.findOne(ATTEMPT_ID, USER_ID);
+
+      expect(attempt.sessions[0].status).toBe('EXPIRED');
+      expect(attempt.sessions[0].timeConsumed).toBe(300);
+      expect(attempt.timeConsumed).toBe(300);
+      // The paper stays open so the student can move to the next section
+      expect(attempt.status).toBe('IN_PROGRESS');
     });
   });
 });

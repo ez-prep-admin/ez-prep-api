@@ -196,8 +196,11 @@ export class MockTestAttempt {
   submittedAt?: Date;
 
   // Pause/Resume tracking
+  // Time spent on the paper in seconds, excluding paused time. Frozen on pause,
+  // session completion and submit/expiry; for session-wise papers it holds the
+  // sum of every section timer. Analytics reads this field.
   @Prop({ type: Number, default: 0 })
-  timeConsumed: number; // Total time consumed in seconds (accumulated across pause/resume cycles)
+  timeConsumed: number;
 
   @Prop()
   pausedAt?: Date; // When the attempt was last paused

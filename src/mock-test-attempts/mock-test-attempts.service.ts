@@ -30,6 +30,7 @@ import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { UserAttemptSummaryDto } from './dto/user-attempt-summary.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { AnalyticsService } from '../analytics/analytics.service';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -43,7 +44,24 @@ export class MockTestAttemptsService {
     @InjectModel(Question.name)
     private questionModel: Model<QuestionDocument>,
     private readonly imageUrlResolver: ImageUrlResolver,
+    private readonly analyticsService: AnalyticsService,
   ) {}
+
+  /**
+   * Drop the cached dashboard/activity payloads once an attempt is closed so the
+   * student sees the finished test, and its time, straight away.
+   */
+  private async refreshAnalytics(userId: string): Promise<void> {
+    try {
+      await this.analyticsService.invalidateDashboardCache(userId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to invalidate analytics cache for user ${userId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   private getCurrentSession(
     attempt: MockTestAttemptDocument,
@@ -168,8 +186,12 @@ export class MockTestAttemptsService {
       return (session.timeConsumed || 0) + currentSessionTime;
     }
 
-    // If paused, return the saved timeConsumed
-    if (attempt.status === 'PAUSED') {
+    // Once paused or closed the timer is frozen at the persisted value
+    if (
+      attempt.status === 'PAUSED' ||
+      attempt.status === 'SUBMITTED' ||
+      attempt.status === 'EXPIRED'
+    ) {
       return attempt.timeConsumed || 0;
     }
 
@@ -178,6 +200,86 @@ export class MockTestAttemptsService {
       (Date.now() - attempt.startedAt.getTime()) / 1000,
     );
     return (attempt.timeConsumed || 0) + currentSessionTime;
+  }
+
+  /**
+   * Helper: Time consumed on the whole paper in seconds.
+   * Session-wise papers add the already finished sessions to the live timer of
+   * the current session, so a full mock reports the time for every section.
+   * Each session is capped at its own duration so abandoned attempts (expired
+   * hours later) cannot report more than the paper allowed.
+   */
+  private calculateTotalTimeConsumed(
+    attempt: MockTestAttemptDocument,
+    elapsedOverride?: number,
+  ): number {
+    const current = this.getCurrentSession(attempt);
+    const elapsed = elapsedOverride ?? this.calculateTimeElapsed(attempt);
+
+    if (!current) {
+      return Math.min(elapsed, this.getAllowedTimeSeconds(attempt));
+    }
+
+    const finished = (attempt.sessions || []).reduce((total, session, index) => {
+      if (index === attempt.currentSessionIndex) {
+        return total;
+      }
+      const cap = session.durationInMinutes * 60;
+      return total + Math.min(session.timeConsumed || 0, cap);
+    }, 0);
+
+    const currentConsumed = Math.min(elapsed, current.durationInMinutes * 60);
+
+    return finished + currentConsumed;
+  }
+
+  /**
+   * Helper: Persist the final paper time on the attempt root so analytics and
+   * the results screen can read it after the attempt is closed.
+   * `elapsedOverride` must be the elapsed value captured before the status was
+   * changed, because a closed attempt no longer has a running timer.
+   */
+  private persistTotalTimeConsumed(
+    attempt: MockTestAttemptDocument,
+    elapsedOverride?: number,
+  ): number {
+    const total = Math.floor(
+      this.calculateTotalTimeConsumed(attempt, elapsedOverride),
+    );
+    attempt.timeConsumed = total;
+    return total;
+  }
+
+  /**
+   * Helper: Time taken on a closed attempt.
+   * Attempts finished before the paper time was persisted fall back to the
+   * section totals, then to the wall clock between start and submission.
+   */
+  private getCompletedTimeTaken(attempt: MockTestAttemptDocument): number {
+    if (attempt.timeConsumed > 0) {
+      return attempt.timeConsumed;
+    }
+
+    const sessionTotal = (attempt.sessions || []).reduce(
+      (total, session) =>
+        total +
+        Math.min(session.timeConsumed || 0, session.durationInMinutes * 60),
+      0,
+    );
+    if (sessionTotal > 0) {
+      return sessionTotal;
+    }
+
+    if (!attempt.submittedAt || !attempt.startedAt) {
+      return 0;
+    }
+    const wallClock = Math.floor(
+      (attempt.submittedAt.getTime() - attempt.startedAt.getTime()) / 1000,
+    );
+    return Math.max(
+      0,
+      Math.min(wallClock, attempt.durationInMinutes * 60),
+    );
   }
 
   /**
@@ -246,6 +348,7 @@ export class MockTestAttemptsService {
       session.status = 'EXPIRED';
       session.timeConsumed = allowedTime;
       session.submittedAt = new Date();
+      this.persistTotalTimeConsumed(attempt, allowedTime);
 
       const isLast =
         attempt.currentSessionIndex >= (attempt.sessions?.length || 1) - 1;
@@ -263,9 +366,11 @@ export class MockTestAttemptsService {
     );
 
     attempt.score = await this.scoreAttempt(attempt);
+    this.persistTotalTimeConsumed(attempt, timeElapsed);
     attempt.status = 'EXPIRED';
     attempt.submittedAt = new Date();
     await attempt.save();
+    await this.refreshAnalytics(attempt.user.toString());
 
     return true;
   }
@@ -509,24 +614,17 @@ export class MockTestAttemptsService {
       );
     }
 
-    // Step 4: Calculate time consumed with grace period
-    const activeSession = this.getCurrentSession(attempt);
-    const timerStart = activeSession?.startedAt || attempt.startedAt;
-    const currentSessionTime = Math.floor(
-      (Date.now() - timerStart.getTime()) / 1000,
-    );
+    // Step 4: Freeze the running timer at the time actually consumed.
+    // The grace period only makes the expiry check lenient for network delays;
+    // it must not be added to the stored time or every pause would inflate it.
     const session = this.getCurrentSession(attempt);
-    const priorConsumed = session
-      ? session.timeConsumed || 0
-      : attempt.timeConsumed || 0;
-    const totalTimeConsumed =
-      priorConsumed + currentSessionTime + GRACE_PERIOD_SECONDS;
-
+    const timeElapsed = this.calculateTimeElapsed(attempt);
     const allowedTime = this.getAllowedTimeSeconds(attempt);
-    const timeRemaining = Math.max(0, allowedTime - totalTimeConsumed);
+    const timerConsumed = Math.min(timeElapsed, allowedTime);
+    const timeRemaining = Math.max(0, allowedTime - timeElapsed);
 
     // Step 5: Check if time has already expired
-    if (timeRemaining === 0) {
+    if (timeElapsed + GRACE_PERIOD_SECONDS >= allowedTime) {
       throw new BadRequestException(
         'Cannot pause: Test time has already expired. Please submit the test.',
       );
@@ -534,12 +632,17 @@ export class MockTestAttemptsService {
 
     // Step 6: Update attempt with paused state
     attempt.status = 'PAUSED';
-    attempt.timeConsumed = totalTimeConsumed;
     attempt.pausedAt = new Date();
     if (session) {
       session.status = 'PAUSED';
-      session.timeConsumed = totalTimeConsumed;
+      session.timeConsumed = timerConsumed;
     }
+    // Session-wise papers keep the paper total on the root and the section
+    // timer on the session; single-timer papers use the root for both.
+    const totalTimeConsumed = this.persistTotalTimeConsumed(
+      attempt,
+      timeElapsed,
+    );
 
     // Add pause event to history
     attempt.pauseResumeHistory.push({
@@ -564,7 +667,8 @@ export class MockTestAttemptsService {
       attemptId: attempt.id,
       testTitle: attempt.testTitle,
       status: 'PAUSED',
-      timeConsumed: totalTimeConsumed,
+      timeConsumed: timerConsumed,
+      totalTimeConsumed,
       timeRemaining,
       pausedAt: attempt.pausedAt,
       pauseCount,
@@ -725,6 +829,7 @@ export class MockTestAttemptsService {
     if (isSubmitted) {
       response.score = attempt.score;
       response.submittedAt = attempt.submittedAt;
+      response.timeTaken = this.getCompletedTimeTaken(attempt);
 
       // Calculate answer statistics
       let correctCount = 0;
@@ -1228,7 +1333,10 @@ export class MockTestAttemptsService {
     const timeElapsed = this.calculateTimeElapsed(attempt);
     const allowedTime = this.getAllowedTimeSeconds(attempt);
     const GRACE_PERIOD_SECONDS = 10; // Allow 10 seconds for network delays
-    const isExpired = timeElapsed > allowedTime;
+    // A session-wise paper reaches submit through completeSession, which has
+    // already frozen the section timer, so trust that verdict as well.
+    const isExpired =
+      timeElapsed > allowedTime || currentSession?.status === 'EXPIRED';
     const exceededBySeconds = timeElapsed - allowedTime;
     const isWithinGracePeriod = exceededBySeconds <= GRACE_PERIOD_SECONDS;
 
@@ -1358,10 +1466,17 @@ export class MockTestAttemptsService {
       currentSession.timeConsumed = Math.min(timeElapsed, allowedTime);
     }
     attempt.score = totalScore;
+    // Freeze the paper time before closing the attempt: analytics, the results
+    // screen and the badge rules all read attempt.timeConsumed afterwards.
+    const totalTimeConsumed = this.persistTotalTimeConsumed(
+      attempt,
+      timeElapsed,
+    );
     attempt.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
     attempt.submittedAt = submittedAt;
 
     await attempt.save();
+    await this.refreshAnalytics(userId);
 
     // Step 9: Prepare response
     const totalPossibleScore = attempt.questions.reduce((sum, q) => {
@@ -1381,7 +1496,7 @@ export class MockTestAttemptsService {
       incorrectAnswers: incorrectCount,
       unansweredQuestions: unansweredCount,
       submittedAt,
-      timeTaken: Math.floor(timeElapsed),
+      timeTaken: totalTimeConsumed,
     };
 
     // Step 10: Include detailed results if showResultsImmediately is true
@@ -1468,7 +1583,8 @@ export class MockTestAttemptsService {
     if (session.status === 'IN_PROGRESS' || session.status === 'PAUSED') {
       session.status = isExpired ? 'EXPIRED' : 'SUBMITTED';
       session.submittedAt = new Date();
-      session.timeConsumed = Math.min(timeElapsed, allowedTime + 10);
+      session.timeConsumed = Math.min(timeElapsed, allowedTime);
+      this.persistTotalTimeConsumed(attempt, timeElapsed);
     }
 
     const isLast = attempt.currentSessionIndex >= attempt.sessions.length - 1;

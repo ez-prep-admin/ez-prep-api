@@ -225,7 +225,11 @@ export class ExamsService {
    * Find one exam by ID
    */
   async findOne(id: string): Promise<ExamResponseDto> {
-    const exam = await this.examModel.findById(id).populate('category').exec();
+    const exam = await this.examModel
+      .findById(id)
+      .populate('category')
+      .populate('subjects.subject')
+      .exec();
 
     if (!exam) {
       throw new NotFoundException(`Exam with ID "${id}" not found`);
@@ -384,6 +388,16 @@ export class ExamsService {
     return String(value);
   }
 
+  private toRefName(value: unknown): string | undefined {
+    if (value && typeof value === 'object') {
+      const row = value as { name?: unknown };
+      if (typeof row.name === 'string' && row.name) {
+        return row.name;
+      }
+    }
+    return undefined;
+  }
+
   /**
    * Helper: Format duration from minutes to human-readable string
    */
@@ -409,6 +423,7 @@ export class ExamsService {
       subjects: obj.subjects?.map(s => ({
         ...s,
         subject: this.toRefId(s.subject) || String(s.subject),
+        name: this.toRefName(s.subject),
       })),
     });
   }
