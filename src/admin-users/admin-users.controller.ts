@@ -42,6 +42,7 @@ export class AdminUsersController {
       'Paginated directory of student accounts (`role=user` only). ' +
       'Admin accounts are excluded in the query and again before the response is built. ' +
       'There is no `role` query parameter — this endpoint cannot list admins. ' +
+      'Email and phone number are masked in the response; `search` still matches the stored name, email, or phone. ' +
       '`testsAttendedCount` is a simple count of mock-test-attempt documents per user.',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })

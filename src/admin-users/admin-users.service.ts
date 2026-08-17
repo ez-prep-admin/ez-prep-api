@@ -16,6 +16,8 @@ import {
   clampPage,
   excludeNonAppUsers,
   isAppUserRole,
+  maskEmail,
+  maskPhoneNumber,
 } from './admin-users.guardrails';
 import { AppUserListItemDto } from './dto/app-user-list-item.dto';
 import { PaginatedAppUsersResponseDto } from './dto/paginated-app-users-response.dto';
@@ -141,9 +143,8 @@ export class AdminUsersService {
     return {
       id: String(obj.id ?? user._id),
       name: String(obj.name ?? ''),
-      email: String(obj.email ?? ''),
-      phoneNumber:
-        typeof obj.phoneNumber === 'string' ? obj.phoneNumber : undefined,
+      email: maskEmail(obj.email),
+      phoneNumber: maskPhoneNumber(obj.phoneNumber),
       avatarUrl: typeof obj.avatarUrl === 'string' ? obj.avatarUrl : undefined,
       role: APP_USER_ROLE,
       isActive: obj.isActive !== false,

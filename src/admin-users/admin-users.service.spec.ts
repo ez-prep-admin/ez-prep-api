@@ -138,8 +138,8 @@ describe('AdminUsersService', () => {
     expect(result.data[0]).toMatchObject({
       id,
       name: 'Anita Sharma',
-      email: 'anita@example.com',
-      phoneNumber: '+919876543210',
+      email: 'a***@***.com',
+      phoneNumber: '+**********10',
       role: APP_USER_ROLE,
       testsAttendedCount: 7,
       targetExam: { id: 'exam1', name: 'UPSC' },
@@ -148,6 +148,8 @@ describe('AdminUsersService', () => {
         status: SubscriptionStatus.ACTIVE,
       },
     });
+    expect(JSON.stringify(result.data[0])).not.toContain('anita@example.com');
+    expect(JSON.stringify(result.data[0])).not.toContain('+919876543210');
     expect(result.data[0]).not.toHaveProperty('username');
     expect(result.data[0]).not.toHaveProperty('passwordHash');
     expect(result.data[0]).not.toHaveProperty('preferences');
@@ -371,5 +373,25 @@ describe('AdminUsersService', () => {
     const result = await service.listAppUsers();
     expect(result.data[0].name).toBe('');
     expect(result.data[0].email).toBe('');
+  });
+
+  it('never serializes a full email or phone number on the list payload', async () => {
+    const user = learnerDoc({
+      email: 'anita.sharma@gmail.com',
+      phoneNumber: '+919876543210',
+    });
+    userModel.find.mockReturnValue(chain([user]));
+    userModel.countDocuments.mockReturnValue(chain(1));
+    attemptModel.aggregate.mockReturnValue(chain([]));
+
+    const result = await service.listAppUsers(1, 12, 'anita.sharma@gmail.com');
+    const payload = JSON.stringify(result.data);
+
+    expect(result.data[0].email).toBe('a***@***.com');
+    expect(result.data[0].phoneNumber).toBe('+**********10');
+    expect(payload).not.toContain('anita.sharma@gmail.com');
+    expect(payload).not.toContain('gmail.com');
+    expect(payload).not.toContain('+919876543210');
+    expect(payload).not.toContain('9876543210');
   });
 });
