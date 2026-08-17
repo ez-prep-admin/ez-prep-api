@@ -59,9 +59,10 @@ export function clampLimit(limit: number, max = 100): number {
 }
 
 /**
- * Masks an email so the full address never leaves the API.
- * `anita.sharma@example.com` → `a***@***.com`
+ * Masks an email so the local part is never returned in full.
+ * `anita.sharma@gmail.com` → `a***@gmail.com`
  *
+ * Keeps the first character of the local part and the full domain.
  * Search still matches the stored value in Mongo; only the response is masked.
  * Values that are already masked (contain `*`) are returned unchanged.
  */
@@ -85,18 +86,38 @@ export function maskEmail(value: unknown): string {
 
   const local = email.slice(0, at);
   const domain = email.slice(at + 1);
-  const lastDot = domain.lastIndexOf('.');
-  const tld = lastDot > 0 ? domain.slice(lastDot) : '';
   const lead = local[0] && /[a-z0-9]/i.test(local[0]) ? local[0] : '*';
 
-  return `${lead}***@***${tld}`;
+  return `${lead}***@${domain}`;
+}
+
+function countryCodeDigitCount(digits: string, hadPlus: boolean): number {
+  if (digits.startsWith('91') && digits.length >= 12) {
+    return 2;
+  }
+  if (!hadPlus) {
+    return 0;
+  }
+  if (digits.startsWith('1') && digits.length === 11) {
+    return 1;
+  }
+  if (digits.length >= 13) {
+    return 3;
+  }
+  if (digits.length === 12) {
+    return 2;
+  }
+  if (digits.length === 11) {
+    return 1;
+  }
+  return Math.min(digits.length, 2);
 }
 
 /**
- * Masks a phone number so the full value never leaves the API.
- * `+919876543210` → `+**********10`
+ * Masks a phone number so the subscriber digits never leave the API.
+ * `+919876543210` → `+91**********`
  *
- * Keeps a leading `+` and the last two digits. Everything else is hidden.
+ * Keeps a leading `+` and the country code (e.g. `91`), then masks the rest.
  * Values that are already masked (contain `*`) are returned unchanged.
  */
 export function maskPhoneNumber(value: unknown): string | undefined {
@@ -117,11 +138,16 @@ export function maskPhoneNumber(value: unknown): string | undefined {
   if (digits.length === 0) {
     return `${plus}****`;
   }
-  if (digits.length <= 2) {
-    return `${plus}${'*'.repeat(digits.length)}`;
+
+  const ccLen = countryCodeDigitCount(digits, plus === '+');
+  const country = digits.slice(0, ccLen);
+  const rest = digits.slice(ccLen);
+  const maskedLocal =
+    rest.length === 0 ? '' : '*'.repeat(Math.max(rest.length, 2));
+
+  if (!country && !maskedLocal) {
+    return `${plus}**`;
   }
 
-  const visible = digits.slice(-2);
-  const hidden = Math.max(digits.length - 2, 4);
-  return `${plus}${'*'.repeat(hidden)}${visible}`;
+  return `${plus}${country}${maskedLocal}`;
 }

@@ -138,8 +138,8 @@ describe('AdminUsersService', () => {
     expect(result.data[0]).toMatchObject({
       id,
       name: 'Anita Sharma',
-      email: 'a***@***.com',
-      phoneNumber: '+**********10',
+      email: 'a***@example.com',
+      phoneNumber: '+91**********',
       role: APP_USER_ROLE,
       testsAttendedCount: 7,
       targetExam: { id: 'exam1', name: 'UPSC' },
@@ -387,11 +387,12 @@ describe('AdminUsersService', () => {
     const result = await service.listAppUsers(1, 12, 'anita.sharma@gmail.com');
     const payload = JSON.stringify(result.data);
 
-    expect(result.data[0].email).toBe('a***@***.com');
-    expect(result.data[0].phoneNumber).toBe('+**********10');
+    expect(result.data[0].email).toBe('a***@gmail.com');
+    expect(result.data[0].phoneNumber).toBe('+91**********');
     expect(payload).not.toContain('anita.sharma@gmail.com');
-    expect(payload).not.toContain('gmail.com');
+    expect(payload).not.toContain('anita.sharma');
     expect(payload).not.toContain('+919876543210');
     expect(payload).not.toContain('9876543210');
+    expect(payload).toContain('gmail.com');
   });
 });

@@ -49,16 +49,16 @@ export class AppUserListItemDto {
   name: string;
 
   @ApiProperty({
-    example: 'a***@***.com',
+    example: 'a***@gmail.com',
     description:
-      'Masked email. The full address is never returned; search still matches the stored value.',
+      'Masked email: first letter of the local part plus the full domain. The rest of the local part is never returned; search still matches the stored value.',
   })
   email: string;
 
   @ApiPropertyOptional({
-    example: '+**********10',
+    example: '+91**********',
     description:
-      'Masked phone number. The full number is never returned; search still matches the stored value.',
+      'Masked phone number: country code (e.g. +91) is kept and the subscriber digits are hidden. Search still matches the stored value.',
   })
   phoneNumber?: string;
 

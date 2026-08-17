@@ -97,19 +97,19 @@ describe('admin-users guardrails', () => {
   });
 
   describe('maskEmail', () => {
-    it('masks the local part and domain, keeping only a lead character and TLD', () => {
-      expect(maskEmail('anita@example.com')).toBe('a***@***.com');
-      expect(maskEmail('Anita.Sharma@Gmail.COM')).toBe('A***@***.COM');
-      expect(maskEmail('ab@x.io')).toBe('a***@***.io');
-      expect(maskEmail('a@b.co')).toBe('a***@***.co');
+    it('keeps the first letter and the full domain', () => {
+      expect(maskEmail('anita@example.com')).toBe('a***@example.com');
+      expect(maskEmail('Anita.Sharma@Gmail.COM')).toBe('A***@Gmail.COM');
+      expect(maskEmail('ab@x.io')).toBe('a***@x.io');
+      expect(maskEmail('a@b.co')).toBe('a***@b.co');
     });
 
-    it('never returns the original address', () => {
-      const original = 'anita.sharma@example.com';
+    it('never returns the original local part', () => {
+      const original = 'anita.sharma@gmail.com';
       const masked = maskEmail(original);
+      expect(masked).toBe('a***@gmail.com');
       expect(masked).not.toBe(original);
       expect(masked).not.toContain('anita.sharma');
-      expect(masked).not.toContain('example');
     });
 
     it('handles missing, blank, and malformed values', () => {
@@ -123,23 +123,23 @@ describe('admin-users guardrails', () => {
     });
 
     it('does not remask an already masked email', () => {
-      expect(maskEmail('a***@***.com')).toBe('a***@***.com');
+      expect(maskEmail('a***@gmail.com')).toBe('a***@gmail.com');
     });
   });
 
   describe('maskPhoneNumber', () => {
-    it('keeps a leading plus and the last two digits', () => {
-      expect(maskPhoneNumber('+919876543210')).toBe('+**********10');
-      expect(maskPhoneNumber('9876543210')).toBe('********10');
-      expect(maskPhoneNumber('+1 (415) 555-0199')).toBe('+*********99');
+    it('keeps the country code and masks the subscriber digits', () => {
+      expect(maskPhoneNumber('+919876543210')).toBe('+91**********');
+      expect(maskPhoneNumber('9876543210')).toBe('**********');
+      expect(maskPhoneNumber('+1 (415) 555-0199')).toBe('+1**********');
     });
 
-    it('never returns the original number', () => {
+    it('never returns the original subscriber number', () => {
       const original = '+919876543210';
       const masked = maskPhoneNumber(original);
+      expect(masked).toBe('+91**********');
       expect(masked).not.toBe(original);
       expect(masked).not.toContain('9876543210');
-      expect(masked).not.toContain('919876543210');
     });
 
     it('handles missing, blank, and very short values', () => {
@@ -149,11 +149,11 @@ describe('admin-users guardrails', () => {
       expect(maskPhoneNumber('   ')).toBeUndefined();
       expect(maskPhoneNumber('+')).toBe('+****');
       expect(maskPhoneNumber('12')).toBe('**');
-      expect(maskPhoneNumber('+9')).toBe('+*');
+      expect(maskPhoneNumber('+9')).toBe('+9');
     });
 
     it('does not remask an already masked phone', () => {
-      expect(maskPhoneNumber('+**********10')).toBe('+**********10');
+      expect(maskPhoneNumber('+91**********')).toBe('+91**********');
     });
   });
 });
