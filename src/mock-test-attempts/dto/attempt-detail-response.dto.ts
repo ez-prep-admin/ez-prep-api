@@ -164,6 +164,12 @@ export class AttemptDetailResponseDto {
   score?: number;
 
   @ApiPropertyOptional({
+    description:
+      'Maximum possible marks for the paper (sum of per-question marks). Present for submitted or expired attempts.',
+  })
+  totalScore?: number;
+
+  @ApiPropertyOptional({
     description: 'When submitted (only for submitted attempts)',
   })
   submittedAt?: Date;
