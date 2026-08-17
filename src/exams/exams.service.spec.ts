@@ -286,7 +286,10 @@ describe('ExamsService', () => {
           category: { id: OID },
           examGroup: { _id: { toString: () => OID2 } },
           subjects: [
-            { subject: { id: OID, name: 'Quantitative Aptitude' }, numberOfQuestions: 1 },
+            {
+              subject: { id: OID, name: 'Quantitative Aptitude' },
+              numberOfQuestions: 1,
+            },
           ],
         }),
       ),

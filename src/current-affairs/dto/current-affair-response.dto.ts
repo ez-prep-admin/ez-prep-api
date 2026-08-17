@@ -17,13 +17,13 @@ export class CurrentAffairResponseDto {
   @Expose()
   title: string;
 
-  @ApiProperty({
-    description: 'Details about the event',
+  @ApiPropertyOptional({
+    description: 'Details about the event. Absent when the item has none.',
     example:
       'ISRO successfully launched a meteorological satellite from Sriharikota.',
   })
   @Expose()
-  description: string;
+  description?: string;
 
   @ApiPropertyOptional({
     description: 'Optional mnemonic or memory aid',

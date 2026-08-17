@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { AdminDashboardService, formatDurationLabel } from './admin-dashboard.service';
+import {
+  AdminDashboardService,
+  formatDurationLabel,
+} from './admin-dashboard.service';
 import { User } from '../users/schemas/user.schema';
 import { Question } from '../mock-test-attempts/schemas/question.schema';
 import { FailedQuestion } from '../imports/schemas/failed-question.schema';
@@ -53,8 +56,14 @@ describe('AdminDashboardService', () => {
           useValue: failedQuestionModel,
         },
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
-        { provide: getModelToken(FullMockTestDraft.name), useValue: draftModel },
-        { provide: getModelToken(MockTestAttempt.name), useValue: attemptModel },
+        {
+          provide: getModelToken(FullMockTestDraft.name),
+          useValue: draftModel,
+        },
+        {
+          provide: getModelToken(MockTestAttempt.name),
+          useValue: attemptModel,
+        },
         { provide: getModelToken(Exam.name), useValue: examModel },
         { provide: getModelToken(Subject.name), useValue: subjectModel },
         { provide: getModelToken(Topic.name), useValue: topicModel },

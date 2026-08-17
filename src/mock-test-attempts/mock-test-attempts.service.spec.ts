@@ -1367,7 +1367,11 @@ describe('MockTestAttemptsService', () => {
           timeConsumed: 1200,
           submittedAt: minutesAgo(5),
         },
-        { durationInMinutes: 30, status: 'IN_PROGRESS', startedAt: secondsAgo(60) },
+        {
+          durationInMinutes: 30,
+          status: 'IN_PROGRESS',
+          startedAt: secondsAgo(60),
+        },
       ]);
       attempt.currentSessionIndex = 1;
       attemptModel.findOne.mockReturnValue(chainable(attempt));

@@ -1,4 +1,10 @@
-import { Controller, Get, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -59,7 +65,9 @@ export class AdminDashboardController {
 
   @Get('questions')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Active questions by subject, topic, and difficulty' })
+  @ApiOperation({
+    summary: 'Active questions by subject, topic, and difficulty',
+  })
   @ApiOkResponse({ type: AdminDashboardQuestionsDto })
   async getQuestions(): Promise<{
     message: string;

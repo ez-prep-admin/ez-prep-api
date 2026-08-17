@@ -25,19 +25,21 @@ export class CreateCurrentAffairDto {
   @Transform(({ value }) => value?.trim())
   title: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Details about the event. Trimmed on save. Shown in the user-facing daily feed.',
+      'Details about the event. Trimmed on save. Shown in the user-facing daily feed. Omit or leave empty if unused.',
     example:
       'ISRO successfully launched a meteorological satellite from Sriharikota.',
     minLength: 2,
     maxLength: 5000,
   })
+  @IsOptional()
+  @ValidateIf((_, value) => value != null && value !== '')
   @IsString()
   @MinLength(2, { message: 'Description must be at least 2 characters long' })
   @MaxLength(5000, { message: 'Description cannot exceed 5000 characters' })
-  @Transform(({ value }) => value?.trim())
-  description: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  description?: string;
 
   @ApiProperty({
     description:

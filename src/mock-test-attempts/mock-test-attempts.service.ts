@@ -226,13 +226,16 @@ export class MockTestAttemptsService {
       return Math.min(elapsed, this.getAllowedTimeSeconds(attempt));
     }
 
-    const finished = (attempt.sessions || []).reduce((total, session, index) => {
-      if (index === attempt.currentSessionIndex) {
-        return total;
-      }
-      const cap = session.durationInMinutes * 60;
-      return total + Math.min(session.timeConsumed || 0, cap);
-    }, 0);
+    const finished = (attempt.sessions || []).reduce(
+      (total, session, index) => {
+        if (index === attempt.currentSessionIndex) {
+          return total;
+        }
+        const cap = session.durationInMinutes * 60;
+        return total + Math.min(session.timeConsumed || 0, cap);
+      },
+      0,
+    );
 
     const currentConsumed = Math.min(elapsed, current.durationInMinutes * 60);
 
@@ -282,10 +285,7 @@ export class MockTestAttemptsService {
     const wallClock = Math.floor(
       (attempt.submittedAt.getTime() - attempt.startedAt.getTime()) / 1000,
     );
-    return Math.max(
-      0,
-      Math.min(wallClock, attempt.durationInMinutes * 60),
-    );
+    return Math.max(0, Math.min(wallClock, attempt.durationInMinutes * 60));
   }
 
   /**
