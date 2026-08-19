@@ -246,6 +246,7 @@ export class FullMockTestsService {
 
     if (params.draftId) {
       const draft = await this.loadDraft(params.draftId);
+      query.exams = draft.exam;
       const exclude = draft.questions.map(q => q.question);
       if (exclude.length) {
         query._id = { $nin: exclude };
@@ -330,6 +331,13 @@ export class FullMockTestsService {
       throw new BadRequestException({
         message: 'Replacement question must belong to the same subject',
         error: 'SUBJECT_MISMATCH',
+      });
+    }
+
+    if (!this.isTaggedToExam(incoming.exams, draft.exam)) {
+      throw new BadRequestException({
+        message: 'Replacement question must be tagged to this exam',
+        error: 'EXAM_MISMATCH',
       });
     }
 
@@ -893,6 +901,14 @@ export class FullMockTestsService {
       negativeMarking: q.negativeMarking,
       replacedFrom: q.replacedFrom,
     };
+  }
+
+  private isTaggedToExam(
+    exams: Array<{ toString(): string }> | undefined,
+    examId: { toString(): string },
+  ): boolean {
+    const target = examId.toString();
+    return (exams || []).some(id => id?.toString() === target);
   }
 
   private assertNoDuplicateQuestions(

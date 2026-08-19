@@ -169,8 +169,8 @@ Error codes (400): \`BLUEPRINT_INVALID\`, \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOU
 Replace-picker search over the question bank.
 
 - \`subjectId\` is required (must match the slot you are replacing).
+- Pass \`draftId\` to scope to questions tagged to that draft’s exam, and to exclude IDs already on the paper.
 - Optional filters: topic, difficulty, text search (EN/ML).
-- Pass \`draftId\` to exclude IDs already on that paper.
 - Returns safe fields only (no correctAnswer / explanation).
     `,
   })
@@ -182,7 +182,8 @@ Replace-picker search over the question bank.
   @ApiQuery({
     name: 'draftId',
     required: false,
-    description: 'When set, questions already on this draft are excluded',
+    description:
+      'When set, only questions tagged to this draft’s exam are returned, and questions already on the paper are excluded',
   })
   @ApiQuery({
     name: 'search',
@@ -282,12 +283,13 @@ Swaps the question at \`position\` (0-based across the whole paper).
 Guards:
 - Draft status must be \`REVIEW\`
 - Incoming question subject **must** match the slot subject (keeps quota, marks, session)
+- Incoming question **must** be tagged to this draft’s exam
 - Incoming question must not already be on the paper
 - Topic may change
 - Marks / negative marking / position are **not** changed
 - Usage counts are **not** incremented (that happens on publish)
 
-Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`.
+Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`, \`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`.
     `,
   })
   @ApiParam({ name: 'id', description: 'Draft ID' })
@@ -302,7 +304,7 @@ Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`DUPLICATE_QUESTION\
   })
   @ApiBadRequestResponse({
     description:
-      'Draft not editable, subject mismatch, duplicate, or ineligible question',
+      'Draft not editable, subject mismatch, exam mismatch, duplicate, or ineligible question',
   })
   @ApiNotFoundResponse({ description: 'Draft not found' })
   @ApiForbiddenResponse({ description: 'Admin role required' })

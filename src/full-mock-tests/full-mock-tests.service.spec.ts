@@ -357,6 +357,25 @@ describe('FullMockTestsService', () => {
         limit: 20,
       });
       expect(result.data[0].snippet).toBe('Hello world');
+      const query = questionModel.find.mock.calls[0][0];
+      expect(query.subject.toString()).toBe(SUB_ID);
+      expect(query.exams.toString()).toBe(EXAM_ID);
+      expect(query.topic.toString()).toBe(TOP_ID);
+      expect(query.difficultyLevel).toBe('easy');
+      expect(query._id.$nin.map((id: Types.ObjectId) => id.toString())).toEqual([
+        Q1,
+      ]);
+    });
+
+    it('should not filter by exam when draftId is omitted', async () => {
+      questionModel.find.mockReturnValue(chainable([questionLean()]));
+
+      await service.searchQuestions({ subjectId: SUB_ID });
+
+      expect(questionModel.find).toHaveBeenCalledWith(
+        expect.not.objectContaining({ exams: expect.anything() }),
+      );
+      expect(questionModel.find.mock.calls[0][0].exams).toBeUndefined();
     });
   });
 
@@ -405,6 +424,7 @@ describe('FullMockTestsService', () => {
           difficultyLevel: 'easy',
           subject: new Types.ObjectId(SUB_ID),
           topic: new Types.ObjectId(TOP_ID),
+          exams: [new Types.ObjectId(EXAM_ID)],
         }),
       );
       const withDup = makeDraft({
@@ -427,6 +447,31 @@ describe('FullMockTestsService', () => {
       );
     });
 
+    it('should reject questions that are not tagged to the draft exam', async () => {
+      draftModel.findById.mockReturnValue(chainable(makeDraft()));
+      questionModel.findById.mockReturnValue(
+        chainable({
+          _id: new Types.ObjectId(Q2),
+          isActive: true,
+          difficultyLevel: 'easy',
+          subject: new Types.ObjectId(SUB_ID),
+          topic: new Types.ObjectId(TOP_ID),
+          exams: [new Types.ObjectId(Q2)],
+        }),
+      );
+
+      await expect(service.replaceQuestion(DRAFT_ID, 0, Q2)).rejects.toThrow(
+        BadRequestException,
+      );
+      try {
+        await service.replaceQuestion(DRAFT_ID, 0, Q2);
+      } catch (error) {
+        expect((error as BadRequestException).getResponse()).toMatchObject({
+          error: 'EXAM_MISMATCH',
+        });
+      }
+    });
+
     it('should replace a question', async () => {
       const draft = makeDraft();
       draftModel.findById.mockReturnValue(chainable(draft));
@@ -437,6 +482,7 @@ describe('FullMockTestsService', () => {
           difficultyLevel: 'hard',
           subject: new Types.ObjectId(SUB_ID),
           topic: new Types.ObjectId(TOP_ID),
+          exams: [new Types.ObjectId(EXAM_ID)],
         }),
       );
       questionModel.find.mockReturnValue(chainable([questionLean(Q2)]));

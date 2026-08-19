@@ -90,8 +90,8 @@ Base path: `/api/v1`.
 | GET | `/full-mock-tests/exams` | Exam picker list (name, duration, questions, marks, category, group, subject names, mode). |
 | POST | `/full-mock-tests/drafts` | `{ examId }` → validate blueprint, sample, persist draft, return grouped paper. |
 | GET | `/full-mock-tests/drafts/:id` | Review payload; keys hidden. |
-| GET | `/full-mock-tests/questions` | Replace-picker search (`subjectId` required). |
-| PATCH | `/full-mock-tests/drafts/:id/questions/:position` | Replace slot; new question must match slot **subject**. |
+| GET | `/full-mock-tests/questions` | Replace-picker search (`subjectId` required; with `draftId`, only that exam’s questions). |
+| PATCH | `/full-mock-tests/drafts/:id/questions/:position` | Replace slot; new question must match slot **subject** and be tagged to the draft **exam**. |
 | POST | `/full-mock-tests/drafts/:id/publish` | Write `FULL_EXAM` mock test; increment usage. |
 | DELETE | `/full-mock-tests/drafts/:id` | Discard. |
 

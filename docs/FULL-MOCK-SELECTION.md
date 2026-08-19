@@ -150,6 +150,7 @@ Topic-wise mock creation does not read or write these fields.
 - `position` must exist.
 - Incoming `questionId` must be active, not deleted, have `difficultyLevel`.
 - Incoming question **subject must equal the slot’s subject** (keeps quota, marks, and session block).
+- Incoming question **must be tagged to the draft exam** (`questions.exams` contains `draft.exam`).
 - Incoming question must not already appear elsewhere on the draft.
 - Topic **may** change (admin can swap in a different topic under the same subject).
 - Set `replacedFrom` to the previous question id.
@@ -160,6 +161,7 @@ Replace-picker search (`GET /full-mock-tests/questions`):
 - `subjectId` required.
 - Optional `search` (question text), `topicId`, `difficultyLevel`.
 - Exclude ids already on the given draft (`draftId` query).
+- When `draftId` is set, only questions tagged to that draft’s exam (`exams` contains `draft.exam`).
 - Return safe fields only (no `correctAnswer`, no `explanation`).
 
 ---
@@ -173,5 +175,6 @@ Replace-picker search (`GET /full-mock-tests/questions`):
 | `EXAM_NOT_FOUND` | Exam id missing or deleted/inactive. |
 | `DRAFT_NOT_EDITABLE` | Replace/publish on a non-`REVIEW` draft. |
 | `SUBJECT_MISMATCH` | Replacement question belongs to a different subject. |
+| `EXAM_MISMATCH` | Replacement question is not tagged to the draft’s exam. |
 | `DUPLICATE_QUESTION` | Replacement id already on the paper, or publish/generate found the same question more than once. |
 | `QUESTION_NOT_ELIGIBLE` | Inactive, deleted, or no difficulty. |
