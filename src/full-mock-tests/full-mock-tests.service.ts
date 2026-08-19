@@ -200,18 +200,30 @@ export class FullMockTestsService {
   }
 
   async searchQuestions(params: {
-    subjectId: string;
+    subjectId?: string;
     draftId?: string;
     search?: string;
     topicId?: string;
     difficultyLevel?: string;
     page?: number;
     limit?: number;
+    allowCrossSubject?: boolean;
   }): Promise<{
     data: SearchQuestionItemDto[];
     pagination: PaginationMetaDto;
   }> {
-    if (!Types.ObjectId.isValid(params.subjectId)) {
+    const allowCrossSubject = !!params.allowCrossSubject;
+    if (allowCrossSubject && !params.draftId) {
+      throw new BadRequestException(
+        'draftId is required when allowCrossSubject is true',
+      );
+    }
+
+    if (!allowCrossSubject) {
+      if (!params.subjectId || !Types.ObjectId.isValid(params.subjectId)) {
+        throw new BadRequestException('Invalid subject ID');
+      }
+    } else if (params.subjectId && !Types.ObjectId.isValid(params.subjectId)) {
       throw new BadRequestException('Invalid subject ID');
     }
 
@@ -220,10 +232,13 @@ export class FullMockTestsService {
     const skip = (validPage - 1) * validLimit;
 
     const query: FilterQuery<QuestionDocument> = {
-      subject: new Types.ObjectId(params.subjectId),
       isActive: true,
       difficultyLevel: { $in: ['easy', 'medium', 'hard'] },
     };
+
+    if (params.subjectId && Types.ObjectId.isValid(params.subjectId)) {
+      query.subject = new Types.ObjectId(params.subjectId);
+    }
 
     if (params.topicId) {
       if (!Types.ObjectId.isValid(params.topicId)) {
@@ -246,6 +261,7 @@ export class FullMockTestsService {
 
     if (params.draftId) {
       const draft = await this.loadDraft(params.draftId);
+      query.exams = draft.exam;
       const exclude = draft.questions.map(q => q.question);
       if (exclude.length) {
         query._id = { $nin: exclude };
@@ -292,6 +308,7 @@ export class FullMockTestsService {
     draftId: string,
     position: number,
     questionId: string,
+    allowCrossSubject = false,
   ): Promise<DraftResponseDto> {
     const draft = await this.loadDraft(draftId);
     if (draft.status !== 'REVIEW') {
@@ -326,10 +343,20 @@ export class FullMockTestsService {
       });
     }
 
-    if (incoming.subject?.toString() !== slot.subject.toString()) {
+    if (
+      !allowCrossSubject &&
+      incoming.subject?.toString() !== slot.subject.toString()
+    ) {
       throw new BadRequestException({
         message: 'Replacement question must belong to the same subject',
         error: 'SUBJECT_MISMATCH',
+      });
+    }
+
+    if (!this.isTaggedToExam(incoming.exams, draft.exam)) {
+      throw new BadRequestException({
+        message: 'Replacement question must be tagged to this exam',
+        error: 'EXAM_MISMATCH',
       });
     }
 
@@ -893,6 +920,14 @@ export class FullMockTestsService {
       negativeMarking: q.negativeMarking,
       replacedFrom: q.replacedFrom,
     };
+  }
+
+  private isTaggedToExam(
+    exams: Array<{ toString(): string }> | undefined,
+    examId: { toString(): string },
+  ): boolean {
+    const target = examId.toString();
+    return (exams || []).some(id => id?.toString() === target);
   }
 
   private assertNoDuplicateQuestions(
