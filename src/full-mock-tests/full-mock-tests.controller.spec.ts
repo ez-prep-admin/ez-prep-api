@@ -58,14 +58,25 @@ describe('FullMockTestsController', () => {
       controller.createDraft({ examId: 'e1' }, admin as any),
     ).resolves.toMatchObject({ data: { id: 'd1' } });
     await expect(
-      controller.searchQuestions('s1', 'd1', 'q', 't', 'easy', 1, 20),
+      controller.searchQuestions('s1', 'd1', 'q', 't', 'easy', 1, 20, true),
     ).resolves.toMatchObject({ data: page.data });
+    expect(service.searchQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subjectId: 's1',
+        draftId: 'd1',
+        allowCrossSubject: true,
+      }),
+    );
     await expect(controller.getDraft('d1')).resolves.toMatchObject({
       data: { id: 'd1' },
     });
     await expect(
-      controller.replaceQuestion('d1', 0, { questionId: 'q1' }),
+      controller.replaceQuestion('d1', 0, {
+        questionId: 'q1',
+        allowCrossSubject: true,
+      }),
     ).resolves.toMatchObject({ data: { id: 'd1' } });
+    expect(service.replaceQuestion).toHaveBeenCalledWith('d1', 0, 'q1', true);
     await expect(
       controller.publishDraft('d1', { title: 'P' }, admin as any),
     ).resolves.toMatchObject({ data: { mockTestId: 't1' } });

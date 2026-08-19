@@ -362,9 +362,9 @@ describe('FullMockTestsService', () => {
       expect(query.exams.toString()).toBe(EXAM_ID);
       expect(query.topic.toString()).toBe(TOP_ID);
       expect(query.difficultyLevel).toBe('easy');
-      expect(query._id.$nin.map((id: Types.ObjectId) => id.toString())).toEqual([
-        Q1,
-      ]);
+      expect(query._id.$nin.map((id: Types.ObjectId) => id.toString())).toEqual(
+        [Q1],
+      );
     });
 
     it('should not filter by exam when draftId is omitted', async () => {
@@ -376,6 +376,26 @@ describe('FullMockTestsService', () => {
         expect.not.objectContaining({ exams: expect.anything() }),
       );
       expect(questionModel.find.mock.calls[0][0].exams).toBeUndefined();
+    });
+
+    it('should require draftId when allowCrossSubject is true', async () => {
+      await expect(
+        service.searchQuestions({ allowCrossSubject: true }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should search all exam-tagged questions when allowCrossSubject omits subjectId', async () => {
+      draftModel.findById.mockReturnValue(chainable(makeDraft()));
+      questionModel.find.mockReturnValue(chainable([questionLean()]));
+
+      await service.searchQuestions({
+        draftId: DRAFT_ID,
+        allowCrossSubject: true,
+      });
+
+      const query = questionModel.find.mock.calls[0][0];
+      expect(query.exams.toString()).toBe(EXAM_ID);
+      expect(query.subject).toBeUndefined();
     });
   });
 
@@ -490,6 +510,55 @@ describe('FullMockTestsService', () => {
       const result = await service.replaceQuestion(DRAFT_ID, 0, Q2);
       expect(draft.save).toHaveBeenCalled();
       expect(result.id).toBe(DRAFT_ID);
+    });
+
+    it('should reject a different subject unless allowCrossSubject is set', async () => {
+      const otherSubject = '507f1f77bcf86cd799439099';
+      draftModel.findById.mockReturnValue(chainable(makeDraft()));
+      questionModel.findById.mockReturnValue(
+        chainable({
+          _id: new Types.ObjectId(Q2),
+          isActive: true,
+          difficultyLevel: 'easy',
+          subject: new Types.ObjectId(otherSubject),
+          topic: new Types.ObjectId(TOP_ID),
+          exams: [new Types.ObjectId(EXAM_ID)],
+        }),
+      );
+
+      await expect(service.replaceQuestion(DRAFT_ID, 0, Q2)).rejects.toThrow(
+        BadRequestException,
+      );
+      try {
+        await service.replaceQuestion(DRAFT_ID, 0, Q2);
+      } catch (error) {
+        expect((error as BadRequestException).getResponse()).toMatchObject({
+          error: 'SUBJECT_MISMATCH',
+        });
+      }
+    });
+
+    it('should replace a cross-subject question without changing the slot subject', async () => {
+      const otherSubject = '507f1f77bcf86cd799439099';
+      const draft = makeDraft();
+      const originalSubject = draft.questions[0].subject.toString();
+      draftModel.findById.mockReturnValue(chainable(draft));
+      questionModel.findById.mockReturnValue(
+        chainable({
+          _id: new Types.ObjectId(Q2),
+          isActive: true,
+          difficultyLevel: 'medium',
+          subject: new Types.ObjectId(otherSubject),
+          topic: new Types.ObjectId(TOP_ID),
+          exams: [new Types.ObjectId(EXAM_ID)],
+        }),
+      );
+      questionModel.find.mockReturnValue(chainable([questionLean(Q2)]));
+
+      await service.replaceQuestion(DRAFT_ID, 0, Q2, true);
+      expect(draft.save).toHaveBeenCalled();
+      expect(draft.questions[0].subject.toString()).toBe(originalSubject);
+      expect(draft.questions[0].question.toString()).toBe(Q2);
     });
   });
 

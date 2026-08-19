@@ -149,19 +149,20 @@ Topic-wise mock creation does not read or write these fields.
 - Draft status must be `REVIEW`.
 - `position` must exist.
 - Incoming `questionId` must be active, not deleted, have `difficultyLevel`.
-- Incoming question **subject must equal the slot’s subject** (keeps quota, marks, and session block).
+- Incoming question **subject must equal the slot’s subject** unless `allowCrossSubject` is true (keeps quota, marks, and session block).
 - Incoming question **must be tagged to the draft exam** (`questions.exams` contains `draft.exam`).
 - Incoming question must not already appear elsewhere on the draft.
-- Topic **may** change (admin can swap in a different topic under the same subject).
+- Topic **may** change (admin can swap in a different topic, including from another subject when opted in).
 - Set `replacedFrom` to the previous question id.
 - Do **not** change `marksPerQuestion` / `negativeMarking` / `position` / slot `subject`.
 
 Replace-picker search (`GET /full-mock-tests/questions`):
 
-- `subjectId` required.
+- `subjectId` required unless `allowCrossSubject=true`.
 - Optional `search` (question text), `topicId`, `difficultyLevel`.
 - Exclude ids already on the given draft (`draftId` query).
 - When `draftId` is set, only questions tagged to that draft’s exam (`exams` contains `draft.exam`).
+- `allowCrossSubject=true` requires `draftId`; `subjectId` may be omitted to list all exam-tagged questions.
 - Return safe fields only (no `correctAnswer`, no `explanation`).
 
 ---

@@ -7,6 +7,7 @@ import { Subject } from '../subjects/schemas/subject.schema';
 import { Topic } from '../topics/schemas/topic.schema';
 import { Question } from '../mock-test-attempts/schemas/question.schema';
 
+const EXAM_ID = '507f1f77bcf86cd799439015';
 const SUB_ID = '507f1f77bcf86cd799439011';
 const TOP_ID = '507f1f77bcf86cd799439012';
 const Q1 = '507f1f77bcf86cd799439013';
@@ -25,6 +26,7 @@ function chainable(resolved: unknown) {
 
 function exam(overrides: Record<string, unknown> = {}) {
   return {
+    _id: new Types.ObjectId(EXAM_ID),
     totalQuestions: 2,
     totalMarks: 4,
     duration: 60,
@@ -202,6 +204,17 @@ describe('FullMockSelectionService', () => {
       const paper = await service.generatePaper(exam());
       expect(paper.questions).toHaveLength(2);
       expect(paper.subjectNames.get(SUB_ID)).toBe('Physics');
+      expect(questionModel.countDocuments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exams: new Types.ObjectId(EXAM_ID),
+          subject: new Types.ObjectId(SUB_ID),
+        }),
+      );
+      expect(questionModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exams: new Types.ObjectId(EXAM_ID),
+        }),
+      );
     });
 
     it('should throw when generated length mismatches expected', async () => {

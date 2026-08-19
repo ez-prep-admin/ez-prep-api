@@ -87,7 +87,7 @@ export class FullMockSelectionService {
         ? row.negativeMarksPerQuestion || 0
         : 0;
 
-      const picks = await this.sampleSubject(row, subject, usedIds);
+      const picks = await this.sampleSubject(row, subject, usedIds, exam._id);
 
       for (const pick of picks) {
         questions.push({
@@ -202,6 +202,7 @@ export class FullMockSelectionService {
     row: ExamSubject,
     subject: SubjectDocument,
     usedIds: Set<string>,
+    examId: Types.ObjectId,
   ): Promise<EligibleQuestion[]> {
     const needed = row.numberOfQuestions;
     const subjectId = subject._id as Types.ObjectId;
@@ -224,7 +225,12 @@ export class FullMockSelectionService {
         ? [
             {
               topicId: null,
-              inventory: await this.countEligible(subjectId, null, usedIds),
+              inventory: await this.countEligible(
+                subjectId,
+                null,
+                usedIds,
+                examId,
+              ),
               quota: 0,
               frac: 0,
             },
@@ -236,6 +242,7 @@ export class FullMockSelectionService {
                 subjectId,
                 topic._id as Types.ObjectId,
                 usedIds,
+                examId,
               ),
               quota: 0,
               frac: 0,
@@ -265,7 +272,12 @@ export class FullMockSelectionService {
       if (bucket.quota <= 0) {
         continue;
       }
-      const pool = await this.loadEligible(subjectId, bucket.topicId, usedIds);
+      const pool = await this.loadEligible(
+        subjectId,
+        bucket.topicId,
+        usedIds,
+        examId,
+      );
       const sample = this.weightedSample(pool, bucket.quota);
       if (sample.length < bucket.quota) {
         throw new BadRequestException({
@@ -292,9 +304,11 @@ export class FullMockSelectionService {
     subjectId: Types.ObjectId,
     topicId: Types.ObjectId | null,
     usedIds: Set<string>,
+    examId: Types.ObjectId,
   ) {
     const match: Record<string, unknown> = {
       subject: subjectId,
+      exams: examId,
       isActive: true,
       difficultyLevel: { $in: ['easy', 'medium', 'hard'] },
     };
@@ -313,9 +327,10 @@ export class FullMockSelectionService {
     subjectId: Types.ObjectId,
     topicId: Types.ObjectId | null,
     usedIds: Set<string>,
+    examId: Types.ObjectId,
   ): Promise<number> {
     return this.questionModel
-      .countDocuments(this.eligibleMatch(subjectId, topicId, usedIds))
+      .countDocuments(this.eligibleMatch(subjectId, topicId, usedIds, examId))
       .exec();
   }
 
@@ -323,9 +338,10 @@ export class FullMockSelectionService {
     subjectId: Types.ObjectId,
     topicId: Types.ObjectId | null,
     usedIds: Set<string>,
+    examId: Types.ObjectId,
   ): Promise<EligibleQuestion[]> {
     const docs = await this.questionModel
-      .find(this.eligibleMatch(subjectId, topicId, usedIds))
+      .find(this.eligibleMatch(subjectId, topicId, usedIds, examId))
       .select(
         '_id topic difficultyLevel fullMockUsageCount lastUsedInFullMockAt',
       )

@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseBoolPipe,
   ParseIntPipe,
   Patch,
   Post,
@@ -168,22 +169,31 @@ Error codes (400): \`BLUEPRINT_INVALID\`, \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOU
     description: `
 Replace-picker search over the question bank.
 
-- \`subjectId\` is required (must match the slot you are replacing).
+- \`subjectId\` is required unless \`allowCrossSubject=true\` (must match the slot by default).
 - Pass \`draftId\` to scope to questions tagged to that draft’s exam, and to exclude IDs already on the paper.
+- \`allowCrossSubject=true\` (requires \`draftId\`) lists exam-tagged questions from any subject. \`subjectId\` is then optional.
 - Optional filters: topic, difficulty, text search (EN/ML).
 - Returns safe fields only (no correctAnswer / explanation).
     `,
   })
   @ApiQuery({
     name: 'subjectId',
-    required: true,
-    description: 'Subject of the draft slot being replaced',
+    required: false,
+    description:
+      'Subject filter. Required unless allowCrossSubject=true. Defaults to the slot subject in the admin UI.',
   })
   @ApiQuery({
     name: 'draftId',
     required: false,
     description:
-      'When set, only questions tagged to this draft’s exam are returned, and questions already on the paper are excluded',
+      'When set, only questions tagged to this draft’s exam are returned, and questions already on the paper are excluded. Required when allowCrossSubject=true.',
+  })
+  @ApiQuery({
+    name: 'allowCrossSubject',
+    required: false,
+    type: Boolean,
+    description:
+      'When true (and draftId is set), subjectId may be omitted or differ from the slot. Exam tagging still applies.',
   })
   @ApiQuery({
     name: 'search',
@@ -214,16 +224,21 @@ Replace-picker search over the question bank.
     type: SearchQuestionItemDto,
     isArray: true,
   })
-  @ApiBadRequestResponse({ description: 'Invalid subjectId or topicId' })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid subjectId, topicId, or allowCrossSubject without draftId',
+  })
   @ApiForbiddenResponse({ description: 'Admin role required' })
   async searchQuestions(
-    @Query('subjectId') subjectId: string,
+    @Query('subjectId') subjectId?: string,
     @Query('draftId') draftId?: string,
     @Query('search') search?: string,
     @Query('topicId') topicId?: string,
     @Query('difficultyLevel') difficultyLevel?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+    @Query('allowCrossSubject', new DefaultValuePipe(false), ParseBoolPipe)
+    allowCrossSubject?: boolean,
   ): Promise<{
     message: string;
     data: SearchQuestionItemDto[];
@@ -237,6 +252,7 @@ Replace-picker search over the question bank.
       difficultyLevel,
       page,
       limit,
+      allowCrossSubject,
     });
     return {
       message: 'Questions retrieved successfully',
@@ -282,11 +298,11 @@ Swaps the question at \`position\` (0-based across the whole paper).
 
 Guards:
 - Draft status must be \`REVIEW\`
-- Incoming question subject **must** match the slot subject (keeps quota, marks, session)
+- Incoming question subject **must** match the slot subject unless \`allowCrossSubject\` is true (keeps quota, marks, session)
 - Incoming question **must** be tagged to this draft’s exam
 - Incoming question must not already be on the paper
 - Topic may change
-- Marks / negative marking / position are **not** changed
+- Slot subject / marks / negative marking / position are **not** changed
 - Usage counts are **not** incremented (that happens on publish)
 
 Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`, \`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`.
@@ -317,6 +333,7 @@ Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`, \`
       id,
       position,
       dto.questionId,
+      dto.allowCrossSubject,
     );
     return {
       message: 'Question replaced successfully',
