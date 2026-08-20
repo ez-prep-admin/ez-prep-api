@@ -29,8 +29,12 @@ import {
 import { CreateDraftDto } from './dto/create-draft.dto';
 import { PublishDraftDto } from './dto/publish-draft.dto';
 import { FullMockExamListItemDto } from './dto/exam-list-item.dto';
-import { DraftResponseDto } from './dto/draft-response.dto';
+import {
+  DraftResponseDto,
+  DraftSubjectBlockDto,
+} from './dto/draft-response.dto';
 import { FullMockTestListItemDto } from './dto/full-mock-test-list-item.dto';
+import { DraftListItemDto } from './dto/draft-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { SearchQuestionItemDto } from './dto/search-question-item.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
@@ -197,6 +201,65 @@ export class FullMockTestsService {
   async getDraft(draftId: string): Promise<DraftResponseDto> {
     const draft = await this.loadDraft(draftId);
     return this.toDraftResponse(draft);
+  }
+
+  async listDrafts(
+    examId?: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    data: DraftListItemDto[];
+    pagination: PaginationMetaDto;
+  }> {
+    if (examId && !Types.ObjectId.isValid(examId)) {
+      throw new BadRequestException('Invalid exam ID');
+    }
+
+    const validPage = Math.max(1, page);
+    const validLimit = Math.min(Math.max(1, limit), 100);
+    const skip = (validPage - 1) * validLimit;
+
+    const query: FilterQuery<FullMockTestDraftDocument> = {
+      status: { $in: ['REVIEW', 'GENERATING', 'PUBLISHING'] },
+    };
+    if (examId) {
+      query.exam = new Types.ObjectId(examId);
+    }
+
+    const [drafts, total] = await Promise.all([
+      this.draftModel
+        .find(query)
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(validLimit)
+        .exec(),
+      this.draftModel.countDocuments(query).exec(),
+    ]);
+
+    const totalPages = Math.ceil(total / validLimit) || 0;
+
+    return {
+      data: drafts.map(draft => ({
+        id: draft.id || draft._id.toString(),
+        examId: draft.exam.toString(),
+        examName: draft.examSnapshot?.name || 'Untitled exam',
+        status: draft.status,
+        totalQuestions: draft.examSnapshot?.totalQuestions ?? 0,
+        totalMarks: draft.examSnapshot?.totalMarks,
+        duration: draft.examSnapshot?.duration,
+        isSessionWise: draft.examSnapshot?.isSessionWise || false,
+        createdAt: draft.createdAt as Date,
+        updatedAt: draft.updatedAt as Date,
+      })),
+      pagination: {
+        total,
+        page: validPage,
+        limit: validLimit,
+        totalPages,
+        hasNextPage: validPage < totalPages,
+        hasPrevPage: validPage > 1,
+      },
+    };
   }
 
   async searchQuestions(params: {
@@ -610,6 +673,7 @@ export class FullMockTestsService {
   async findOnePublished(
     id: string,
     userId?: string,
+    includeQuestions = false,
   ): Promise<FullMockTestListItemDto> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid mock test ID');
@@ -639,7 +703,11 @@ export class FullMockTestsService {
       resumeAttemptId = entry?.resumeAttemptId;
     }
 
-    return this.toListItem(test, action, resumeAttemptId);
+    const item = this.toListItem(test, action, resumeAttemptId);
+    if (includeQuestions) {
+      item.subjects = await this.toPublishedSubjects(test);
+    }
+    return item;
   }
 
   private async loadDraft(draftId: string): Promise<FullMockTestDraftDocument> {
@@ -728,6 +796,65 @@ export class FullMockTestsService {
       createdAt: draft.createdAt as Date,
       updatedAt: draft.updatedAt as Date,
     };
+  }
+
+  private async toPublishedSubjects(
+    test: MockTestDocument,
+  ): Promise<DraftSubjectBlockDto[]> {
+    const questionIds = (test.questionIds || []).map(id => id.toString());
+    const docs = questionIds.length
+      ? await this.questionModel
+          .find({ _id: { $in: questionIds } })
+          .select('-correctAnswer -explanation')
+          .lean()
+          .exec()
+      : [];
+    const byId = new Map(docs.map(q => [q._id.toString(), q]));
+
+    return Promise.all(
+      (test.subjectConfig || []).map(async row => {
+        const blockIds =
+          row.questionIds?.map(id => id.toString()) ||
+          questionIds.slice(row.questionStartIndex, row.questionEndIndex + 1);
+
+        const questions = await Promise.all(
+          blockIds.map(async (qid, indexInBlock) => {
+            const doc = byId.get(qid);
+            const position = row.questionStartIndex + indexInBlock;
+            const safe = doc
+              ? await this.toSafeQuestion(doc)
+              : {
+                  _id: qid,
+                  questionText: {
+                    en: { text: null, imageUrl: null },
+                    ml: { text: null, imageUrl: null },
+                  },
+                  options: [],
+                  subject: row.subject.toString(),
+                };
+            return {
+              ...safe,
+              position,
+              marksPerQuestion: row.marksPerQuestion,
+              negativeMarking: row.hasNegativeMarking
+                ? row.negativeMarksPerQuestion
+                : 0,
+            };
+          }),
+        );
+
+        return {
+          subjectId: row.subject.toString(),
+          name: row.name,
+          numberOfQuestions: row.numberOfQuestions,
+          marksPerQuestion: row.marksPerQuestion,
+          hasNegativeMarking: row.hasNegativeMarking,
+          negativeMarksPerQuestion: row.negativeMarksPerQuestion,
+          sessionTime: row.sessionTime,
+          questions,
+        };
+      }),
+    );
   }
 
   private toListItem(

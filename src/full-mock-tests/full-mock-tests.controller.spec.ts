@@ -10,6 +10,7 @@ describe('FullMockTestsController', () => {
   const service = {
     listExamsForAdmin: jest.fn(),
     createDraft: jest.fn(),
+    listDrafts: jest.fn(),
     searchQuestions: jest.fn(),
     getDraft: jest.fn(),
     replaceQuestion: jest.fn(),
@@ -19,6 +20,7 @@ describe('FullMockTestsController', () => {
     findOnePublished: jest.fn(),
   };
   const admin = { id: 'a1', role: UserRole.ADMIN };
+  const student = { id: 's1', role: UserRole.USER };
   const page = { data: [{ id: '1' }], pagination: { total: 1 } };
 
   beforeEach(async () => {
@@ -43,6 +45,7 @@ describe('FullMockTestsController', () => {
   it('should delegate admin and student endpoints', async () => {
     service.listExamsForAdmin.mockResolvedValue(page);
     service.createDraft.mockResolvedValue({ id: 'd1' });
+    service.listDrafts.mockResolvedValue(page);
     service.searchQuestions.mockResolvedValue(page);
     service.getDraft.mockResolvedValue({ id: 'd1' });
     service.replaceQuestion.mockResolvedValue({ id: 'd1' });
@@ -57,6 +60,10 @@ describe('FullMockTestsController', () => {
     await expect(
       controller.createDraft({ examId: 'e1' }, admin as any),
     ).resolves.toMatchObject({ data: { id: 'd1' } });
+    await expect(controller.listDrafts('e1', 1, 10)).resolves.toMatchObject({
+      data: page.data,
+    });
+    expect(service.listDrafts).toHaveBeenCalledWith('e1', 1, 10);
     await expect(
       controller.searchQuestions('s1', 'd1', 'q', 't', 'easy', 1, 20, true),
     ).resolves.toMatchObject({ data: page.data });
@@ -90,5 +97,14 @@ describe('FullMockTestsController', () => {
     await expect(controller.findOne('t1', admin as any)).resolves.toMatchObject(
       { data: { id: 't1' } },
     );
+    expect(service.findOnePublished).toHaveBeenCalledWith('t1', 'a1', true);
+  });
+
+  it('loads published detail without questions for non-admins', async () => {
+    service.findOnePublished.mockResolvedValue({ id: 't1' });
+    await expect(
+      controller.findOne('t1', student as any),
+    ).resolves.toMatchObject({ data: { id: 't1' } });
+    expect(service.findOnePublished).toHaveBeenCalledWith('t1', 's1', false);
   });
 });

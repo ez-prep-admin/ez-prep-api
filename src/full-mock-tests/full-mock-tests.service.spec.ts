@@ -137,9 +137,11 @@ describe('FullMockTestsService', () => {
   };
   const draftModel: any = {
     create: jest.fn(),
+    find: jest.fn(),
     findById: jest.fn(),
     findOneAndUpdate: jest.fn(),
     updateOne: jest.fn(),
+    countDocuments: jest.fn(),
   };
   const selectionService = { generatePaper: jest.fn() };
   const mockTestsService = { getUserAttemptActions: jest.fn() };
@@ -174,6 +176,9 @@ describe('FullMockTestsService', () => {
       exec: jest.fn().mockResolvedValue(1),
     });
     questionModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(1),
+    });
+    draftModel.countDocuments.mockReturnValue({
       exec: jest.fn().mockResolvedValue(1),
     });
     draftModel.updateOne.mockReturnValue({
@@ -775,6 +780,46 @@ describe('FullMockTestsService', () => {
     });
   });
 
+  describe('listDrafts', () => {
+    it('should reject invalid exam ids and list open drafts', async () => {
+      await expect(service.listDrafts('bad')).rejects.toThrow(
+        BadRequestException,
+      );
+
+      const draft = makeDraft();
+      draftModel.find.mockReturnValue(chainable([draft]));
+      draftModel.countDocuments.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(1),
+      });
+
+      const result = await service.listDrafts(EXAM_ID, 1, 10);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({
+        id: DRAFT_ID,
+        examId: EXAM_ID,
+        examName: 'CGL',
+        status: 'REVIEW',
+        totalQuestions: 1,
+        isSessionWise: false,
+      });
+      expect(result.pagination.total).toBe(1);
+    });
+
+    it('lists drafts without exam filter using defaults', async () => {
+      draftModel.find.mockReturnValue(chainable([]));
+      draftModel.countDocuments.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(0),
+      });
+      const result = await service.listDrafts();
+      expect(result.data).toEqual([]);
+      expect(draftModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: { $in: ['REVIEW', 'GENERATING', 'PUBLISHING'] },
+        }),
+      );
+    });
+  });
+
   describe('listPublished / findOnePublished', () => {
     const published = {
       id: TEST_ID,
@@ -791,6 +836,7 @@ describe('FullMockTestsService', () => {
         description: 'd',
         toString: () => EXAM_ID,
       },
+      questionIds: [{ toString: () => Q1 }],
       subjectConfig: [
         {
           subject: { toString: () => SUB_ID },
@@ -802,6 +848,7 @@ describe('FullMockTestsService', () => {
           sessionTime: 30,
           questionStartIndex: 0,
           questionEndIndex: 0,
+          questionIds: [{ toString: () => Q1 }],
         },
       ],
       marksPerQuestion: 2,
@@ -852,6 +899,30 @@ describe('FullMockTestsService', () => {
       mockTestsService.getUserAttemptActions.mockResolvedValue(new Map());
       const result = await service.findOnePublished(TEST_ID, USER_ID);
       expect(result.id).toBe(TEST_ID);
+      expect(result.subjects).toBeUndefined();
+    });
+
+    it('includes safe question subjects for admin detail', async () => {
+      mockTestModel.findOne.mockReturnValue(chainable(published));
+      mockTestsService.getUserAttemptActions.mockResolvedValue(new Map());
+      questionModel.find.mockReturnValue(chainable([questionLean(Q1)]));
+
+      const result = await service.findOnePublished(TEST_ID, USER_ID, true);
+      expect(result.subjects).toHaveLength(1);
+      expect(result.subjects![0]).toMatchObject({
+        subjectId: SUB_ID,
+        name: 'GS',
+        numberOfQuestions: 1,
+      });
+      expect(result.subjects![0].questions[0]).toMatchObject({
+        _id: Q1,
+        position: 0,
+        marksPerQuestion: 2,
+        negativeMarking: 0.5,
+      });
+      expect(result.subjects![0].questions[0]).not.toHaveProperty(
+        'correctAnswer',
+      );
     });
 
     it('lists and loads papers without a user id', async () => {

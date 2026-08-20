@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
 import { ExamSummaryDto } from '../../mock-tests/dto/mock-test-list-item.dto';
+import { DraftSubjectBlockDto } from './draft-response.dto';
 
 export class FullMockSubjectConfigDto {
   @ApiProperty({
@@ -149,4 +150,11 @@ export class FullMockTestListItemDto {
     example: '64f123456789abcdef123456',
   })
   resumeAttemptId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Admin-only: safe question payloads grouped by subject (same shape as draft review). Omitted for students.',
+    type: [DraftSubjectBlockDto],
+  })
+  subjects?: DraftSubjectBlockDto[];
 }
