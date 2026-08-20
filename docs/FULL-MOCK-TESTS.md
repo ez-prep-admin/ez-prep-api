@@ -89,6 +89,7 @@ Base path: `/api/v1`.
 |---|---|---|
 | GET | `/full-mock-tests/exams` | Exam picker list (name, duration, questions, marks, category, group, subject names, mode). |
 | POST | `/full-mock-tests/drafts` | `{ examId }` → validate blueprint, sample, persist draft, return grouped paper. |
+| GET | `/full-mock-tests/drafts` | Paginated open drafts (`REVIEW` / `GENERATING` / `PUBLISHING`). Optional `examId`. |
 | GET | `/full-mock-tests/drafts/:id` | Review payload; keys hidden. |
 | GET | `/full-mock-tests/questions` | Replace-picker search (`subjectId` required unless `allowCrossSubject`; with `draftId`, only that exam’s questions). |
 | PATCH | `/full-mock-tests/drafts/:id/questions/:position` | Replace slot; new question must match slot **subject** unless `allowCrossSubject`, and be tagged to the draft **exam**. Slot subject/marks/session stay. |
@@ -100,7 +101,7 @@ Base path: `/api/v1`.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/full-mock-tests?examId=` | Published FULL papers for that exam + `userAttemptAction`. |
-| GET | `/full-mock-tests/:id` | One FULL paper (404 if topic-wise). |
+| GET | `/full-mock-tests/:id` | One FULL paper (404 if topic-wise). Admins also get `subjects` with safe question payloads for review. |
 
 Taking the test: existing `/mock-test-attempts` (`start`, `answer`, `pause`, `resume`, `submit`). Session-wise adds `POST /mock-test-attempts/:id/sessions/complete`.
 

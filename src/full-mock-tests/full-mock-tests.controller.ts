@@ -43,6 +43,7 @@ import { DraftResponseDto } from './dto/draft-response.dto';
 import { FullMockTestListItemDto } from './dto/full-mock-test-list-item.dto';
 import { SearchQuestionItemDto } from './dto/search-question-item.dto';
 import { PublishDraftResultDto } from './dto/publish-draft-result.dto';
+import { DraftListItemDto } from './dto/draft-list-item.dto';
 
 @ApiTags('full-mock-tests')
 @Controller('full-mock-tests')
@@ -158,6 +159,60 @@ Error codes (400): \`BLUEPRINT_INVALID\`, \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOU
     return {
       message: 'Full mock draft generated successfully',
       data: draft,
+    };
+  }
+
+  @Get('drafts')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiOperation({
+    summary: 'List open full-mock drafts (Admin)',
+    description: `
+Paginated list of drafts that are still in progress (\`REVIEW\`, \`GENERATING\`,
+\`PUBLISHING\`). Discarded and published drafts are excluded — published papers
+appear on \`GET /full-mock-tests\`.
+
+Use \`GET /full-mock-tests/drafts/:id\` to resume review / replace / publish.
+    `,
+  })
+  @ApiQuery({
+    name: 'examId',
+    required: false,
+    description: 'When set, only drafts for this exam',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: '1–100, default 10',
+    example: 10,
+  })
+  @ApiOkResponse({
+    description: 'Paginated open drafts',
+    type: DraftListItemDto,
+    isArray: true,
+  })
+  @ApiBadRequestResponse({ description: 'examId invalid' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
+  async listDrafts(
+    @Query('examId') examId: string | undefined,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<{
+    message: string;
+    data: DraftListItemDto[];
+    pagination: PaginationMetaDto;
+  }> {
+    const result = await this.fullMockTestsService.listDrafts(
+      examId,
+      page,
+      limit,
+    );
+    return {
+      message: 'Drafts retrieved successfully',
+      data: result.data,
+      pagination: result.pagination,
     };
   }
 
@@ -478,7 +533,13 @@ Students only see active papers. Admins also see inactive ones. \`examId\` is op
     description: `
 Returns a single published \`FULL_EXAM\` paper (404 if the id is topic-wise).
 
-Includes \`userAttemptAction\` / \`resumeAttemptId\` and \`subjectConfig\` (question counts and \`questionIds\` per subject). Question stems are not returned here — start or resume an attempt to get the paper.
+Includes \`userAttemptAction\` / \`resumeAttemptId\` and \`subjectConfig\` (question counts and \`questionIds\` per subject).
+
+**Admins** also receive \`subjects\`: safe question payloads grouped by subject
+(same shape as draft review — no correctAnswer / explanation), for the published
+view screen.
+
+Students do not receive stems here — start or resume an attempt to get the paper.
 
 Take-test: \`POST /mock-test-attempts/start\` or \`GET /mock-test-attempts/{id}/resume\` as indicated by \`userAttemptAction\`.
     `,
@@ -499,7 +560,12 @@ Take-test: \`POST /mock-test-attempts/start\` or \`GET /mock-test-attempts/{id}/
     message: string;
     data: FullMockTestListItemDto;
   }> {
-    const test = await this.fullMockTestsService.findOnePublished(id, user.id);
+    const isAdmin = user?.role === UserRole.ADMIN;
+    const test = await this.fullMockTestsService.findOnePublished(
+      id,
+      user.id,
+      isAdmin,
+    );
     return {
       message: 'Full mock test retrieved successfully',
       data: test,
