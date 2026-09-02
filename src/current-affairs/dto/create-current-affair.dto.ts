@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsOptional,
   IsString,
   MaxLength,
@@ -10,6 +12,13 @@ import {
 } from 'class-validator';
 import { ImageMetadataDto } from '../../questions/dto/image-metadata.dto';
 import { IsCalendarDate } from '../utils/calendar-date';
+import {
+  DESCRIPTION_MAX_POINTS,
+  DESCRIPTION_POINT_MAX_LENGTH,
+  DESCRIPTION_POINT_MIN_LENGTH,
+  cleanDescriptionPoints,
+  sanitizeDescriptionPoints,
+} from '../utils/description-points';
 
 export class CreateCurrentAffairDto {
   @ApiProperty({
@@ -27,19 +36,36 @@ export class CreateCurrentAffairDto {
 
   @ApiPropertyOptional({
     description:
-      'Details about the event. Trimmed on save. Shown in the user-facing daily feed. Omit or leave empty if unused.',
-    example:
-      'ISRO successfully launched a meteorological satellite from Sriharikota.',
-    minLength: 2,
-    maxLength: 5000,
+      'Optional bullet points about the event. Up to 10 items. Empty strings are stripped on save. Order is preserved. Omit or send an empty array when unused.',
+    type: [String],
+    example: [
+      'ISRO launched a meteorological satellite from Sriharikota.',
+      'The mission improves short-range weather forecasting.',
+    ],
+    maxItems: DESCRIPTION_MAX_POINTS,
   })
   @IsOptional()
-  @ValidateIf((_, value) => value != null && value !== '')
-  @IsString()
-  @MinLength(2, { message: 'Description must be at least 2 characters long' })
-  @MaxLength(5000, { message: 'Description cannot exceed 5000 characters' })
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  description?: string;
+  @ValidateIf(
+    (_, value) => cleanDescriptionPoints(value).length > 0,
+  )
+  @IsArray()
+  @ArrayMaxSize(DESCRIPTION_MAX_POINTS, {
+    message: `Description cannot have more than ${DESCRIPTION_MAX_POINTS} bullet points`,
+  })
+  @IsString({ each: true })
+  @MinLength(DESCRIPTION_POINT_MIN_LENGTH, {
+    each: true,
+    message: `Each description bullet must be at least ${DESCRIPTION_POINT_MIN_LENGTH} characters long`,
+  })
+  @MaxLength(DESCRIPTION_POINT_MAX_LENGTH, {
+    each: true,
+    message: `Each description bullet cannot exceed ${DESCRIPTION_POINT_MAX_LENGTH} characters`,
+  })
+  @Transform(({ value }) => {
+    const points = cleanDescriptionPoints(value);
+    return points.length > 0 ? points : undefined;
+  })
+  description?: string[];
 
   @ApiProperty({
     description:

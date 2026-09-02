@@ -97,7 +97,7 @@ Paginated public list. Soft-deleted items are never returned.
 **User-facing app (one round trip for a day):**
 \`GET /api/v1/current-affairs?date=2026-08-14&activeOnly=true&limit=100\`
 
-**Admin:** omit \`activeOnly\` to include inactive items; pass \`date\` from the single-date picker. Optional \`search\` uses a text index on title and description.
+**Admin:** omit \`activeOnly\` to include inactive items; pass \`date\` from the single-date picker. Optional \`search\` uses a text index on title and description bullet points.
 
 When \`date\` is set, results are ordered by \`sortOrder\` then \`createdAt\`. Otherwise by \`date\` descending, then \`sortOrder\`.
 
@@ -131,7 +131,8 @@ When \`date\` is set, results are ordered by \`sortOrder\` then \`createdAt\`. O
     name: 'search',
     required: false,
     type: String,
-    description: 'Full-text search on title and description',
+    description:
+      'Full-text search on title and description bullet points',
     example: 'ISRO satellite',
   })
   @ApiQuery({
@@ -216,6 +217,7 @@ Partial update. Only provided fields are changed.
 
 - Changing \`date\` moves the item to another calendar day. If \`sortOrder\` is omitted, it is appended to that day.
 - Send \`image: null\` to remove an existing image. Omit \`image\` to leave it unchanged. Send new S3 metadata to replace it.
+- Send \`description: []\` to clear existing bullet points. Omit \`description\` to leave it unchanged.
 - Set \`isActive: false\` to hide the item from user-facing \`activeOnly=true\` lists without deleting it.
 
 Requires admin JWT.

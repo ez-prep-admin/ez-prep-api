@@ -49,7 +49,7 @@ describe('CurrentAffairsController', () => {
     service.create.mockResolvedValue(item);
     const dto = {
       title: 'Satellite launch',
-      description: 'ISRO launch',
+      description: ['ISRO launch'],
       date: '2026-08-14',
     };
     await expect(controller.create(dto as any)).resolves.toEqual({
