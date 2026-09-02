@@ -18,12 +18,16 @@ export class CurrentAffairResponseDto {
   title: string;
 
   @ApiPropertyOptional({
-    description: 'Details about the event. Absent when the item has none.',
-    example:
+    description:
+      'Optional bullet points about the event. Absent when the item has none. Legacy string records are returned as a one-item array.',
+    type: [String],
+    example: [
       'ISRO successfully launched a meteorological satellite from Sriharikota.',
+      'The mission improves short-range weather forecasting.',
+    ],
   })
   @Expose()
-  description?: string;
+  description?: string[];
 
   @ApiPropertyOptional({
     description: 'Optional mnemonic or memory aid',

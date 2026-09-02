@@ -18,6 +18,10 @@ import {
   CurrentAffairImage,
 } from './schemas/current-affair.schema';
 import { isCalendarDate } from './utils/calendar-date';
+import {
+  normalizeDescriptionForStorage,
+  normalizeDescriptionFromDb,
+} from './utils/description-points';
 
 @Injectable()
 export class CurrentAffairsService {
@@ -32,7 +36,7 @@ export class CurrentAffairsService {
     const storedImage = this.toStoredImage(dto.image);
     const item = await this.currentAffairModel.create({
       title: dto.title,
-      description: dto.description,
+      description: normalizeDescriptionForStorage(dto.description),
       memoryTrick: dto.memoryTrick,
       dateKey: dto.date,
       ...(storedImage ? { image: storedImage } : {}),
@@ -126,12 +130,18 @@ export class CurrentAffairsService {
     }
 
     const $set: Record<string, unknown> = {};
+    const $unset: Record<string, 1> = {};
 
     if (dto.title !== undefined) {
       $set.title = dto.title;
     }
     if (dto.description !== undefined) {
-      $set.description = dto.description;
+      const description = normalizeDescriptionForStorage(dto.description);
+      if (description) {
+        $set.description = description;
+      } else {
+        $unset.description = 1;
+      }
     }
     if (dto.memoryTrick !== undefined) {
       $set.memoryTrick = dto.memoryTrick;
@@ -169,7 +179,10 @@ export class CurrentAffairsService {
       updateQuery.$set = $set;
     }
     if (dto.image === null) {
-      updateQuery.$unset = { image: 1 };
+      $unset.image = 1;
+    }
+    if (Object.keys($unset).length > 0) {
+      updateQuery.$unset = $unset;
     }
 
     const item = await this.currentAffairModel
@@ -259,7 +272,7 @@ export class CurrentAffairsService {
     return new CurrentAffairResponseDto({
       id: obj.id,
       title: obj.title,
-      description: obj.description,
+      description: normalizeDescriptionFromDb(obj.description),
       memoryTrick: obj.memoryTrick,
       date: obj.dateKey,
       image: obj.image,

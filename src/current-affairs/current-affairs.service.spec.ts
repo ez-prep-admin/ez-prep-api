@@ -30,7 +30,7 @@ const doc = (data: Record<string, unknown> = {}) => {
   const payload = {
     id: (data.id as string) || 'ca1',
     title: 'Satellite launch',
-    description: 'ISRO launch',
+    description: ['ISRO launch'],
     memoryTrick: 'sky report',
     dateKey: '2026-08-14',
     sortOrder: 0,
@@ -95,13 +95,13 @@ describe('CurrentAffairsService', () => {
 
       const result = await service.create({
         title: 'Satellite launch',
-        description: 'ISRO launch',
+        description: ['ISRO launch'],
         date: '2026-08-14',
       } as any);
 
       expect(model.create).toHaveBeenCalledWith({
         title: 'Satellite launch',
-        description: 'ISRO launch',
+        description: ['ISRO launch'],
         memoryTrick: undefined,
         dateKey: '2026-08-14',
         sortOrder: 0,
@@ -135,7 +135,7 @@ describe('CurrentAffairsService', () => {
 
       await service.create({
         title: 'Second item',
-        description: 'Follow up',
+        description: ['Follow up'],
         date: '2026-08-14',
       } as any);
 
@@ -163,7 +163,7 @@ describe('CurrentAffairsService', () => {
 
       const result = await service.create({
         title: 'Satellite launch',
-        description: 'ISRO launch',
+        description: ['ISRO launch'],
         date: '2026-08-14',
         memoryTrick: 'sky report',
         image: imageMeta,
@@ -190,7 +190,7 @@ describe('CurrentAffairsService', () => {
 
       await service.create({
         title: 'Satellite launch',
-        description: 'ISRO launch',
+        description: ['ISRO launch'],
         date: '2026-08-14',
         image: {
           key: 'k',
@@ -208,7 +208,7 @@ describe('CurrentAffairsService', () => {
 
       await service.create({
         title: 'Satellite launch',
-        description: 'ISRO launch',
+        description: ['ISRO launch'],
         date: '2026-08-14',
         image: {
           key: 'k',
@@ -345,12 +345,12 @@ describe('CurrentAffairsService', () => {
     it('updates scalar fields without moving the date', async () => {
       model.findById.mockReturnValue(chain(doc()));
       model.findByIdAndUpdate.mockReturnValue(
-        chain(doc({ title: 'Updated', description: 'New copy' })),
+        chain(doc({ title: 'Updated', description: ['New copy'] })),
       );
 
       await service.update('ca1', {
         title: 'Updated',
-        description: 'New copy',
+        description: ['New copy'],
         memoryTrick: 'new trick',
         isActive: false,
         sortOrder: 3,
@@ -362,7 +362,7 @@ describe('CurrentAffairsService', () => {
         {
           $set: {
             title: 'Updated',
-            description: 'New copy',
+            description: ['New copy'],
             memoryTrick: 'new trick',
             isActive: false,
             sortOrder: 3,
@@ -370,6 +370,46 @@ describe('CurrentAffairsService', () => {
         },
         { new: true },
       );
+    });
+
+    it('clears description when an empty array is sent', async () => {
+      model.findById.mockReturnValue(chain(doc()));
+      model.findByIdAndUpdate.mockReturnValue(
+        chain(doc({ description: undefined })),
+      );
+
+      await service.update('ca1', { description: [] });
+
+      expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+        'ca1',
+        { $unset: { description: 1 } },
+        { new: true },
+      );
+    });
+
+    it('normalizes legacy string description in responses', async () => {
+      model.findById.mockReturnValue(
+        chain(
+          doc({
+            description: 'Legacy paragraph',
+            toObject: () => ({
+              id: 'ca1',
+              title: 'Satellite launch',
+              description: 'Legacy paragraph',
+              memoryTrick: 'sky report',
+              dateKey: '2026-08-14',
+              sortOrder: 0,
+              isActive: true,
+              createdAt: new Date('2026-08-14T10:00:00.000Z'),
+              updatedAt: new Date('2026-08-14T10:00:00.000Z'),
+            }),
+          }),
+        ),
+      );
+      imageUrlResolver.resolve.mockResolvedValue(null);
+
+      const result = await service.findOne('ca1');
+      expect(result.description).toEqual(['Legacy paragraph']);
     });
 
     it('does not change dateKey when the same date is sent', async () => {
