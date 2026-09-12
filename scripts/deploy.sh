@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 
 ###############################################################################
-# EZ Prep API Deployment Script
+# API Deployment Script (shared across instances)
 ###############################################################################
 
 set -Eeuo pipefail
 
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
 ###############################################################################
-# Load NVM and select Node.js
+# Load NVM
 ###############################################################################
 
 export NVM_DIR="$HOME/.nvm"
@@ -19,26 +21,34 @@ fi
 
 . "$NVM_DIR/nvm.sh"
 
-nvm use 24.16.0
+# Droplet default Node is already 24; use whatever nvm has selected / default.
+nvm use default >/dev/null 2>&1 || true
 
 echo "Using Node $(node -v)"
 echo "Using npm $(npm -v)"
 
-if [ "$(node -v)" != "v24.16.0" ]; then
-    echo "❌ Unexpected Node.js version."
-    exit 1
+cd "$APP_DIR"
+
+###############################################################################
+# Load instance env (not auto-loaded by the shell / DigitalOcean)
+###############################################################################
+
+if [ -f "$APP_DIR/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$APP_DIR/.env"
+    set +a
 fi
+
+INSTANCE_NAME="${INSTANCE_NAME:-API}"
+INSTANCE_ID="${INSTANCE_ID:-api}"
 
 echo ""
 echo "======================================================="
-echo "🚀 EZ Prep API Deployment Started"
+echo "🚀 ${INSTANCE_NAME} API Deployment Started"
+echo "   instance: ${INSTANCE_ID}"
+echo "   dir:      ${APP_DIR}"
 echo "======================================================="
-
-###############################################################################
-# Move to project directory
-###############################################################################
-
-cd /var/www/ez-prep-api
 
 ###############################################################################
 # Fetch latest code
@@ -158,5 +168,5 @@ pm2 save
 
 echo ""
 echo "======================================================="
-echo "✅ Deployment Successful"
+echo "✅ ${INSTANCE_NAME} Deployment Successful"
 echo "======================================================="

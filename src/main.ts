@@ -87,10 +87,12 @@ async function bootstrap() {
     app.setGlobalPrefix('api/v1');
 
     // Swagger API documentation
+    const instanceName =
+      configService.get<string>('INSTANCE_NAME') || 'EZ Prep';
     const config = new DocumentBuilder()
-      .setTitle('EZ Prep API')
+      .setTitle(`${instanceName} API`)
       .setDescription(
-        'EZ Prep API. Topic-wise papers: /mock-tests. Full-exam papers: /full-mock-tests (admin draft → publish). Students take both via /mock-test-attempts. Session-wise full exams: one subject timer at a time; filter questions by sessionOrder / sessions[].questionIds; POST .../sessions/complete before the next subject. GET .../resume unpauses a paused attempt.',
+        `${instanceName} API. Topic-wise papers: /mock-tests. Full-exam papers: /full-mock-tests (admin draft → publish). Students take both via /mock-test-attempts. Session-wise full exams: one subject timer at a time; filter questions by sessionOrder / sessions[].questionIds; POST .../sessions/complete before the next subject. GET .../resume unpauses a paused attempt.`,
       )
       .setVersion('1.0.0')
       .addTag('health', 'Health check endpoints')
@@ -135,7 +137,7 @@ async function bootstrap() {
         tagsSorter: 'alpha',
         operationsSorter: 'alpha',
       },
-      customSiteTitle: 'EZ Prep API Documentation',
+      customSiteTitle: `${instanceName} API Documentation`,
       customfavIcon: 'https://swagger.io/favicon.ico',
     });
 

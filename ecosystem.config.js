@@ -1,11 +1,13 @@
+require('dotenv').config();
+
+const instanceId = process.env.INSTANCE_ID || 'api';
+
 module.exports = {
   apps: [
     {
-      name: 'ez-prep-api',
+      name: `${instanceId}-api`,
 
       script: 'dist/main.js',
-
-      cwd: '/var/www/ez-prep-api',
 
       instances: 1,
 
@@ -22,6 +24,8 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
+        INSTANCE_ID: process.env.INSTANCE_ID || 'api',
+        INSTANCE_NAME: process.env.INSTANCE_NAME || 'API',
       },
     },
   ],

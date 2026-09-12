@@ -1,7 +1,12 @@
+import { config as loadDotenv } from 'dotenv';
 import { WinstonModuleOptions } from 'nest-winston';
 import * as winston from 'winston';
 
+// Winston defaultMeta is evaluated at import time, before ConfigModule loads .env.
+loadDotenv();
+
 const isVercel = process.env.VERCEL === '1';
+const instanceId = process.env.INSTANCE_ID || 'api';
 
 const logFormat = winston.format.combine(
   winston.format.timestamp(),
@@ -59,7 +64,8 @@ export const winstonConfig: WinstonModuleOptions = {
 
   // Default metadata
   defaultMeta: {
-    service: 'ez-prep-api',
+    service: `${instanceId}-api`,
+    instanceId,
     environment: process.env.NODE_ENV || 'development',
   },
 
