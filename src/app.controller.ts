@@ -22,7 +22,7 @@ export class AppController {
         data: {
           type: 'object',
           properties: {
-            greeting: { type: 'string', example: 'Welcome to EZ Prep API!' },
+            greeting: { type: 'string', example: 'Welcome to the API!' },
           },
         },
       },
@@ -52,6 +52,7 @@ export class AppController {
         message: {
           type: 'string',
           example: 'EZ Prep API is running successfully',
+          description: 'Uses INSTANCE_NAME from the deployment environment',
         },
         timestamp: { type: 'string', example: '2025-09-17T02:30:00.000Z' },
         environment: { type: 'string', example: 'development' },
@@ -59,9 +60,10 @@ export class AppController {
     },
   })
   getHealth() {
+    const instanceName = process.env.INSTANCE_NAME || 'EZ Prep';
     return {
       status: 'OK',
-      message: 'EZ Prep API is running successfully',
+      message: `${instanceName} API is running successfully`,
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
     };

@@ -25,14 +25,33 @@ describe('AppController', () => {
 
   describe('health', () => {
     it('should return OK status and environment', () => {
-      const previous = process.env.NODE_ENV;
+      const previousEnv = process.env.NODE_ENV;
+      const previousName = process.env.INSTANCE_NAME;
       process.env.NODE_ENV = 'test';
+      process.env.INSTANCE_NAME = 'EZ Prep';
       const result = appController.getHealth();
       expect(result.status).toBe('OK');
       expect(result.message).toBe('EZ Prep API is running successfully');
       expect(result.timestamp).toBeDefined();
       expect(result.environment).toBe('test');
-      process.env.NODE_ENV = previous;
+      process.env.NODE_ENV = previousEnv;
+      if (previousName === undefined) {
+        delete process.env.INSTANCE_NAME;
+      } else {
+        process.env.INSTANCE_NAME = previousName;
+      }
+    });
+
+    it('should use INSTANCE_NAME in the health message', () => {
+      const previousName = process.env.INSTANCE_NAME;
+      process.env.INSTANCE_NAME = 'ExamFlex';
+      const result = appController.getHealth();
+      expect(result.message).toBe('ExamFlex API is running successfully');
+      if (previousName === undefined) {
+        delete process.env.INSTANCE_NAME;
+      } else {
+        process.env.INSTANCE_NAME = previousName;
+      }
     });
 
     it('should default environment to development when NODE_ENV is unset', () => {
