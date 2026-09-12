@@ -17,7 +17,6 @@ import {
   DESCRIPTION_POINT_MAX_LENGTH,
   DESCRIPTION_POINT_MIN_LENGTH,
   cleanDescriptionPoints,
-  sanitizeDescriptionPoints,
 } from '../utils/description-points';
 
 export class CreateCurrentAffairDto {
@@ -45,9 +44,7 @@ export class CreateCurrentAffairDto {
     maxItems: DESCRIPTION_MAX_POINTS,
   })
   @IsOptional()
-  @ValidateIf(
-    (_, value) => cleanDescriptionPoints(value).length > 0,
-  )
+  @ValidateIf((_, value) => cleanDescriptionPoints(value).length > 0)
   @IsArray()
   @ArrayMaxSize(DESCRIPTION_MAX_POINTS, {
     message: `Description cannot have more than ${DESCRIPTION_MAX_POINTS} bullet points`,
