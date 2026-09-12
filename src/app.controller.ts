@@ -1,11 +1,15 @@
 import { Controller, Get } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
 
 @ApiTags('health')
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -51,7 +55,7 @@ export class AppController {
         status: { type: 'string', example: 'OK' },
         message: {
           type: 'string',
-          example: 'EZ Prep API is running successfully',
+          example: 'ExamFlex API is running successfully',
           description: 'Uses INSTANCE_NAME from the deployment environment',
         },
         timestamp: { type: 'string', example: '2025-09-17T02:30:00.000Z' },
@@ -60,12 +64,15 @@ export class AppController {
     },
   })
   getHealth() {
-    const instanceName = process.env.INSTANCE_NAME || 'EZ Prep';
+    const instanceName =
+      this.configService.get<string>('INSTANCE_NAME')?.trim() ||
+      this.configService.get<string>('INSTANCE_ID')?.trim() ||
+      'API';
     return {
       status: 'OK',
       message: `${instanceName} API is running successfully`,
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
+      environment: this.configService.get<string>('NODE_ENV') || 'development',
     };
   }
 }

@@ -131,8 +131,7 @@ When \`date\` is set, results are ordered by \`sortOrder\` then \`createdAt\`. O
     name: 'search',
     required: false,
     type: String,
-    description:
-      'Full-text search on title and description bullet points',
+    description: 'Full-text search on title and description bullet points',
     example: 'ISRO satellite',
   })
   @ApiQuery({

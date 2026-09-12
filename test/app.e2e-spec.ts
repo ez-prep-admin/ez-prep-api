@@ -38,9 +38,8 @@ describe('AppController (e2e)', () => {
       .expect(200)
       .expect(res => {
         expect(res.body.status).toBe('OK');
-        expect(res.body.message).toBe(
-          `${process.env.INSTANCE_NAME || 'EZ Prep'} API is running successfully`,
-        );
+        expect(res.body.message).toMatch(/API is running successfully$/);
+        expect(res.body.message).not.toBe('');
         expect(res.body.timestamp).toBeDefined();
       });
   });

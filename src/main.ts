@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { useContainer } from 'class-validator';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { securityConfig } from './common/config/security.config';
+import { securityConfig, getCorsConfig } from './common/config/security.config';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -80,15 +80,17 @@ async function bootstrap() {
       }),
     );
 
-    // Enhanced CORS configuration
-    app.enableCors(securityConfig.cors);
+    // Enhanced CORS configuration (per-instance via CORS_ORIGINS)
+    app.enableCors(getCorsConfig(configService.get<string>('CORS_ORIGINS')));
 
     // Global prefix for API routes
     app.setGlobalPrefix('api/v1');
 
     // Swagger API documentation
     const instanceName =
-      configService.get<string>('INSTANCE_NAME') || 'EZ Prep';
+      configService.get<string>('INSTANCE_NAME')?.trim() ||
+      configService.get<string>('INSTANCE_ID')?.trim() ||
+      'API';
     const config = new DocumentBuilder()
       .setTitle(`${instanceName} API`)
       .setDescription(

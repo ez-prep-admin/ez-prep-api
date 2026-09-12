@@ -12,7 +12,13 @@ describe('description-points', () => {
   });
 
   it('trims, removes empty entries, and caps the number of points', () => {
-    const input = ['  first  ', '', '   ', 'second', ...Array(12).fill('extra')];
+    const input = [
+      '  first  ',
+      '',
+      '   ',
+      'second',
+      ...Array(12).fill('extra'),
+    ];
     expect(sanitizeDescriptionPoints(input)).toEqual([
       'first',
       'second',

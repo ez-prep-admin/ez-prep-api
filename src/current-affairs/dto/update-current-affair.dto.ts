@@ -32,9 +32,7 @@ export class UpdateCurrentAffairDto extends PartialType(
     maxItems: DESCRIPTION_MAX_POINTS,
   })
   @IsOptional()
-  @ValidateIf(
-    (_, value) => cleanDescriptionPoints(value).length > 0,
-  )
+  @ValidateIf((_, value) => cleanDescriptionPoints(value).length > 0)
   @IsArray()
   @ArrayMaxSize(DESCRIPTION_MAX_POINTS, {
     message: `Description cannot have more than ${DESCRIPTION_MAX_POINTS} bullet points`,
