@@ -128,12 +128,13 @@ Samples a complete paper from the question bank to match the exam blueprint:
 
 - Subject order and quotas from \`exam.subjects[]\`
 - Marks / negative marking from each subject row
-- Mixed: one timer = \`exam.duration\`
-- Session-wise: every subject must have \`sessionTime > 0\`
+- Mixed: one timer = \`exam.duration\`; questions are shuffled across the whole pack
+- Session-wise: every subject must have \`sessionTime > 0\`; subject/session order is preserved; each session is shuffled internally
+- Within a shuffle, same-topic questions are separated when possible
 - Topic split inside a subject uses inventory + usage-weighted sampling
 
 The result is a **draft** in \`fullmocktestdrafts\` (status \`REVIEW\`).
-Questions are stored in **exam subject order** (contiguous blocks).
+Session-wise papers keep contiguous subject blocks in exam order; mixed papers may interleave subjects.
 Nothing is written to \`mocktests\` until publish.
 
 Correct answers and explanations are **not** returned.
@@ -405,8 +406,9 @@ Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`, \`
 Writes the paper into \`mocktests\` with \`paperType: FULL_EXAM\`, then increments
 \`fullMockUsageCount\` / \`lastUsedInFullMockAt\` on every question.
 
-Questions are regrouped into contiguous subject blocks. Each \`subjectConfig\` row
-stores \`questionIds\` plus start/end indexes.
+Session-wise: questions are regrouped into contiguous subject blocks in exam
+subject/session order. Mixed: draft order is kept (whole-pack shuffle).
+Each \`subjectConfig\` row stores \`questionIds\` plus start/end indexes.
 
 Students then see it on \`GET /full-mock-tests\` and take it with \`POST /mock-test-attempts/start\`.
 Session-wise papers use per-subject timers and \`POST /mock-test-attempts/{id}/sessions/complete\`.
