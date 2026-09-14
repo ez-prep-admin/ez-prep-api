@@ -168,8 +168,12 @@ export class FullMockTestsService {
 
     const { questions, subjectNames } =
       await this.selectionService.generatePaper(exam);
-    const grouped = this.groupQuestionsBySubjectOrder(questions, exam.subjects);
-    this.assertNoDuplicateQuestions(grouped);
+    const arranged = this.selectionService.arrangePaperQuestions(
+      questions,
+      exam.subjects,
+      !!exam.isSessionWise,
+    );
+    this.assertNoDuplicateQuestions(arranged);
 
     const draft = await this.draftModel.create({
       exam: exam._id,
@@ -192,7 +196,7 @@ export class FullMockTestsService {
           sessionTime: row.sessionTime,
         })),
       },
-      questions: grouped,
+      questions: arranged,
     });
 
     return this.toDraftResponse(draft);
@@ -489,10 +493,13 @@ export class FullMockTestsService {
     userId: string,
   ): Promise<{ mockTestId: string; draft: DraftResponseDto }> {
     const snapshot = draft.examSnapshot;
-    const ordered = this.groupQuestionsBySubjectOrder(
-      draft.questions,
-      snapshot.subjects,
-    );
+    // Session-wise: force contiguous blocks in exam subject/session order.
+    // Mixed: keep the draft's whole-pack shuffle (do not regroup by subject).
+    const ordered = snapshot.isSessionWise
+      ? this.groupQuestionsBySubjectOrder(draft.questions, snapshot.subjects)
+      : draft.questions.map((q, position) =>
+          this.cloneDraftQuestion(q, position),
+        );
     this.assertNoDuplicateQuestions(ordered);
     if (
       snapshot.totalQuestions != null &&

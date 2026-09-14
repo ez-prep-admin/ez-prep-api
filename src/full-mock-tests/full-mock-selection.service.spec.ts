@@ -267,4 +267,141 @@ describe('FullMockSelectionService', () => {
       jest.restoreAllMocks();
     });
   });
+
+  describe('shuffleAvoidingAdjacentTopics', () => {
+    const topicA = new Types.ObjectId('507f1f77bcf86cd7994390b1');
+    const topicB = new Types.ObjectId('507f1f77bcf86cd7994390b2');
+    const topicC = new Types.ObjectId('507f1f77bcf86cd7994390b3');
+
+    function q(
+      id: string,
+      topic: Types.ObjectId,
+      subject = new Types.ObjectId(SUB_ID),
+    ) {
+      return {
+        question: new Types.ObjectId(id),
+        subject,
+        topic,
+        difficultyLevel: 'easy',
+        position: 0,
+        marksPerQuestion: 1,
+        negativeMarking: 0,
+      };
+    }
+
+    it('should avoid adjacent same-topic questions when possible', () => {
+      const clustered = [
+        q('507f1f77bcf86cd7994390c1', topicA),
+        q('507f1f77bcf86cd7994390c2', topicA),
+        q('507f1f77bcf86cd7994390c3', topicB),
+        q('507f1f77bcf86cd7994390c4', topicB),
+        q('507f1f77bcf86cd7994390c5', topicC),
+        q('507f1f77bcf86cd7994390c6', topicC),
+      ];
+
+      const shuffled = service.shuffleAvoidingAdjacentTopics(clustered);
+      expect(shuffled).toHaveLength(6);
+      for (let i = 1; i < shuffled.length; i++) {
+        expect(shuffled[i].topic?.toString()).not.toBe(
+          shuffled[i - 1].topic?.toString(),
+        );
+      }
+      expect(
+        new Set(shuffled.map(row => row.question.toString())).size,
+      ).toBe(6);
+    });
+
+    it('should keep all questions when one topic dominates', () => {
+      const mostlyA = [
+        q('507f1f77bcf86cd7994390c1', topicA),
+        q('507f1f77bcf86cd7994390c2', topicA),
+        q('507f1f77bcf86cd7994390c3', topicA),
+        q('507f1f77bcf86cd7994390c4', topicB),
+      ];
+      const shuffled = service.shuffleAvoidingAdjacentTopics(mostlyA);
+      expect(shuffled).toHaveLength(4);
+      expect(
+        new Set(shuffled.map(row => row.question.toString())).size,
+      ).toBe(4);
+    });
+  });
+
+  describe('arrangePaperQuestions', () => {
+    const sub2 = '507f1f77bcf86cd799439019';
+    const topicA = new Types.ObjectId('507f1f77bcf86cd7994390b1');
+    const topicB = new Types.ObjectId('507f1f77bcf86cd7994390b2');
+
+    function q(
+      id: string,
+      subjectId: string,
+      topic: Types.ObjectId,
+      position: number,
+    ) {
+      return {
+        question: new Types.ObjectId(id),
+        subject: new Types.ObjectId(subjectId),
+        topic,
+        difficultyLevel: 'easy',
+        position,
+        marksPerQuestion: 1,
+        negativeMarking: 0,
+      };
+    }
+
+    it('should preserve session/subject order and separate topics within each session', () => {
+      const subjects = [
+        { subject: new Types.ObjectId(SUB_ID) },
+        { subject: new Types.ObjectId(sub2) },
+      ];
+      const questions = [
+        q('507f1f77bcf86cd7994390d1', SUB_ID, topicA, 0),
+        q('507f1f77bcf86cd7994390d2', SUB_ID, topicA, 1),
+        q('507f1f77bcf86cd7994390d3', SUB_ID, topicB, 2),
+        q('507f1f77bcf86cd7994390d4', SUB_ID, topicB, 3),
+        q('507f1f77bcf86cd7994390d5', sub2, topicA, 4),
+        q('507f1f77bcf86cd7994390d6', sub2, topicB, 5),
+      ];
+
+      const arranged = service.arrangePaperQuestions(questions, subjects, true);
+
+      expect(arranged.map(row => row.subject.toString())).toEqual([
+        SUB_ID,
+        SUB_ID,
+        SUB_ID,
+        SUB_ID,
+        sub2,
+        sub2,
+      ]);
+      expect(arranged.map(row => row.position)).toEqual([0, 1, 2, 3, 4, 5]);
+
+      const firstSession = arranged.slice(0, 4);
+      for (let i = 1; i < firstSession.length; i++) {
+        expect(firstSession[i].topic?.toString()).not.toBe(
+          firstSession[i - 1].topic?.toString(),
+        );
+      }
+    });
+
+    it('should shuffle the whole pack for mixed exams', () => {
+      const subjects = [
+        { subject: new Types.ObjectId(SUB_ID) },
+        { subject: new Types.ObjectId(sub2) },
+      ];
+      const questions = [
+        q('507f1f77bcf86cd7994390d1', SUB_ID, topicA, 0),
+        q('507f1f77bcf86cd7994390d2', SUB_ID, topicA, 1),
+        q('507f1f77bcf86cd7994390d3', sub2, topicB, 2),
+        q('507f1f77bcf86cd7994390d4', sub2, topicB, 3),
+      ];
+
+      const arranged = service.arrangePaperQuestions(questions, subjects, false);
+      expect(arranged).toHaveLength(4);
+      expect(arranged.map(row => row.position)).toEqual([0, 1, 2, 3]);
+      for (let i = 1; i < arranged.length; i++) {
+        expect(arranged[i].topic?.toString()).not.toBe(
+          arranged[i - 1].topic?.toString(),
+        );
+      }
+    });
+  });
 });

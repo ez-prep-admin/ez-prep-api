@@ -429,4 +429,131 @@ export class FullMockSelectionService {
     const jitter = 0.85 + 0.15 * Math.random();
     return (1 / Math.pow(1 + usage, USAGE_EXPONENT)) * recencyPenalty * jitter;
   }
+
+  /**
+   * Arrange sampled questions for the draft:
+   * - Session-wise: keep exam subject/session order; shuffle inside each session
+   *   so same-topic items are not adjacent when possible.
+   * - Mixed: shuffle the whole paper with the same topic-separation goal.
+   * Positions are rewritten 0..n-1.
+   */
+  arrangePaperQuestions(
+    questions: DraftQuestion[],
+    subjects: Array<{ subject: Types.ObjectId | { toString(): string } }>,
+    isSessionWise: boolean,
+  ): DraftQuestion[] {
+    if (questions.length === 0) {
+      return [];
+    }
+
+    let arranged: DraftQuestion[];
+    if (isSessionWise) {
+      arranged = this.arrangeSessionWise(questions, subjects);
+    } else {
+      arranged = this.shuffleAvoidingAdjacentTopics(questions);
+    }
+
+    return arranged.map((q, position) => ({
+      question: q.question,
+      subject: q.subject,
+      topic: q.topic,
+      difficultyLevel: q.difficultyLevel,
+      position,
+      marksPerQuestion: q.marksPerQuestion,
+      negativeMarking: q.negativeMarking,
+      replacedFrom: q.replacedFrom,
+    }));
+  }
+
+  private arrangeSessionWise(
+    questions: DraftQuestion[],
+    subjects: Array<{ subject: Types.ObjectId | { toString(): string } }>,
+  ): DraftQuestion[] {
+    const bySubject = new Map<string, DraftQuestion[]>();
+    for (const q of questions) {
+      const key = q.subject.toString();
+      const bucket = bySubject.get(key) || [];
+      bucket.push(q);
+      bySubject.set(key, bucket);
+    }
+
+    const arranged: DraftQuestion[] = [];
+    const seen = new Set<string>();
+    for (const row of subjects) {
+      const key = row.subject.toString();
+      const block = bySubject.get(key) || [];
+      arranged.push(...this.shuffleAvoidingAdjacentTopics(block));
+      seen.add(key);
+    }
+    for (const [key, block] of bySubject) {
+      if (!seen.has(key)) {
+        arranged.push(...this.shuffleAvoidingAdjacentTopics(block));
+      }
+    }
+    return arranged;
+  }
+
+  /**
+   * Best-effort rearrange so consecutive questions have different topics.
+   * When one topic dominates (more than half + remainder), some adjacency is
+   * unavoidable; greedy largest-bucket picking still minimizes it.
+   */
+  shuffleAvoidingAdjacentTopics(questions: DraftQuestion[]): DraftQuestion[] {
+    if (questions.length <= 1) {
+      return [...questions];
+    }
+
+    const buckets = new Map<string, DraftQuestion[]>();
+    for (const q of questions) {
+      const key = this.topicKey(q);
+      const bucket = buckets.get(key) || [];
+      bucket.push(q);
+      buckets.set(key, bucket);
+    }
+
+    for (const bucket of buckets.values()) {
+      this.fisherYates(bucket);
+    }
+
+    const result: DraftQuestion[] = [];
+    let lastKey: string | null = null;
+
+    while (result.length < questions.length) {
+      const candidates = [...buckets.entries()]
+        .filter(([, qs]) => qs.length > 0)
+        .sort((a, b) => {
+          const sizeDiff = b[1].length - a[1].length;
+          if (sizeDiff !== 0) {
+            return sizeDiff;
+          }
+          return Math.random() - 0.5;
+        });
+
+      if (candidates.length === 0) {
+        break;
+      }
+
+      const preferred = candidates.find(([key]) => key !== lastKey);
+      const [chosenKey, chosenBucket] = preferred || candidates[0];
+      result.push(chosenBucket.shift() as DraftQuestion);
+      lastKey = chosenKey;
+    }
+
+    return result;
+  }
+
+  private topicKey(question: DraftQuestion): string {
+    if (question.topic) {
+      return question.topic.toString();
+    }
+    // Untopiced items never "match" each other for adjacency purposes.
+    return `__none__:${question.question.toString()}`;
+  }
+
+  private fisherYates<T>(items: T[]): void {
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+  }
 }

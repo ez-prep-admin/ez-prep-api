@@ -143,7 +143,26 @@ describe('FullMockTestsService', () => {
     updateOne: jest.fn(),
     countDocuments: jest.fn(),
   };
-  const selectionService = { generatePaper: jest.fn() };
+  const realSelection = new FullMockSelectionService(
+    null as any,
+    null as any,
+    null as any,
+  );
+  const selectionService = {
+    generatePaper: jest.fn(),
+    arrangePaperQuestions: jest.fn(
+      (
+        questions: Parameters<
+          FullMockSelectionService['arrangePaperQuestions']
+        >[0],
+        subjects: Parameters<
+          FullMockSelectionService['arrangePaperQuestions']
+        >[1],
+        isSessionWise: boolean,
+      ) =>
+        realSelection.arrangePaperQuestions(questions, subjects, isSessionWise),
+    ),
+  };
   const mockTestsService = { getUserAttemptActions: jest.fn() };
   const imageUrlResolver = {
     resolveMany: jest.fn().mockResolvedValue([null, null, null]),
@@ -255,10 +274,11 @@ describe('FullMockTestsService', () => {
       expect(result.subjects[0].questions[0]._id).toBe(Q1);
     });
 
-    it('should persist generated questions in exam subject order', async () => {
+    it('should persist session-wise questions in exam subject order', async () => {
       const sub2 = '507f1f77bcf86cd799439019';
       const exam = {
         ...makeExam(),
+        isSessionWise: true,
         totalQuestions: 2,
         subjects: [
           ...makeExam().subjects,
@@ -311,6 +331,103 @@ describe('FullMockTestsService', () => {
       ).toEqual([Q1, Q2]);
       expect(stored[0].position).toBe(0);
       expect(stored[1].position).toBe(1);
+      expect(selectionService.arrangePaperQuestions).toHaveBeenCalledWith(
+        expect.any(Array),
+        exam.subjects,
+        true,
+      );
+    });
+
+    it('should arrange mixed papers as a whole pack (not subject blocks)', async () => {
+      const sub2 = '507f1f77bcf86cd799439019';
+      const topicA = '507f1f77bcf86cd7994390a1';
+      const topicB = '507f1f77bcf86cd7994390a2';
+      const q3 = '507f1f77bcf86cd7994390a3';
+      const q4 = '507f1f77bcf86cd7994390a4';
+      const exam = {
+        ...makeExam(),
+        isSessionWise: false,
+        totalQuestions: 4,
+        subjects: [
+          {
+            subject: new Types.ObjectId(SUB_ID),
+            numberOfQuestions: 2,
+            marksPerQuestion: 1,
+            hasNegativeMarking: false,
+            negativeMarksPerQuestion: 0,
+          },
+          {
+            subject: new Types.ObjectId(sub2),
+            numberOfQuestions: 2,
+            marksPerQuestion: 1,
+            hasNegativeMarking: false,
+            negativeMarksPerQuestion: 0,
+          },
+        ],
+      };
+      const clustered = [
+        {
+          question: new Types.ObjectId(Q1),
+          subject: new Types.ObjectId(SUB_ID),
+          topic: new Types.ObjectId(topicA),
+          difficultyLevel: 'easy',
+          position: 0,
+          marksPerQuestion: 1,
+          negativeMarking: 0,
+        },
+        {
+          question: new Types.ObjectId(Q2),
+          subject: new Types.ObjectId(SUB_ID),
+          topic: new Types.ObjectId(topicA),
+          difficultyLevel: 'easy',
+          position: 1,
+          marksPerQuestion: 1,
+          negativeMarking: 0,
+        },
+        {
+          question: new Types.ObjectId(q3),
+          subject: new Types.ObjectId(sub2),
+          topic: new Types.ObjectId(topicB),
+          difficultyLevel: 'easy',
+          position: 2,
+          marksPerQuestion: 1,
+          negativeMarking: 0,
+        },
+        {
+          question: new Types.ObjectId(q4),
+          subject: new Types.ObjectId(sub2),
+          topic: new Types.ObjectId(topicB),
+          difficultyLevel: 'easy',
+          position: 3,
+          marksPerQuestion: 1,
+          negativeMarking: 0,
+        },
+      ];
+      examModel.findById.mockReturnValue(chainable(exam));
+      selectionService.generatePaper.mockResolvedValue({
+        questions: clustered,
+        subjectNames: new Map([
+          [SUB_ID, 'GS'],
+          [sub2, 'Math'],
+        ]),
+      });
+      draftModel.create.mockResolvedValue(makeDraft());
+      questionModel.find.mockReturnValue(chainable([questionLean()]));
+
+      await service.createDraft({ examId: EXAM_ID }, USER_ID);
+
+      const stored = draftModel.create.mock.calls[0][0].questions;
+      expect(stored).toHaveLength(4);
+      expect(selectionService.arrangePaperQuestions).toHaveBeenCalledWith(
+        clustered,
+        exam.subjects,
+        false,
+      );
+      for (let i = 1; i < stored.length; i++) {
+        expect(stored[i].topic.toString()).not.toBe(
+          stored[i - 1].topic.toString(),
+        );
+      }
     });
 
     it('should load a draft', async () => {
@@ -615,7 +732,7 @@ describe('FullMockTestsService', () => {
       expect(draft.status).toBe('PUBLISHED');
     });
 
-    it('should regroup interleaved questions into contiguous subject blocks', async () => {
+    it('should regroup interleaved questions into contiguous subject blocks for session-wise', async () => {
       const sub2 = '507f1f77bcf86cd799439019';
       const draft = makeDraft({
         examSnapshot: {
@@ -697,6 +814,75 @@ describe('FullMockTestsService', () => {
           id.toString(),
         ),
       ).toEqual([Q2]);
+    });
+
+    it('should keep mixed draft order on publish (no subject regroup)', async () => {
+      const sub2 = '507f1f77bcf86cd799439019';
+      const draft = makeDraft({
+        examSnapshot: {
+          name: 'CGL',
+          description: 'd',
+          duration: 60,
+          totalQuestions: 2,
+          totalMarks: 3,
+          isSessionWise: false,
+          subjects: [
+            {
+              subject: new Types.ObjectId(SUB_ID),
+              name: 'GS',
+              numberOfQuestions: 1,
+              marksPerQuestion: 2,
+              hasNegativeMarking: true,
+              negativeMarksPerQuestion: 0.5,
+            },
+            {
+              subject: new Types.ObjectId(sub2),
+              name: 'Math',
+              numberOfQuestions: 1,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+          ],
+        },
+        questions: [
+          {
+            question: new Types.ObjectId(Q2),
+            subject: new Types.ObjectId(sub2),
+            topic: new Types.ObjectId(TOP_ID),
+            difficultyLevel: 'easy',
+            position: 0,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(Q1),
+            subject: new Types.ObjectId(SUB_ID),
+            topic: new Types.ObjectId(TOP_ID),
+            difficultyLevel: 'medium',
+            position: 1,
+            marksPerQuestion: 2,
+            negativeMarking: 0.5,
+          },
+        ],
+      });
+      draftModel.findOneAndUpdate.mockResolvedValue(draft);
+      questionModel.find.mockReturnValue(
+        chainable([questionLean(Q1), questionLean(Q2)]),
+      );
+      mockTestModel.create.mockResolvedValue({
+        id: TEST_ID,
+        _id: new Types.ObjectId(TEST_ID),
+      });
+      questionModel.updateMany.mockResolvedValue({});
+
+      await service.publishDraft(DRAFT_ID, { title: 'Paper 1' }, USER_ID);
+
+      const payload = mockTestModel.create.mock.calls[0][0];
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([Q2, Q1]);
+      expect(payload.isSessionWise).toBe(false);
     });
 
     it('should keep question ids when grouping mongoose-like subdocuments', async () => {
