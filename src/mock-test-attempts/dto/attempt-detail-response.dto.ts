@@ -13,6 +13,12 @@ class BasicInfoDto {
 
   @ApiPropertyOptional({ description: 'Description' })
   description?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Present on exam refs. When false, clients should hide the language toggle.',
+  })
+  hasMultiLingualSupport?: boolean;
 }
 
 class QuestionOptionDto {
