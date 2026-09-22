@@ -401,7 +401,7 @@ export class MockTestAttemptsService {
     // Step 2: Fetch the mock test with populated exam, subject, and topic
     const test = await this.mockTestModel
       .findById(mockTestId)
-      .populate('exam', '_id name description')
+      .populate('exam', '_id name description hasMultiLingualSupport')
       .populate('subject', '_id name description')
       .populate('topic', '_id name')
       .exec();
@@ -556,6 +556,10 @@ export class MockTestAttemptsService {
           id: examDoc?._id?.toString() || '',
           name: examDoc?.name || '',
           description: examDoc?.description,
+          hasMultiLingualSupport: Boolean(
+            (examDoc as PopulatedDocument & { hasMultiLingualSupport?: boolean })
+              ?.hasMultiLingualSupport,
+          ),
         },
         subject: subjectDoc?._id
           ? {
@@ -709,7 +713,7 @@ export class MockTestAttemptsService {
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
-      .populate('exam', 'name description')
+      .populate('exam', 'name description hasMultiLingualSupport')
       .populate('subject', 'name description')
       .populate('topic', 'name description')
       .exec();
@@ -775,6 +779,7 @@ export class MockTestAttemptsService {
     const examDoc = attempt.exam as unknown as PopulatedDocument & {
       name?: string;
       description?: string;
+      hasMultiLingualSupport?: boolean;
     };
 
     const subjectDoc = attempt.subject as unknown as PopulatedDocument & {
@@ -806,6 +811,7 @@ export class MockTestAttemptsService {
           id: (examDoc?._id as Types.ObjectId)?.toString() || '',
           name: examDoc?.name || '',
           description: examDoc?.description,
+          hasMultiLingualSupport: Boolean(examDoc?.hasMultiLingualSupport),
         },
         subject: {
           id: (subjectDoc?._id as Types.ObjectId)?.toString() || '',
@@ -886,7 +892,7 @@ export class MockTestAttemptsService {
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
-      .populate('exam', '_id name description')
+      .populate('exam', '_id name description hasMultiLingualSupport')
       .populate('subject', '_id name description')
       .populate('topic', '_id name')
       .exec();
@@ -979,6 +985,10 @@ export class MockTestAttemptsService {
           id: examDoc?._id?.toString() || '',
           name: examDoc?.name || '',
           description: examDoc?.description,
+          hasMultiLingualSupport: Boolean(
+            (examDoc as { hasMultiLingualSupport?: boolean })
+              ?.hasMultiLingualSupport,
+          ),
         },
         subject: subjectDoc?._id
           ? {
@@ -1020,7 +1030,7 @@ export class MockTestAttemptsService {
         'mockTest',
         'title totalQuestions durationInMinutes marksPerQuestion',
       )
-      .populate('exam', 'name description')
+      .populate('exam', 'name description hasMultiLingualSupport')
       .populate('subject', 'name description')
       .populate('topic', 'name description')
       .sort({ createdAt: -1 })
@@ -1111,7 +1121,7 @@ export class MockTestAttemptsService {
         'mockTest',
         'title totalQuestions durationInMinutes marksPerQuestion',
       )
-      .populate('exam', 'name description')
+      .populate('exam', 'name description hasMultiLingualSupport')
       .populate('subject', 'name description')
       .populate('topic', 'name description')
       .sort({ createdAt: -1 })

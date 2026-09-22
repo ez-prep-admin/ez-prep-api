@@ -136,6 +136,13 @@ export class ExamSummaryDto {
     example: 'Staff Selection Commission Combined Graduate Level',
   })
   description?: string;
+
+  @ApiProperty({
+    description:
+      'Whether the exam supports bilingual questions. When false, clients should hide the language toggle.',
+    example: false,
+  })
+  hasMultiLingualSupport: boolean;
 }
 
 export class SubjectSummaryDto {
