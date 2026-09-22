@@ -167,6 +167,24 @@ export class SubjectsService {
           },
         },
         { $unwind: '$subjects' },
+        // exam.subjects.subject may be stored as ObjectId or string; normalize for $lookup
+        {
+          $addFields: {
+            'subjects.subject': {
+              $convert: {
+                input: '$subjects.subject',
+                to: 'objectId',
+                onError: null,
+                onNull: null,
+              },
+            },
+          },
+        },
+        {
+          $match: {
+            'subjects.subject': { $ne: null },
+          },
+        },
         {
           $lookup: {
             from: 'subjects',
