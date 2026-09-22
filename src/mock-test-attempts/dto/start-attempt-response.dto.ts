@@ -223,6 +223,14 @@ export class AttemptTestMetadataDto {
   })
   passingScore?: number;
 
+  @ApiPropertyOptional({
+    description:
+      'TOPIC_WISE opens Daily Practice; FULL_EXAM opens Full Mocks for this exam.',
+    enum: ['TOPIC_WISE', 'FULL_EXAM'],
+    example: 'TOPIC_WISE',
+  })
+  paperType?: 'TOPIC_WISE' | 'FULL_EXAM';
+
   @ApiProperty({
     description: 'Exam details',
     type: ExamSummaryDto,

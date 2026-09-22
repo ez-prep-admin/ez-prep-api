@@ -119,6 +119,13 @@ class TestMetadataDto {
   })
   showResultsImmediately?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'TOPIC_WISE opens Daily Practice; FULL_EXAM opens Full Mocks for this exam.',
+    enum: ['TOPIC_WISE', 'FULL_EXAM'],
+  })
+  paperType?: 'TOPIC_WISE' | 'FULL_EXAM';
+
   @ApiProperty({ description: 'Exam information', type: BasicInfoDto })
   exam: BasicInfoDto;
 

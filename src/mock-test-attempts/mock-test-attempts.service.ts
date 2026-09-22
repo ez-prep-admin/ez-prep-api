@@ -29,6 +29,7 @@ import { ResumeAttemptResponseDto } from './dto/resume-attempt-response.dto';
 import { PauseAttemptResponseDto } from './dto/pause-attempt-response.dto';
 import { UserAttemptSummaryDto } from './dto/user-attempt-summary.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
+import { PaperType } from '../common/enums/paper-type.enum';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import { AnalyticsService } from '../analytics/analytics.service';
 
@@ -552,6 +553,10 @@ export class MockTestAttemptsService {
         marksPerQuestion: test.marksPerQuestion,
         negativeMarking: test.negativeMarking,
         passingScore: test.passingScore,
+        paperType:
+          test.paperType === PaperType.FULL_EXAM
+            ? PaperType.FULL_EXAM
+            : PaperType.TOPIC_WISE,
         exam: {
           id: examDoc?._id?.toString() || '',
           name: examDoc?.name || '',
@@ -716,6 +721,7 @@ export class MockTestAttemptsService {
       .populate('exam', 'name description hasMultiLingualSupport')
       .populate('subject', 'name description')
       .populate('topic', 'name description')
+      .populate('mockTest', 'paperType')
       .exec();
 
     if (!attempt) {
@@ -807,6 +813,11 @@ export class MockTestAttemptsService {
         negativeMarking: attempt.negativeMarking,
         passingScore: attempt.passingScore,
         showResultsImmediately: attempt.showResultsImmediately,
+        paperType:
+          (attempt.mockTest as { paperType?: string } | null)?.paperType ===
+          PaperType.FULL_EXAM
+            ? PaperType.FULL_EXAM
+            : PaperType.TOPIC_WISE,
         exam: {
           id: (examDoc?._id as Types.ObjectId)?.toString() || '',
           name: examDoc?.name || '',
@@ -895,6 +906,7 @@ export class MockTestAttemptsService {
       .populate('exam', '_id name description hasMultiLingualSupport')
       .populate('subject', '_id name description')
       .populate('topic', '_id name')
+      .populate('mockTest', 'paperType')
       .exec();
 
     if (!attempt) {
@@ -981,6 +993,11 @@ export class MockTestAttemptsService {
         marksPerQuestion: attempt.marksPerQuestion,
         negativeMarking: attempt.negativeMarking,
         passingScore: attempt.passingScore,
+        paperType:
+          (attempt.mockTest as { paperType?: string } | null)?.paperType ===
+          PaperType.FULL_EXAM
+            ? PaperType.FULL_EXAM
+            : PaperType.TOPIC_WISE,
         exam: {
           id: examDoc?._id?.toString() || '',
           name: examDoc?.name || '',
