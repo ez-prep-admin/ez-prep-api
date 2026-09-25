@@ -22,6 +22,7 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { GoogleSignInDto } from './dto/google-sign-in.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -71,6 +72,51 @@ export class AuthController {
     const authResponse =
       await this.authService.verifyOtpAndAuthenticate(verifyOtpDto);
 
+    const message = authResponse.isNewUser
+      ? 'Account created and authenticated successfully'
+      : 'Authentication successful';
+
+    return {
+      message,
+      data: authResponse,
+    };
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Sign in with Google',
+    description: `
+Verifies a Google authorization code and returns the same JWT used by OTP login.
+
+The browser sends the one-time code, the redirect URI, and the PKCE verifier.
+The API exchanges that code with Google using the client secret, then verifies
+the ID token signature, audience, issuer, expiry, and email_verified flag.
+A fake or malformed JWT is rejected and does not create a session.
+
+Accounts are matched by the stable Google subject first, then by email, so a student who
+already added that email to an OTP account continues in the same account.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Google sign-in succeeded',
+    type: AuthResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Missing or malformed authorization code' })
+  @ApiUnauthorizedResponse({
+    description:
+      'Invalid code, unrecognized redirect, bad ID token, or deactivated account',
+  })
+  @ApiConflictResponse({
+    description: 'Email is already linked to a different Google account',
+  })
+  async signInWithGoogle(@Body() dto: GoogleSignInDto): Promise<{
+    message: string;
+    data: AuthResponseDto;
+  }> {
+    const authResponse = await this.authService.signInWithGoogle(dto);
     const message = authResponse.isNewUser
       ? 'Account created and authenticated successfully'
       : 'Authentication successful';

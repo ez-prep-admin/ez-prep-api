@@ -49,6 +49,7 @@ describe('UsersService', () => {
   const mockUserDocument = (data: any) => ({
     ...data,
     _id: data._id || OID,
+    get: jest.fn((key: string) => data[key]),
     toObject: jest.fn().mockReturnValue({ ...data, id: data.id || OID }),
     save: jest.fn().mockResolvedValue({
       ...data,
@@ -68,6 +69,7 @@ describe('UsersService', () => {
   mockUserModel.findOneAndUpdate = jest.fn();
   mockUserModel.deleteOne = jest.fn();
   mockUserModel.create = jest.fn();
+  mockUserModel.findOneAndUpdate = jest.fn();
   mockUserModel.countDocuments = jest.fn();
   mockUserModel.updateOne = jest.fn();
 
@@ -578,6 +580,144 @@ describe('UsersService', () => {
       await expect(
         service.updateMembershipTier(OID, MembershipTier.GOLD, 5),
       ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('Google account linking', () => {
+    it('should find an auth record by email and google sub', async () => {
+      const doc = mockUserDocument({
+        email: 'student@gmail.com',
+        googleSub: 'sub-1',
+        name: 'Student',
+      });
+      mockUserModel.findOne.mockReturnValue(chain(doc));
+
+      const byEmail = await service.findAuthByEmail(' Student@Gmail.com ');
+      expect(byEmail?.googleSub).toBe('sub-1');
+      expect(byEmail?.user).not.toHaveProperty('googleSub');
+      expect(mockUserModel.findOne).toHaveBeenCalledWith({
+        email: 'student@gmail.com',
+      });
+
+      mockUserModel.findOne.mockReturnValue(chain(null));
+      await expect(service.findAuthByGoogleSub('missing')).resolves.toBeNull();
+    });
+
+    it('should create a Google user without a phone number', async () => {
+      const doc = mockUserDocument({
+        name: 'Student',
+        email: 'student@gmail.com',
+        googleSub: 'sub-1',
+      });
+      mockUserModel.create.mockResolvedValue(doc);
+
+      const result = await service.createGoogleUser({
+        name: 'Student',
+        email: 'Student@Gmail.com',
+        googleSub: 'sub-1',
+        avatarUrl: 'https://lh3.googleusercontent.com/a',
+      });
+
+      expect(result.email).toBe('student@gmail.com');
+      expect(result).not.toHaveProperty('googleSub');
+      expect(mockUserModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'student@gmail.com',
+          googleSub: 'sub-1',
+          role: UserRole.USER,
+        }),
+      );
+    });
+
+    it('should throw ConflictException when the Google identity already exists', async () => {
+      mockUserModel.create.mockRejectedValue({ code: 11000 });
+
+      await expect(
+        service.createGoogleUser({
+          name: 'Student',
+          email: 'student@gmail.com',
+          googleSub: 'sub-1',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('should rethrow unexpected create errors', async () => {
+      mockUserModel.create.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.createGoogleUser({
+          name: 'Student',
+          email: 'student@gmail.com',
+          googleSub: 'sub-1',
+        }),
+      ).rejects.toThrow('db down');
+    });
+
+    it('should link a Google subject only when it is free or already the same', async () => {
+      mockUserModel.findOneAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ name: 'Student', googleSub: 'sub-1' })),
+      );
+
+      const linked = await service.linkGoogleAccount(
+        OID,
+        'sub-1',
+        'https://example.com/a.png',
+      );
+
+      expect(linked).toBeDefined();
+      expect(mockUserModel.findOneAndUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          $or: [
+            { googleSub: { $exists: false } },
+            { googleSub: null },
+            { googleSub: 'sub-1' },
+          ],
+        }),
+        expect.objectContaining({
+          $set: expect.objectContaining({ googleSub: 'sub-1' }),
+        }),
+        { new: true },
+      );
+
+      mockUserModel.findOneAndUpdate.mockReturnValue(chain(null));
+      await expect(service.linkGoogleAccount(OID, 'sub-2')).resolves.toBeNull();
+    });
+
+    it('should update a Google email only when it is not taken', async () => {
+      mockUserModel.findOne.mockReturnValue(chain(null));
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ email: 'next@gmail.com' })),
+      );
+
+      const updated = await service.updateEmailIfAvailable(OID, 'Next@Gmail.com');
+      expect(updated?.email).toBe('next@gmail.com');
+
+      mockUserModel.findOne.mockReturnValue(chain(mockUserDocument({ email: 'taken' })));
+      await expect(
+        service.updateEmailIfAvailable(OID, 'taken@gmail.com'),
+      ).resolves.toBeNull();
+    });
+
+    it('should keep the current email when a concurrent write takes it', async () => {
+      mockUserModel.findOne.mockReturnValue(chain(null));
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: jest.fn().mockRejectedValue({ code: 11000 }),
+      });
+
+      await expect(
+        service.updateEmailIfAvailable(OID, 'race@gmail.com'),
+      ).resolves.toBeNull();
+    });
+
+    it('should rethrow unexpected email update errors', async () => {
+      mockUserModel.findOne.mockReturnValue(chain(null));
+      mockUserModel.findByIdAndUpdate.mockReturnValue({
+        exec: jest.fn().mockRejectedValue(new Error('db down')),
+      });
+
+      await expect(
+        service.updateEmailIfAvailable(OID, 'next@gmail.com'),
+      ).rejects.toThrow('db down');
     });
   });
 });

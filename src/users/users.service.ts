@@ -19,6 +19,11 @@ import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 
+export interface UserWithGoogleLink {
+  user: UserResponseDto;
+  googleSub?: string;
+}
+
 @Injectable()
 export class UsersService {
   constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
@@ -78,6 +83,112 @@ export class UsersService {
   async findByEmail(email: string): Promise<UserResponseDto | null> {
     const user = await this.userModel.findOne({ email }).exec();
     return user ? this.toResponseDto(user) : null;
+  }
+
+  async findAuthByEmail(email: string): Promise<UserWithGoogleLink | null> {
+    const user = await this.userModel
+      .findOne({ email: email.trim().toLowerCase() })
+      .exec();
+    return user ? this.toGoogleLink(user) : null;
+  }
+
+  async findAuthByGoogleSub(
+    googleSub: string,
+  ): Promise<UserWithGoogleLink | null> {
+    const user = await this.userModel.findOne({ googleSub }).exec();
+    return user ? this.toGoogleLink(user) : null;
+  }
+
+  async createGoogleUser(input: {
+    name: string;
+    email: string;
+    googleSub: string;
+    avatarUrl?: string;
+  }): Promise<UserResponseDto> {
+    try {
+      const created = await this.userModel.create({
+        name: input.name,
+        email: input.email.trim().toLowerCase(),
+        googleSub: input.googleSub,
+        ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
+        role: UserRole.USER,
+        isActive: true,
+        isDeleted: false,
+      });
+      return this.toResponseDto(created);
+    } catch (error) {
+      if (error?.code === 11000) {
+        throw new ConflictException(
+          'An account with this Google identity already exists',
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Attach a Google subject to an account that does not already have a different one.
+   * Returns null when another request linked a different Google account first.
+   */
+  async linkGoogleAccount(
+    id: string,
+    googleSub: string,
+    avatarUrl?: string,
+  ): Promise<UserResponseDto | null> {
+    const updated = await this.userModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(id),
+          $or: [
+            { googleSub: { $exists: false } },
+            { googleSub: null },
+            { googleSub },
+          ],
+        },
+        {
+          $set: {
+            googleSub,
+            ...(avatarUrl ? { avatarUrl } : {}),
+          },
+        },
+        { new: true },
+      )
+      .exec();
+
+    return updated ? this.toResponseDto(updated) : null;
+  }
+
+  /**
+   * Keep the stored email aligned with a verified Google email when nobody else owns it.
+   * Returns null when the address is taken; the caller keeps the existing email.
+   */
+  async updateEmailIfAvailable(
+    id: string,
+    email: string,
+  ): Promise<UserResponseDto | null> {
+    const normalized = email.trim().toLowerCase();
+    const taken = await this.userModel
+      .findOne({
+        email: normalized,
+        _id: { $ne: new Types.ObjectId(id) },
+      })
+      .exec();
+
+    if (taken) {
+      return null;
+    }
+
+    try {
+      const updated = await this.userModel
+        .findByIdAndUpdate(id, { $set: { email: normalized } }, { new: true })
+        .exec();
+      return updated ? this.toResponseDto(updated) : null;
+    } catch (error) {
+      if (error?.code === 11000) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async findByPhone(phoneNumber: string): Promise<UserResponseDto | null> {
@@ -507,9 +618,19 @@ export class UsersService {
       obj.targetExamRemainingDays = Math.max(0, Math.ceil(diff / 86_400_000));
     }
 
-    // Never leak password hashes even if they were explicitly selected
+    // Never leak password hashes or the Google subject in API payloads
     delete obj.passwordHash;
+    delete obj.googleSub;
 
     return new UserResponseDto(obj);
+  }
+
+  private toGoogleLink(user: UserDocument): UserWithGoogleLink {
+    const raw = user.get('googleSub');
+    const googleSub = typeof raw === 'string' && raw ? raw : undefined;
+    return {
+      user: this.toResponseDto(user),
+      googleSub,
+    };
   }
 }

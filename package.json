@@ -48,6 +48,7 @@
     "cache-manager": "^7.2.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "google-auth-library": "^11.1.0",
     "helmet": "^8.1.0",
     "libphonenumber-js": "^1.12.17",
     "mongoose": "^8.24.3",

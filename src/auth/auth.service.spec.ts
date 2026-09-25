@@ -3,7 +3,16 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { Msg91Service } from './services/msg91.service';
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { OtpIdentityStrategy } from './identity/otp-identity.strategy';
+import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
+import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
+import { StudentAccountResolver } from './identity/student-account.resolver';
+import { StudentAuthProvider } from './identity/verified-student-identity';
+import {
+  ConflictException,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserRole } from '../common/enums/user-role.enum';
 import {
   mockJwtService,
@@ -30,6 +39,19 @@ describe('AuthService', () => {
     countPasswordAdmins: jest.fn(),
     createAdmin: jest.fn(),
     findByUsernameForAuth: jest.fn(),
+    findAuthByGoogleSub: jest.fn(),
+    findAuthByEmail: jest.fn(),
+    createGoogleUser: jest.fn(),
+    linkGoogleAccount: jest.fn(),
+    updateEmailIfAvailable: jest.fn(),
+  };
+
+  const mockGoogleIdentity = {
+    verify: jest.fn(),
+  };
+
+  const mockGoogleCodes = {
+    exchange: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -47,6 +69,16 @@ describe('AuthService', () => {
         {
           provide: Msg91Service,
           useValue: mockMsg91Service,
+        },
+        OtpIdentityStrategy,
+        StudentAccountResolver,
+        {
+          provide: GoogleIdentityStrategy,
+          useValue: mockGoogleIdentity,
+        },
+        {
+          provide: GoogleCodeExchangeService,
+          useValue: mockGoogleCodes,
         },
       ],
     }).compile();
@@ -167,6 +199,91 @@ describe('AuthService', () => {
           service.verifyOtpAndAuthenticate(validDto),
         ).rejects.toThrow(UnauthorizedException);
       });
+    });
+  });
+
+  describe('signInWithGoogle', () => {
+    const dto = {
+      code: 'auth-code',
+      redirectUri: 'http://localhost:3001',
+      codeVerifier: 'a'.repeat(43),
+    };
+    const googleUser = {
+      ...mockUsers.validStudent,
+      email: 'student@gmail.com',
+      phoneNumber: undefined,
+    };
+
+    beforeEach(() => {
+      mockGoogleCodes.exchange.mockResolvedValue('header.payload.signature');
+    });
+
+    it('verifies the ID token returned by Google, not a token from the browser', async () => {
+      mockGoogleIdentity.verify.mockResolvedValue({
+        provider: StudentAuthProvider.GOOGLE,
+        googleSub: 'google-sub-1',
+        email: 'student@gmail.com',
+        name: 'Student',
+      });
+      mockUsersService.findAuthByGoogleSub.mockResolvedValue({
+        user: googleUser,
+        googleSub: 'google-sub-1',
+      });
+      mockJwtService.sign.mockReturnValue('mock-jwt-token');
+
+      const result = await service.signInWithGoogle(dto);
+
+      expect(mockGoogleCodes.exchange).toHaveBeenCalledWith({
+        code: dto.code,
+        redirectUri: dto.redirectUri,
+        codeVerifier: dto.codeVerifier,
+      });
+      expect(mockGoogleIdentity.verify).toHaveBeenCalledWith(
+        'header.payload.signature',
+      );
+      expect(result.accessToken).toBe('mock-jwt-token');
+      expect(result.isNewUser).toBe(false);
+      expect(jwtService.sign).toHaveBeenCalledWith({
+        sub: googleUser.id,
+        role: googleUser.role,
+      });
+    });
+
+    it('does not create an account when the ID token is rejected', async () => {
+      mockGoogleIdentity.verify.mockRejectedValue(
+        new UnauthorizedException('Invalid Google sign-in'),
+      );
+
+      await expect(service.signInWithGoogle(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockUsersService.findAuthByGoogleSub).not.toHaveBeenCalled();
+      expect(mockUsersService.createGoogleUser).not.toHaveBeenCalled();
+    });
+
+    it('preserves conflict errors from account linking', async () => {
+      mockGoogleIdentity.verify.mockResolvedValue({
+        provider: StudentAuthProvider.GOOGLE,
+        googleSub: 'new-sub',
+        email: 'taken@gmail.com',
+      });
+      mockUsersService.findAuthByGoogleSub.mockResolvedValue(null);
+      mockUsersService.findAuthByEmail.mockResolvedValue({
+        user: { ...googleUser, isActive: true, role: UserRole.USER },
+        googleSub: 'other-sub',
+      });
+
+      await expect(service.signInWithGoogle(dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('wraps unexpected failures', async () => {
+      mockGoogleCodes.exchange.mockRejectedValue(new Error('network'));
+
+      await expect(service.signInWithGoogle(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
