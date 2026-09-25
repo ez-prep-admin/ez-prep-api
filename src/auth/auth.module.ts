@@ -7,6 +7,11 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { Msg91Service } from './services/msg91.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { OtpIdentityStrategy } from './identity/otp-identity.strategy';
+import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
+import { GoogleIdTokenVerifier } from './identity/google-id-token.verifier';
+import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
+import { StudentAccountResolver } from './identity/student-account.resolver';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -26,7 +31,16 @@ import { UsersModule } from '../users/users.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, Msg91Service, JwtStrategy],
+  providers: [
+    AuthService,
+    Msg91Service,
+    OtpIdentityStrategy,
+    GoogleIdTokenVerifier,
+    GoogleCodeExchangeService,
+    GoogleIdentityStrategy,
+    StudentAccountResolver,
+    JwtStrategy,
+  ],
   exports: [AuthService, JwtModule, PassportModule],
 })
 export class AuthModule {}

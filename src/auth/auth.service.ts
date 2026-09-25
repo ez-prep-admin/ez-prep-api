@@ -1,6 +1,7 @@
 /* eslint-disable prettier/prettier */
 import {
   ForbiddenException,
+  HttpException,
   Injectable,
   UnauthorizedException,
   Logger,
@@ -8,11 +9,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
-import { Msg91Service } from './services/msg91.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { GoogleSignInDto } from './dto/google-sign-in.dto';
+import { OtpIdentityStrategy } from './identity/otp-identity.strategy';
+import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
+import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
+import { StudentAccountResolver } from './identity/student-account.resolver';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { UserResponseDto } from '../users/dto/user-response.dto';
-import { CreateUserDto } from '../users/dto/create-user.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -33,7 +37,10 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
-    private readonly msg91Service: Msg91Service,
+    private readonly otpIdentity: OtpIdentityStrategy,
+    private readonly googleCodes: GoogleCodeExchangeService,
+    private readonly googleIdentity: GoogleIdentityStrategy,
+    private readonly studentAccounts: StudentAccountResolver,
   ) {}
 
   /**
@@ -47,81 +54,9 @@ export class AuthService {
   ): Promise<AuthResponseDto> {
     try {
       this.logger.log('Starting OTP verification and authentication process');
-
-      // Step 1: Verify access token with MSG91
-      const phoneNumber = await this.msg91Service.verifyAccessToken(
-        verifyOtpDto.accessToken,
-      );
-      this.logger.log(`Phone number verified: ${phoneNumber}`);
-
-      // Step 2: Check if user exists
-      let user: UserResponseDto;
-      let isNewUser = false;
-
-      const existingUser = await this.usersService.findByPhone(phoneNumber);
-
-      if (existingUser) {
-        // Existing user - login flow
-        this.logger.log(`Existing user found for phone: ${phoneNumber}`);
-
-        // Check if user is active
-        if (!existingUser.isActive) {
-          this.logger.warn(`Inactive user attempted login: ${phoneNumber}`);
-          throw new UnauthorizedException(
-            'Your account has been deactivated. Please contact support.',
-          );
-        }
-
-        user = existingUser;
-
-        if (user.role === UserRole.ADMIN) {
-          throw new UnauthorizedException(
-            'Admin accounts must sign in with username and password',
-          );
-        }
-      } else {
-        // New user - signup flow
-        this.logger.log(`New user detected for phone: ${phoneNumber}`);
-        isNewUser = true;
-
-        // Create new user with phone number
-        // Extract name from phone number (temporary) - user can update later
-        const tempName = `User ${phoneNumber.slice(-4)}`;
-        const tempEmail = `user${phoneNumber.replace(/\D/g, '')}@temp.ezprep.com`;
-
-        const createUserDto: CreateUserDto = {
-          name: tempName,
-          email: tempEmail,
-          phoneNumber: phoneNumber,
-          // role defaults to USER
-        };
-
-        try {
-          user = await this.usersService.create(createUserDto);
-          this.logger.log(`New user created successfully: ${user.id}`);
-        } catch (error) {
-          this.logger.error('Failed to create new user:', error.message);
-          throw new UnauthorizedException('Failed to create user account');
-        }
-      }
-
-      // Step 3: Generate JWT token
-      const jwtPayload: JwtPayload = {
-        sub: user.id,
-        phoneNumber: user.phoneNumber,
-        role: user.role,
-      };
-
-      const accessToken = this.jwtService.sign(jwtPayload);
-      this.logger.log(`JWT token generated for user: ${user.id}`);
-
-      // Step 4: Return authentication response
-      const authResponse = new AuthResponseDto(accessToken, user, isNewUser);
-
-      this.logger.log(
-        `Authentication successful for user: ${user.id}, isNewUser: ${isNewUser}`,
-      );
-      return authResponse;
+      const identity = await this.otpIdentity.verify(verifyOtpDto.accessToken);
+      const { user, isNewUser } = await this.studentAccounts.resolve(identity);
+      return this.issueStudentToken(user, isNewUser);
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -133,6 +68,50 @@ export class AuthService {
       );
       throw new UnauthorizedException('Authentication failed');
     }
+  }
+
+  /**
+   * Exchange a Google authorization code, verify the ID token Google returns,
+   * then issue the same student JWT used by OTP login.
+   * A token supplied by the browser is never accepted in place of that check.
+   */
+  async signInWithGoogle(dto: GoogleSignInDto): Promise<AuthResponseDto> {
+    try {
+      const idToken = await this.googleCodes.exchange({
+        code: dto.code,
+        redirectUri: dto.redirectUri,
+        codeVerifier: dto.codeVerifier,
+      });
+      const identity = await this.googleIdentity.verify(idToken);
+      const { user, isNewUser } = await this.studentAccounts.resolve(identity);
+      return this.issueStudentToken(user, isNewUser);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      this.logger.error('Unexpected error during Google sign-in:', error.message);
+      throw new UnauthorizedException('Authentication failed');
+    }
+  }
+
+  private issueStudentToken(
+    user: UserResponseDto,
+    isNewUser: boolean,
+  ): AuthResponseDto {
+    const jwtPayload: JwtPayload = {
+      sub: user.id,
+      role: user.role,
+    };
+    if (user.phoneNumber) {
+      jwtPayload.phoneNumber = user.phoneNumber;
+    }
+
+    const accessToken = this.jwtService.sign(jwtPayload);
+    this.logger.log(
+      `JWT token generated for user: ${user.id}, isNewUser: ${isNewUser}`,
+    );
+    return new AuthResponseDto(accessToken, user, isNewUser);
   }
 
   /**

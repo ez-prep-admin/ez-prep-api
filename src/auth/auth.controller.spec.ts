@@ -10,6 +10,7 @@ describe('AuthController', () => {
 
   const mockAuthService = {
     verifyOtpAndAuthenticate: jest.fn(),
+    signInWithGoogle: jest.fn(),
     createAdmin: jest.fn(),
     loginAdmin: jest.fn(),
   };
@@ -103,6 +104,45 @@ describe('AuthController', () => {
       });
 
       const result = await controller.verifyOtp(validDto);
+
+      expect(result.message).toBe(
+        'Account created and authenticated successfully',
+      );
+    });
+  });
+
+  describe('signInWithGoogle', () => {
+    const dto = {
+      code: 'auth-code',
+      redirectUri: 'http://localhost:3001',
+      codeVerifier: 'a'.repeat(43),
+    };
+
+    it('should authenticate an existing Google user', async () => {
+      const serviceResponse = {
+        accessToken: 'jwt',
+        isNewUser: false,
+        user: { id: '1' },
+      };
+      mockAuthService.signInWithGoogle.mockResolvedValue(serviceResponse);
+
+      const result = await controller.signInWithGoogle(dto);
+
+      expect(authService.signInWithGoogle).toHaveBeenCalledWith(dto);
+      expect(result).toEqual({
+        message: 'Authentication successful',
+        data: serviceResponse,
+      });
+    });
+
+    it('should use the new-user success message', async () => {
+      mockAuthService.signInWithGoogle.mockResolvedValue({
+        accessToken: 'jwt',
+        isNewUser: true,
+        user: { id: '1' },
+      });
+
+      const result = await controller.signInWithGoogle(dto);
 
       expect(result.message).toBe(
         'Account created and authenticated successfully',

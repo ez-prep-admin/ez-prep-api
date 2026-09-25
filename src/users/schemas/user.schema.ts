@@ -154,6 +154,13 @@ export class User {
   @Prop({ select: false })
   passwordHash?: string;
 
+  /**
+   * Stable Google account id (`sub` from a verified ID token).
+   * Email can change; this value does not. Omitted for OTP-only accounts.
+   */
+  @Prop({ trim: true, maxlength: 255 })
+  googleSub?: string;
+
   @Prop({
     type: String,
     enum: UserRole,
@@ -226,6 +233,7 @@ export const UserSchema = SchemaFactory.createForClass(User);
 // ─── Indexes ───────────────────────────────────────────────────────────────────
 UserSchema.index({ phoneNumber: 1 }, { sparse: true });
 UserSchema.index({ username: 1 }, { unique: true, sparse: true });
+UserSchema.index({ googleSub: 1 }, { unique: true, sparse: true });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
 UserSchema.index({ membershipTier: 1 });
 UserSchema.index({ 'subscription.plan': 1, 'subscription.status': 1 });
