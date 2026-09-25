@@ -1,99 +1,69 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# EzPrep API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend for the EzPrep exam-prep app. One codebase can also run another instance (for example ExamFlex) by changing environment variables. Do not commit `.env`.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+NestJS, MongoDB, JWT. Node `24.16.0`. Routes are under `/api/v1`. Interactive docs: `/api/docs`. Health check: `GET /api/v1/health`.
 
-## Description
-
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## Setup
 
 ```bash
-$ npm install
+npm install
+cp .env.example .env
+npm run start:dev
 ```
 
-## Compile and run the project
+Fill `.env` before starting. `CORS_ORIGINS` must include the browser origin (local app is `http://localhost:3001`). In production, `CORS_ORIGINS` is required.
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI` | Database |
+| `INSTANCE_ID`, `INSTANCE_NAME` | Which deployment this process is |
+| `JWT_SECRET`, `JWT_EXPIRES_IN` | Session tokens (default expiry `7d`) |
+| `MSG91_AUTH_KEY` | Mobile OTP verification |
+| `GOOGLE_CLIENT_ID` | Web OAuth client |
+| `GOOGLE_CLIENT_SECRET` | Server only. Never put this in the frontend |
+| `GOOGLE_CLIENT_IDS` | Optional extra audiences (Android, iOS), comma-separated |
+| `GOOGLE_REDIRECT_URIS` | Exact redirect URIs allowed for the code exchange |
+| `AWS_*` | Question and image uploads |
+| `MATHPIX_*`, `DEEPSEEK_*` | Paper import |
+
+If a key is listed twice in `.env`, the last value wins. Empty duplicates wipe a real value.
+
+Restart the process after changing `.env`. Nest reads it once at startup.
+
+## Authentication
+
+Students get the same JWT from either sign-in method.
+
+- `POST /api/v1/auth/verify-otp` — MSG91 access token from the phone widget. New numbers create an account.
+- `POST /api/v1/auth/google` — one-time authorization code, redirect URI, and PKCE verifier. The API exchanges the code with Google using the client secret, then checks the ID token (signature, audience, issuer, expiry, and that the email is verified). A token sent by the browser is not trusted. The redirect URI must match `GOOGLE_REDIRECT_URIS` exactly, including a trailing slash.
+- `POST /api/v1/auth/admin/login` — admin username and password. Admins cannot use OTP or Google.
+
+Google accounts are matched by the stable Google subject first, then by email. See the security note below before relying on that email match.
+
+On production, omit `http://localhost:3001` from `GOOGLE_REDIRECT_URIS`.
+
+## What the API covers
+
+Students: mock tests (topic-wise and full exam), attempts, bookmarks, analytics, current affairs, study content, search.
+
+Admins: question bank, imports, full-mock drafts, users, dashboard. First admin can be created with `POST /api/v1/auth/admins` when none exists; after that, only an admin JWT can create another.
+
+Request and response shapes are in Swagger.
+
+## Scripts
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run start:dev    # watch
+npm run build && npm run start:prod
+npm test             # unit tests
+npm run test:cov     # coverage (80% minimum)
 ```
 
-## Run tests
+## Deploy
 
-```bash
-# unit tests
-$ npm run test
+Each droplet has its own `.env`. Set `INSTANCE_ID`, `INSTANCE_NAME`, `MONGODB_URI`, `JWT_SECRET`, `CORS_ORIGINS`, and the Google values for that host. Build with `npm run build` and run `npm run start:prod` (`node dist/main`).
 
-# e2e tests
-$ npm run test:e2e
+## Account linking
 
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+If an OTP account’s email was typed in on the profile and never verified, a later Google sign-in with that same address joins the existing account. Do not treat that as proof the phone account owns the Gmail address.
