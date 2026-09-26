@@ -30,18 +30,52 @@ echo "Using npm $(npm -v)"
 cd "$APP_DIR"
 
 ###############################################################################
-# Load instance env (not auto-loaded by the shell / DigitalOcean)
+# Instance label for this script's logs.
+# Do not source .env. Values often contain $, spaces, or a UTF-8 BOM, and bash
+# would execute them. Nest and PM2 load .env themselves.
+# Discord titles are fixed per job in .github/workflows/deploy.yml.
 ###############################################################################
 
-if [ -f "$APP_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . "$APP_DIR/.env"
-    set +a
-fi
+read_dotenv_value() {
+    local file="$1"
+    local key="$2"
+    local line value first last
 
-INSTANCE_NAME="${INSTANCE_NAME:-API}"
-INSTANCE_ID="${INSTANCE_ID:-api}"
+    line="$(grep -E "^${key}=" "$file" 2>/dev/null | tail -n 1 || true)"
+    line="${line%$'\r'}"
+
+    if [ -z "$line" ]; then
+        return 0
+    fi
+
+    value="${line#"${key}="}"
+
+    if [ "${#value}" -ge 2 ]; then
+        first="${value:0:1}"
+        last="${value: -1}"
+        if [ "$first" = "$last" ] && { [ "$first" = "'" ] || [ "$first" = '"' ]; }; then
+            value="${value:1:$((${#value} - 2))}"
+        fi
+    fi
+
+    printf '%s' "$value"
+}
+
+INSTANCE_NAME="API"
+INSTANCE_ID="api"
+
+if [ -f "$APP_DIR/.env" ]; then
+    name_from_file="$(read_dotenv_value "$APP_DIR/.env" INSTANCE_NAME)"
+    id_from_file="$(read_dotenv_value "$APP_DIR/.env" INSTANCE_ID)"
+
+    if [ -n "$name_from_file" ]; then
+        INSTANCE_NAME="$name_from_file"
+    fi
+
+    if [ -n "$id_from_file" ]; then
+        INSTANCE_ID="$id_from_file"
+    fi
+fi
 
 echo ""
 echo "======================================================="
