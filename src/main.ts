@@ -45,6 +45,7 @@ async function bootstrap() {
   });
 
   try {
+    // NestJs Observability for monitoring and logging
     const app = await NestFactory.create(AppModule, {
       ...(observeEnabled() ? { instrument: ObserveInstrument } : {}),
     });
