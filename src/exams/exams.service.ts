@@ -214,6 +214,7 @@ export class ExamsService {
           totalMarks: exam.totalMarks,
           testsCount: testCountMap.get(exam._id.toString()) || 0,
           subjectsCount: exam.subjects?.length || 0,
+          trending: exam.trending === true,
         })),
       });
     }
@@ -418,6 +419,7 @@ export class ExamsService {
     return new ExamResponseDto({
       ...obj,
       id: obj.id || exam._id.toString(),
+      trending: obj.trending === true,
       category: this.toRefId(obj.category) || '',
       examGroup: this.toRefId(obj.examGroup) || '',
       subjects: obj.subjects?.map(s => ({

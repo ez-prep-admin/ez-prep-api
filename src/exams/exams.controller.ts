@@ -95,6 +95,12 @@ export class ExamsController {
                     totalMarks: { type: 'number' },
                     testsCount: { type: 'number' },
                     subjectsCount: { type: 'number' },
+                    trending: {
+                      type: 'boolean',
+                      example: false,
+                      description:
+                        'Whether this exam is trending — nearby, or widely signed up. False when unset.',
+                    },
                   },
                 },
               },

@@ -159,4 +159,14 @@ export class CreateExamDto {
   @IsOptional()
   @IsBoolean()
   hasMultiLingualSupport?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether this exam is trending — nearby, or widely signed up. Defaults to false.',
+    example: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  trending?: boolean;
 }

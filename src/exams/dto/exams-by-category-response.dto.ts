@@ -48,6 +48,13 @@ export class ExamsByCategoryItemDto {
     example: 4,
   })
   subjectsCount?: number;
+
+  @ApiProperty({
+    description:
+      'Whether this exam is trending — nearby, or widely signed up. False when unset.',
+    example: false,
+  })
+  trending: boolean;
 }
 
 export class CategoryGroupDto {

@@ -150,6 +150,7 @@ describe('ExamsService', () => {
             duration: 90,
             totalQuestions: 10,
             totalMarks: 20,
+            trending: true,
             category: { toString: () => OID },
             subjects: [1, 2],
           },
@@ -177,6 +178,8 @@ describe('ExamsService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].exams[0].duration).toBe('1h 30min');
       expect(result[0].exams[0].testsCount).toBe(3);
+      expect(result[0].exams[0].trending).toBe(true);
+      expect(result[0].exams[1].trending).toBe(false);
       expect(result[0].exams[1].duration).toBe('45min');
       expect(result[0].exams[2].duration).toBe('1h');
     });

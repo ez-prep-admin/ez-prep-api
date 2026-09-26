@@ -123,6 +123,14 @@ export class ExamResponseDto {
   isActive: boolean;
 
   @ApiProperty({
+    description:
+      'Whether this exam is trending — nearby, or widely signed up. False when unset.',
+    example: false,
+  })
+  @Expose()
+  trending: boolean;
+
+  @ApiProperty({
     description: 'Creation timestamp',
     example: '2026-05-10T10:00:00.000Z',
   })

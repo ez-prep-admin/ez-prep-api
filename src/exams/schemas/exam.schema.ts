@@ -76,6 +76,10 @@ export class Exam {
   @Prop({ default: true, index: true })
   isActive: boolean;
 
+  /** Nearby exam or one with a high number of sign-ups. Missing values are treated as false. */
+  @Prop({ default: false })
+  trending: boolean;
+
   @Prop({ default: false })
   isDeleted: boolean;
 
