@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ImportController } from './import.controller';
 import { ImportService } from './import.service';
@@ -37,6 +37,7 @@ import {
 } from './schemas/failed-question.schema';
 import { AwsModule } from '../aws/aws.module';
 import { MathpixModule } from '../integrations/mathpix/mathpix.module';
+import { ImportQueueModule } from '../queues/import-queue.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { MathpixModule } from '../integrations/mathpix/mathpix.module';
     ]),
     AwsModule,
     MathpixModule,
+    forwardRef(() => ImportQueueModule),
   ],
   controllers: [ImportController],
   providers: [

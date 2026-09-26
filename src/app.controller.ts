@@ -1,7 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
+import { RedisHealthService } from './redis/redis-health.service';
 
 @ApiTags('health')
 @Controller()
@@ -9,6 +10,7 @@ export class AppController {
   constructor(
     private readonly appService: AppService,
     private readonly configService: ConfigService,
+    @Optional() private readonly redisHealth?: RedisHealthService,
   ) {}
 
   @Get()
@@ -60,19 +62,28 @@ export class AppController {
         },
         timestamp: { type: 'string', example: '2025-09-17T02:30:00.000Z' },
         environment: { type: 'string', example: 'development' },
+        redis: {
+          type: 'string',
+          enum: ['disabled', 'up', 'down'],
+          example: 'disabled',
+        },
       },
     },
   })
-  getHealth() {
+  async getHealth() {
     const instanceName =
       this.configService.get<string>('INSTANCE_NAME')?.trim() ||
       this.configService.get<string>('INSTANCE_ID')?.trim() ||
       'API';
+    const redis = this.redisHealth
+      ? await this.redisHealth.probe()
+      : 'disabled';
     return {
       status: 'OK',
       message: `${instanceName} API is running successfully`,
       timestamp: new Date().toISOString(),
       environment: this.configService.get<string>('NODE_ENV') || 'development',
+      redis,
     };
   }
 }

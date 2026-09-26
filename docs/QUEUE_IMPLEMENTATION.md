@@ -1,5 +1,8 @@
 # Queue Plan (Discussion Only — Not Implemented Yet)
 
+> The import queues described as a later phase are now implemented.
+> Read [REDIS.md](./REDIS.md) for the current architecture. This file is the original discussion and is not the implementation guide.
+
 You don't need heavy infrastructure to get started. Here's a practical progression that scales with the application's needs.
 
 ---

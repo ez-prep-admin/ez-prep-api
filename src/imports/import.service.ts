@@ -4,6 +4,9 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ServiceUnavailableException,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, FilterQuery } from 'mongoose';
@@ -54,6 +57,7 @@ import { MathpixService } from '../integrations/mathpix/mathpix.service';
 import {
   QuestionUpload,
   QuestionUploadDocument,
+  UploadStatus,
 } from './schemas/question-upload.schema';
 import {
   UploadQuestionPdfDto,
@@ -70,6 +74,7 @@ import {
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 import { EnrichQuestionsDto } from './dto/enrich-questions.dto';
 import { randomUUID } from 'crypto';
+import { ZodError } from 'zod';
 import {
   aggregateChunkEnrichResults,
   ChunkEnrichResult,
@@ -82,6 +87,13 @@ import {
 import { isOutputBudgetExhaustionError } from './utils/enrich-output-budget.util';
 import { DeepseekThinkingOptions } from './llm/deepseek.types';
 import { Subject, SubjectDocument } from '../subjects/schemas/subject.schema';
+import { ImportJobPublisher } from '../queues/bull-import-job.publisher';
+import { errorMessage } from '../redis/redis-log';
+import {
+  IMPORT_ENRICH_QUEUE,
+  IMPORT_JOB_PUBLISHER,
+  IMPORT_PARSE_QUEUE,
+} from '../redis/redis.constants';
 
 /** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
 const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
@@ -98,12 +110,14 @@ export interface StartEnrichUploadResult {
   uploadId: string;
   status: 'processing';
   message: string;
+  jobId?: string;
 }
 
 export interface StartParsePdfUploadResult {
   uploadId: string;
   status: 'parsing';
   message: string;
+  jobId?: string;
 }
 
 export interface ParseMarkdownResult {
@@ -146,6 +160,9 @@ export class ImportService {
     private readonly questionUploadModel: Model<QuestionUploadDocument>,
     @InjectModel(Subject.name)
     private readonly subjectModel: Model<SubjectDocument>,
+    @Optional()
+    @Inject(IMPORT_JOB_PUBLISHER)
+    private readonly importJobs?: ImportJobPublisher | null,
   ) {}
 
   async parseMarkdown(
@@ -313,9 +330,29 @@ export class ImportService {
     // Fail fast on missing metadata before accepting the job.
     this.buildMapperMetadataFromUpload(upload);
 
+    const snapshot = this.captureUploadJobSnapshot(upload);
     upload.status = 'processing';
     upload.errorMessage = undefined;
     await upload.save();
+
+    if (this.importJobs) {
+      const jobId = await this.enqueueUploadJob(
+        upload,
+        snapshot,
+        IMPORT_ENRICH_QUEUE,
+        () => this.importJobs!.enqueueEnrich(uploadId, dto),
+        'enrich',
+        'The enrichment queue is unavailable. Try again shortly.',
+      );
+      this.logger.log(`[enrich] Queued job ${jobId} for upload_id=${uploadId}`);
+      return {
+        uploadId,
+        status: 'processing',
+        jobId,
+        message:
+          'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
+      };
+    }
 
     this.activeEnrichJobs.add(uploadId);
     void this.runEnrichUploadInBackground(uploadId, dto).finally(() => {
@@ -334,7 +371,80 @@ export class ImportService {
     };
   }
 
-  private async runEnrichUploadInBackground(
+  private captureUploadJobSnapshot(upload: QuestionUploadDocument): {
+    status: UploadStatus;
+    errorMessage?: string;
+    parsingStartedAt?: Date;
+  } {
+    return {
+      status: upload.status,
+      errorMessage: upload.errorMessage,
+      parsingStartedAt: upload.parsingStartedAt,
+    };
+  }
+
+  private async enqueueUploadJob(
+    upload: QuestionUploadDocument,
+    snapshot: {
+      status: UploadStatus;
+      errorMessage?: string;
+      parsingStartedAt?: Date;
+    },
+    logicalQueue: string,
+    enqueue: () => Promise<string>,
+    logLabel: string,
+    unavailableMessage: string,
+  ): Promise<string> {
+    const uploadId = upload._id.toString();
+    try {
+      const jobId = await enqueue();
+      upload.activeJobId = jobId;
+      upload.activeJobName = logicalQueue;
+      try {
+        await upload.save();
+      } catch (saveError) {
+        this.logger.error(
+          `[${logLabel}] Queued upload_id=${uploadId} but could not store the job id: ${errorMessage(saveError)}`,
+        );
+      }
+      return jobId;
+    } catch (error) {
+      if (!(error instanceof ZodError)) {
+        this.logger.error(
+          `[${logLabel}] Failed to queue upload_id=${uploadId}: ${errorMessage(error)}`,
+        );
+      }
+      await this.restoreUploadJobSnapshot(upload, snapshot);
+      if (error instanceof ZodError) {
+        throw new BadRequestException(
+          error.issues.map(issue => issue.message).join('; '),
+        );
+      }
+      throw new ServiceUnavailableException(unavailableMessage);
+    }
+  }
+
+  private async restoreUploadJobSnapshot(
+    upload: QuestionUploadDocument,
+    snapshot: {
+      status: UploadStatus;
+      errorMessage?: string;
+      parsingStartedAt?: Date;
+    },
+  ): Promise<void> {
+    upload.status = snapshot.status;
+    upload.errorMessage = snapshot.errorMessage;
+    upload.parsingStartedAt = snapshot.parsingStartedAt;
+    try {
+      await upload.save();
+    } catch (saveError) {
+      this.logger.error(
+        `[queue] Failed to restore upload_id=${upload._id.toString()} after a queue error: ${errorMessage(saveError)}`,
+      );
+    }
+  }
+
+  async runEnrichUploadInBackground(
     uploadId: string,
     dto: EnrichQuestionsDto,
   ): Promise<void> {
@@ -1882,10 +1992,32 @@ export class ImportService {
       );
     }
 
+    const snapshot = this.captureUploadJobSnapshot(upload);
     upload.status = 'parsing';
     upload.parsingStartedAt = new Date();
     upload.errorMessage = undefined;
     await upload.save();
+
+    if (this.importJobs) {
+      const jobId = await this.enqueueUploadJob(
+        upload,
+        snapshot,
+        IMPORT_PARSE_QUEUE,
+        () => this.importJobs!.enqueueParse(uploadId, dto),
+        'parse-pdf',
+        'The PDF parsing queue is unavailable. Try again shortly.',
+      );
+      this.logger.log(
+        `[parse-pdf] Queued job ${jobId} for upload_id=${uploadId}`,
+      );
+      return {
+        uploadId,
+        status: 'parsing',
+        jobId,
+        message:
+          'PDF parsing started. Poll GET /imports/uploads/:uploadId until status is parsed or failed.',
+      };
+    }
 
     this.activeParseJobs.add(uploadId);
     void this.runParsePdfInBackground(uploadId, dto).finally(() => {
@@ -1904,7 +2036,7 @@ export class ImportService {
     };
   }
 
-  private async runParsePdfInBackground(
+  async runParsePdfInBackground(
     uploadId: string,
     dto: ParseQuestionPdfDto,
   ): Promise<void> {

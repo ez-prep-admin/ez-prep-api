@@ -68,6 +68,11 @@ export class StartParsePdfUploadResponseDto {
       'PDF parsing started. Poll GET /imports/uploads/:uploadId until status is parsed or failed.',
   })
   message: string;
+
+  @ApiPropertyOptional({
+    description: 'BullMQ job id when Redis is configured for this instance',
+  })
+  jobId?: string;
 }
 
 /**

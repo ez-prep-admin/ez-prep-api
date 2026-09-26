@@ -140,6 +140,18 @@ export class QuestionUpload {
   parsingCompletedAt?: Date;
 
   /**
+   * BullMQ job id for the import queue currently working on this upload.
+   */
+  @Prop({ type: String })
+  activeJobId?: string;
+
+  /**
+   * Logical import queue name, such as import-enrich or import-parse.
+   */
+  @Prop({ type: String })
+  activeJobName?: string;
+
+  /**
    * Processing error message (if failed)
    */
   @Prop({ type: String })
@@ -258,5 +270,6 @@ QuestionUploadSchema.pre(
 
 // Index for efficient queries
 QuestionUploadSchema.index({ status: 1, createdAt: -1 });
+QuestionUploadSchema.index({ status: 1, updatedAt: 1 });
 QuestionUploadSchema.index({ uploadedBy: 1, createdAt: -1 });
 QuestionUploadSchema.index({ subject: 1, topic: 1 });

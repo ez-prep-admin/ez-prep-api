@@ -25,6 +25,7 @@ import { ImportModule } from './imports/import.module';
 import { CurrentAffairsModule } from './current-affairs/current-affairs.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
+import { RedisModule } from './redis/redis.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -84,6 +85,7 @@ const observeRootModule = createObserveRootModule();
     ...(observeRootModule ? [observeRootModule] : []),
     // AWS services (Global module)
     AwsModule,
+    RedisModule,
     // Custom validation module
     ValidationModule,
     UsersModule,

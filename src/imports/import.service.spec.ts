@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { ImportService } from './import.service';
@@ -40,6 +41,7 @@ import {
 } from './types/import-question';
 import { MATHPIX_PENDING_BUCKET } from './types/import-image-metadata';
 import { MatchedQuestion } from './types/matched-question';
+import { ZodError } from 'zod';
 
 const UPLOAD_ID = '507f1f77bcf86cd799439011';
 const SUBJECT_ID = '507f1f77bcf86cd799439012';
@@ -1179,6 +1181,142 @@ describe('ImportService', () => {
       questionUploadModel.countDocuments.mockResolvedValue(1);
       const list = await service.listUploads({ page: 1, limit: 10 } as never);
       expect(list.uploads[0].examIds).toEqual([SUBJECT_ID]);
+    });
+  });
+
+  describe('queued dispatch', () => {
+    function useQueue() {
+      return {
+        enqueueEnrich: jest.fn().mockResolvedValue('job-enrich'),
+        enqueueParse: jest.fn().mockResolvedValue('job-parse'),
+        getJobState: jest.fn(),
+        close: jest.fn(),
+      };
+    }
+
+    it('stores the BullMQ job id and does not run enrichment in-process', async () => {
+      const jobs = useQueue();
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({
+        status: 'parsed',
+        matchedQuestionsCache: matched,
+      });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      const accepted = await service.startEnrichUpload(UPLOAD_ID, {
+        forceReparse: true,
+      });
+
+      expect(accepted.jobId).toBe('job-enrich');
+      expect((upload as { activeJobId?: string }).activeJobId).toBe(
+        'job-enrich',
+      );
+      expect((upload as { activeJobName?: string }).activeJobName).toBe(
+        'import-enrich',
+      );
+      expect(jobs.enqueueEnrich).toHaveBeenCalledWith(
+        UPLOAD_ID,
+        expect.objectContaining({ forceReparse: true }),
+      );
+      await new Promise(resolve => setImmediate(resolve));
+      expect(deepseekService.extractQuestionsBatch).not.toHaveBeenCalled();
+    });
+
+    it('keeps the job when the job id cannot be saved', async () => {
+      const jobs = useQueue();
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({ status: 'parsed' });
+      let saves = 0;
+      upload.save.mockImplementation(async () => {
+        saves += 1;
+        if (saves === 2) {
+          throw new Error('mongo down');
+        }
+      });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      await expect(
+        service.startEnrichUpload(UPLOAD_ID, {}),
+      ).resolves.toMatchObject({ jobId: 'job-enrich' });
+    });
+
+    it('restores the upload and reports the queue as unavailable', async () => {
+      const jobs = useQueue();
+      jobs.enqueueEnrich.mockRejectedValue(
+        new Error('rediss://default:secret@example.upstash.io:6379 down'),
+      );
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({
+        status: 'parsed',
+        errorMessage: 'old',
+      });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      await expect(
+        service.startEnrichUpload(UPLOAD_ID, {}),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(upload.status).toBe('parsed');
+      expect((upload as { errorMessage?: string }).errorMessage).toBe('old');
+    });
+
+    it('returns a validation error when the job payload is rejected', async () => {
+      const jobs = useQueue();
+      jobs.enqueueParse.mockRejectedValue(
+        new ZodError([
+          {
+            code: 'custom',
+            message: 'pollingIntervalMs is invalid',
+            path: ['pollingIntervalMs'],
+          },
+        ]),
+      );
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({ status: 'uploaded' });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      await expect(
+        service.startParsePdfUpload(UPLOAD_ID, { pollingIntervalMs: 1000 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(upload.status).toBe('uploaded');
+    });
+
+    it('queues PDF parsing and still reports the outage if status restore fails', async () => {
+      const jobs = useQueue();
+      jobs.enqueueParse.mockRejectedValue(new Error('queue down'));
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({ status: 'uploaded' });
+      let saves = 0;
+      upload.save.mockImplementation(async () => {
+        saves += 1;
+        if (saves === 2) {
+          throw new Error('restore failed');
+        }
+      });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      await expect(
+        service.startParsePdfUpload(UPLOAD_ID, {}),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      expect(upload.status).toBe('uploaded');
+    });
+
+    it('stores a parse job id when the queue accepts the PDF', async () => {
+      const jobs = useQueue();
+      (service as unknown as { importJobs: typeof jobs }).importJobs = jobs;
+      const upload = makeUpload({ status: 'uploaded' });
+      questionUploadModel.findById.mockResolvedValue(upload);
+
+      const accepted = await service.startParsePdfUpload(UPLOAD_ID, {
+        maxPollingAttempts: 3,
+      });
+      expect(accepted).toMatchObject({
+        status: 'parsing',
+        jobId: 'job-parse',
+      });
+      expect((upload as { activeJobName?: string }).activeJobName).toBe(
+        'import-parse',
+      );
+      expect(mathpixService.convertPdfToMarkdown).not.toHaveBeenCalled();
     });
   });
 });
