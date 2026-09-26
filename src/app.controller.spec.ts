@@ -40,31 +40,43 @@ describe('AppController', () => {
   });
 
   describe('health', () => {
-    it('should return OK status and environment', () => {
-      const result = appController.getHealth();
+    it('should return OK status and environment', async () => {
+      const result = await appController.getHealth();
       expect(result.status).toBe('OK');
       expect(result.message).toBe('EZ Prep API is running successfully');
       expect(result.timestamp).toBeDefined();
       expect(result.environment).toBe('test');
+      expect(result.redis).toBe('disabled');
     });
 
-    it('should use INSTANCE_NAME in the health message', () => {
+    it('should use INSTANCE_NAME in the health message', async () => {
       configValues.INSTANCE_NAME = 'ExamFlex';
-      const result = appController.getHealth();
+      const result = await appController.getHealth();
       expect(result.message).toBe('ExamFlex API is running successfully');
     });
 
-    it('should fall back to INSTANCE_ID when INSTANCE_NAME is unset', () => {
+    it('should fall back to INSTANCE_ID when INSTANCE_NAME is unset', async () => {
       configValues.INSTANCE_NAME = undefined;
       configValues.INSTANCE_ID = 'examflex';
-      const result = appController.getHealth();
+      const result = await appController.getHealth();
       expect(result.message).toBe('examflex API is running successfully');
     });
 
-    it('should default environment to development when NODE_ENV is unset', () => {
+    it('should default environment to development when NODE_ENV is unset', async () => {
       configValues.NODE_ENV = undefined;
-      const result = appController.getHealth();
+      const result = await appController.getHealth();
       expect(result.environment).toBe('development');
+    });
+
+    it('reports Redis health when a probe is available', async () => {
+      const probed = new AppController(
+        new AppService(),
+        {
+          get: (key: string) => configValues[key],
+        } as ConfigService,
+        { probe: jest.fn().mockResolvedValue('up') } as never,
+      );
+      await expect(probed.getHealth()).resolves.toMatchObject({ redis: 'up' });
     });
   });
 });

@@ -218,6 +218,11 @@ export class StartEnrichUploadResponseDto {
       'Enrichment started. Poll GET /imports/uploads/:uploadId until status is enriched or failed.',
   })
   message: string;
+
+  @ApiPropertyOptional({
+    description: 'BullMQ job id when Redis is configured for this instance',
+  })
+  jobId?: string;
 }
 
 export class EnrichQuestionsResponseDto {
