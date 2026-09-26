@@ -562,8 +562,11 @@ export class MockTestAttemptsService {
           name: examDoc?.name || '',
           description: examDoc?.description,
           hasMultiLingualSupport: Boolean(
-            (examDoc as PopulatedDocument & { hasMultiLingualSupport?: boolean })
-              ?.hasMultiLingualSupport,
+            (
+              examDoc as PopulatedDocument & {
+                hasMultiLingualSupport?: boolean;
+              }
+            )?.hasMultiLingualSupport,
           ),
         },
         subject: subjectDoc?._id

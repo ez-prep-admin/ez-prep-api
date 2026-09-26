@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { WinstonModule } from 'nest-winston';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -27,10 +26,12 @@ import { CurrentAffairsModule } from './current-affairs/current-affairs.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { securityConfig } from './common/config/security.config';
-import { winstonConfig } from './common/config/winston.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
+import { createObserveRootModule } from './common/observability/observe.config';
+
+const observeRootModule = createObserveRootModule();
 
 @Module({
   imports: [
@@ -80,8 +81,7 @@ import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
     }),
     // Rate limiting configuration
     ThrottlerModule.forRoot([securityConfig.rateLimit]),
-    // Winston logging configuration
-    WinstonModule.forRoot(winstonConfig),
+    ...(observeRootModule ? [observeRootModule] : []),
     // AWS services (Global module)
     AwsModule,
     // Custom validation module

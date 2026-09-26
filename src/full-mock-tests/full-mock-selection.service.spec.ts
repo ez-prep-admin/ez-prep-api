@@ -306,9 +306,9 @@ describe('FullMockSelectionService', () => {
           shuffled[i - 1].topic?.toString(),
         );
       }
-      expect(
-        new Set(shuffled.map(row => row.question.toString())).size,
-      ).toBe(6);
+      expect(new Set(shuffled.map(row => row.question.toString())).size).toBe(
+        6,
+      );
     });
 
     it('should keep all questions when one topic dominates', () => {
@@ -320,9 +320,9 @@ describe('FullMockSelectionService', () => {
       ];
       const shuffled = service.shuffleAvoidingAdjacentTopics(mostlyA);
       expect(shuffled).toHaveLength(4);
-      expect(
-        new Set(shuffled.map(row => row.question.toString())).size,
-      ).toBe(4);
+      expect(new Set(shuffled.map(row => row.question.toString())).size).toBe(
+        4,
+      );
     });
   });
 
@@ -394,7 +394,11 @@ describe('FullMockSelectionService', () => {
         q('507f1f77bcf86cd7994390d4', sub2, topicB, 3),
       ];
 
-      const arranged = service.arrangePaperQuestions(questions, subjects, false);
+      const arranged = service.arrangePaperQuestions(
+        questions,
+        subjects,
+        false,
+      );
       expect(arranged).toHaveLength(4);
       expect(arranged.map(row => row.position)).toEqual([0, 1, 2, 3]);
       for (let i = 1; i < arranged.length; i++) {

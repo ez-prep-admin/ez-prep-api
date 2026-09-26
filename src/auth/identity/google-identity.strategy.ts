@@ -26,9 +26,7 @@ export class GoogleIdentityStrategy {
   async verify(idToken: string): Promise<VerifiedStudentIdentity> {
     const audiences = readGoogleClientIds(this.configService);
     if (audiences.length === 0) {
-      throw new ServiceUnavailableException(
-        'Google sign-in is not configured',
-      );
+      throw new ServiceUnavailableException('Google sign-in is not configured');
     }
 
     const payload = await this.verifier.verify(idToken, audiences);
@@ -71,11 +69,7 @@ export function assertGooglePayload(
   }
 
   const audClaim = payload.aud;
-  const auds = Array.isArray(audClaim)
-    ? audClaim
-    : audClaim
-      ? [audClaim]
-      : [];
+  const auds = Array.isArray(audClaim) ? audClaim : audClaim ? [audClaim] : [];
   if (!auds.some(aud => audiences.includes(aud))) {
     throw new UnauthorizedException('Invalid Google sign-in');
   }
@@ -97,9 +91,7 @@ export function assertGooglePayload(
   }
 
   if (payload.email_verified !== true) {
-    throw new UnauthorizedException(
-      'Google email address is not verified',
-    );
+    throw new UnauthorizedException('Google email address is not verified');
   }
 }
 

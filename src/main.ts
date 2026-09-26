@@ -6,6 +6,8 @@ import { useContainer } from 'class-validator';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { securityConfig, getCorsConfig } from './common/config/security.config';
+import { ObserveInstrument } from './common/observability/observe.config';
+import { observeEnabled } from './common/observability/observe.policy';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -43,7 +45,9 @@ async function bootstrap() {
   });
 
   try {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create(AppModule, {
+      ...(observeEnabled() ? { instrument: ObserveInstrument } : {}),
+    });
     const configService = app.get(ConfigService);
 
     // Enable class-validator to use NestJS dependency injection
@@ -154,7 +158,6 @@ async function bootstrap() {
       `⚡ Rate limiting: ${securityConfig.rateLimit.limit} requests per ${securityConfig.rateLimit.ttl}ms`,
     );
     logger.log(`✅ Advanced validation with custom validators enabled`);
-    logger.log(`📝 Winston logging configured - logs saved to ./logs/`);
   } catch (error) {
     logger.error('❌ Error starting application:', error);
     process.exit(1);
