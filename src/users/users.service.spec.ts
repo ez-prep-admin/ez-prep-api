@@ -689,10 +689,15 @@ describe('UsersService', () => {
         chain(mockUserDocument({ email: 'next@gmail.com' })),
       );
 
-      const updated = await service.updateEmailIfAvailable(OID, 'Next@Gmail.com');
+      const updated = await service.updateEmailIfAvailable(
+        OID,
+        'Next@Gmail.com',
+      );
       expect(updated?.email).toBe('next@gmail.com');
 
-      mockUserModel.findOne.mockReturnValue(chain(mockUserDocument({ email: 'taken' })));
+      mockUserModel.findOne.mockReturnValue(
+        chain(mockUserDocument({ email: 'taken' })),
+      );
       await expect(
         service.updateEmailIfAvailable(OID, 'taken@gmail.com'),
       ).resolves.toBeNull();

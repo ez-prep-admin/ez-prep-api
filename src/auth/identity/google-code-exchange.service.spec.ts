@@ -52,7 +52,9 @@ describe('GoogleCodeExchangeService', () => {
       } as unknown as ConfigService),
     ).toBe('first.apps.googleusercontent.com');
     expect(
-      readGoogleRedirectUris({ get: () => undefined } as unknown as ConfigService),
+      readGoogleRedirectUris({
+        get: () => undefined,
+      } as unknown as ConfigService),
     ).toEqual([]);
   });
 
@@ -86,7 +88,10 @@ describe('GoogleCodeExchangeService', () => {
 
   it('refuses a redirect URI that was not registered', async () => {
     await expect(
-      service.exchange({ ...input, redirectUri: 'https://evil.example/callback' }),
+      service.exchange({
+        ...input,
+        redirectUri: 'https://evil.example/callback',
+      }),
     ).rejects.toThrow(/redirect/);
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -103,7 +108,9 @@ describe('GoogleCodeExchangeService', () => {
       json: async () => ({ id_token: 'not-a-jwt' }),
     });
 
-    await expect(service.exchange(input)).rejects.toThrow(UnauthorizedException);
+    await expect(service.exchange(input)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 
   it('rejects an error response, a network failure, and a body that is not JSON', async () => {
@@ -111,10 +118,14 @@ describe('GoogleCodeExchangeService', () => {
       ok: false,
       json: async () => ({ error: 'invalid_grant' }),
     });
-    await expect(service.exchange(input)).rejects.toThrow(UnauthorizedException);
+    await expect(service.exchange(input)).rejects.toThrow(
+      UnauthorizedException,
+    );
 
     (global.fetch as jest.Mock).mockRejectedValue(new Error('offline'));
-    await expect(service.exchange(input)).rejects.toThrow(UnauthorizedException);
+    await expect(service.exchange(input)).rejects.toThrow(
+      UnauthorizedException,
+    );
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
@@ -122,12 +133,16 @@ describe('GoogleCodeExchangeService', () => {
         throw new Error('bad json');
       },
     });
-    await expect(service.exchange(input)).rejects.toThrow(UnauthorizedException);
+    await expect(service.exchange(input)).rejects.toThrow(
+      UnauthorizedException,
+    );
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: 'only-access' }),
     });
-    await expect(service.exchange(input)).rejects.toThrow(UnauthorizedException);
+    await expect(service.exchange(input)).rejects.toThrow(
+      UnauthorizedException,
+    );
   });
 });

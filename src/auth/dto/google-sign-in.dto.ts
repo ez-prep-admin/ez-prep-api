@@ -22,7 +22,8 @@ export class GoogleSignInDto {
   redirectUri: string;
 
   @ApiProperty({
-    description: 'PKCE code verifier that matches the code_challenge sent to Google.',
+    description:
+      'PKCE code verifier that matches the code_challenge sent to Google.',
   })
   @IsString()
   @IsNotEmpty()

@@ -4,10 +4,7 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import {
-  UsersService,
-  UserWithGoogleLink,
-} from '../../users/users.service';
+import { UsersService, UserWithGoogleLink } from '../../users/users.service';
 import { UserResponseDto } from '../../users/dto/user-response.dto';
 import { CreateUserDto } from '../../users/dto/create-user.dto';
 import { UserRole } from '../../common/enums/user-role.enum';

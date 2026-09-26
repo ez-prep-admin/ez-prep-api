@@ -265,9 +265,7 @@ describe('StudentAccountResolver', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({ user: student, googleSub: 'sub-1' });
       users.findAuthByEmail.mockResolvedValue(null);
-      users.createGoogleUser.mockRejectedValue(
-        new ConflictException('exists'),
-      );
+      users.createGoogleUser.mockRejectedValue(new ConflictException('exists'));
 
       const result = await resolver.resolve(identity);
 
@@ -293,7 +291,9 @@ describe('StudentAccountResolver', () => {
       users.findAuthByEmail.mockResolvedValue(null);
       users.createGoogleUser.mockRejectedValue(new ConflictException('exists'));
 
-      await expect(resolver.resolve(identity)).rejects.toThrow(/contact support/);
+      await expect(resolver.resolve(identity)).rejects.toThrow(
+        /contact support/,
+      );
     });
 
     it('treats an unexpected create failure as an authentication error', async () => {

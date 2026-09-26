@@ -87,9 +87,7 @@ describe('GoogleIdentityStrategy', () => {
   it('fails closed when Google sign-in is not configured', async () => {
     config.get.mockReturnValue(undefined);
 
-    await expect(strategy.verify('id-token')).rejects.toThrow(
-      /not configured/,
-    );
+    await expect(strategy.verify('id-token')).rejects.toThrow(/not configured/);
     expect(verifier.verify).not.toHaveBeenCalled();
   });
 
@@ -106,12 +104,15 @@ describe('GoogleIdentityStrategy', () => {
       assertGooglePayload(payload({ azp: 'other-client' }), audiences),
     ).toThrow(UnauthorizedException);
 
-    expect(() => assertGooglePayload(payload({ sub: '  ' }), audiences)).toThrow(
-      UnauthorizedException,
-    );
+    expect(() =>
+      assertGooglePayload(payload({ sub: '  ' }), audiences),
+    ).toThrow(UnauthorizedException);
 
     expect(() =>
-      assertGooglePayload(payload({ aud: undefined, azp: undefined }), audiences),
+      assertGooglePayload(
+        payload({ aud: undefined, azp: undefined }),
+        audiences,
+      ),
     ).toThrow(UnauthorizedException);
 
     expect(() =>
@@ -153,14 +154,20 @@ describe('GoogleIdentityStrategy', () => {
   });
 
   it('builds a display name and ignores unsafe avatars', () => {
-    expect(displayNameFromGoogle(null, 'asha.nair@gmail.com')).toBe('asha.nair');
+    expect(displayNameFromGoogle(null, 'asha.nair@gmail.com')).toBe(
+      'asha.nair',
+    );
     expect(displayNameFromGoogle(null, null)).toBe('EzPrep User');
-    expect(displayNameFromGoogle('  ', 'asha.nair@gmail.com')).toBe('asha.nair');
+    expect(displayNameFromGoogle('  ', 'asha.nair@gmail.com')).toBe(
+      'asha.nair',
+    );
     expect(displayNameFromGoogle('', 'a@gmail.com')).toBe('EzPrep User');
     expect(displayNameFromGoogle('  Asha   Nair  ')).toBe('Asha Nair');
     expect(safeHttpsAvatar('http://example.com/a.png')).toBeUndefined();
     expect(safeHttpsAvatar('not a url')).toBeUndefined();
-    expect(safeHttpsAvatar(`https://example.com/${'a'.repeat(2100)}`)).toBeUndefined();
+    expect(
+      safeHttpsAvatar(`https://example.com/${'a'.repeat(2100)}`),
+    ).toBeUndefined();
     expect(safeHttpsAvatar(null)).toBeUndefined();
   });
 

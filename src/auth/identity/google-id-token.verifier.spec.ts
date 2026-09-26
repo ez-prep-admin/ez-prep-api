@@ -21,7 +21,11 @@ describe('GoogleIdTokenVerifier', () => {
 
   it('returns the payload from a verified Google ID token', async () => {
     const { verifier, verifyIdToken } = verifierAndMock();
-    const payload = { sub: 'sub', aud: 'web', iss: 'https://accounts.google.com' };
+    const payload = {
+      sub: 'sub',
+      aud: 'web',
+      iss: 'https://accounts.google.com',
+    };
     verifyIdToken.mockResolvedValue({ getPayload: () => payload });
 
     await expect(
