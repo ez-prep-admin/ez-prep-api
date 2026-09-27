@@ -188,6 +188,7 @@ Keys and explanations are never returned here.
     description: `
 Saves \`selectedOptionId\` for one question. No scoring here.
 
+- Send \`selectedOptionId: null\` to clear the answer — the question then counts as unanswered
 - Attempt must be \`IN_PROGRESS\` (resume first if paused)
 - Session-wise: the question must belong to the **current** session (\`questionIds\` / \`sessionOrder\`). Other sessions return 400.
 - If the **current session** timer has expired: 400 — call \`POST .../sessions/complete\` (do not keep answering)

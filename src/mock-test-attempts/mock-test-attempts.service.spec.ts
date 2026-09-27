@@ -862,6 +862,20 @@ describe('MockTestAttemptsService', () => {
       expect(attemptModel.updateOne).toHaveBeenCalled();
     });
 
+    it('clears the stored answer when selectedOptionId is null', async () => {
+      attemptModel.findOne.mockReturnValue(chainable(makeAttempt()));
+      await service.updateAnswer(ATTEMPT_ID, USER_ID, {
+        questionId: Q1,
+        selectedOptionId: null,
+      });
+      expect(attemptModel.updateOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          $set: { 'questions.$.selectedOption': null },
+        }),
+      );
+    });
+
     it('rejects answers when the current session is not in progress', async () => {
       attemptModel.findOne.mockReturnValue(
         chainable(
