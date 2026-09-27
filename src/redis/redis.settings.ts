@@ -5,6 +5,7 @@ export interface RedisEnv {
   REDIS_KEY_PREFIX?: string;
   BULLMQ_PREFIX?: string;
   QUEUE_WORKER_ENABLED?: string;
+  IMPORT_QUEUE_DRIVER?: string;
   REDIS_CONNECT_TIMEOUT_MS?: string;
   REDIS_COMMAND_TIMEOUT_MS?: string;
   REDIS_HEALTH_TIMEOUT_MS?: string;
@@ -25,12 +26,15 @@ export interface RedisEnv {
   IMPORT_QUEUE_REMOVE_ON_FAIL_AGE_SEC?: string;
 }
 
+export type ImportQueueDriver = 'memory' | 'bullmq';
+
 export interface RedisSettings {
   enabled: boolean;
   url: string;
   instanceId: string;
   keyPrefix: string;
   bullPrefix: string;
+  queueDriver: ImportQueueDriver;
   workerEnabled: boolean;
   connectTimeoutMs: number;
   commandTimeoutMs: number;
@@ -62,6 +66,7 @@ export function resolveRedisSettings(env: RedisEnv): RedisSettings {
   }
 
   const instanceId = normalizeInstanceId(env.INSTANCE_ID, enabled);
+  const queueDriver = resolveQueueDriver(env, enabled);
   const keyPrefix = env.REDIS_KEY_PREFIX?.trim()
     ? assertNamespace(env.REDIS_KEY_PREFIX, 'REDIS_KEY_PREFIX')
     : instanceId;
@@ -75,7 +80,8 @@ export function resolveRedisSettings(env: RedisEnv): RedisSettings {
     instanceId,
     keyPrefix,
     bullPrefix,
-    workerEnabled: resolveWorkerEnabled(env, enabled),
+    queueDriver,
+    workerEnabled: resolveWorkerEnabled(env, queueDriver === 'bullmq'),
     connectTimeoutMs: readBoundedInt(
       'REDIS_CONNECT_TIMEOUT_MS',
       env.REDIS_CONNECT_TIMEOUT_MS,
@@ -215,6 +221,7 @@ export function readRedisEnv(config: {
     'REDIS_KEY_PREFIX',
     'BULLMQ_PREFIX',
     'QUEUE_WORKER_ENABLED',
+    'IMPORT_QUEUE_DRIVER',
     'REDIS_CONNECT_TIMEOUT_MS',
     'REDIS_COMMAND_TIMEOUT_MS',
     'REDIS_HEALTH_TIMEOUT_MS',
@@ -244,8 +251,28 @@ export function readRedisEnv(config: {
   return env;
 }
 
-function resolveWorkerEnabled(env: RedisEnv, enabled: boolean): boolean {
-  if (!enabled) {
+function resolveQueueDriver(
+  env: RedisEnv,
+  redisEnabled: boolean,
+): ImportQueueDriver {
+  const raw = env.IMPORT_QUEUE_DRIVER?.trim().toLowerCase() ?? '';
+  if (raw === '' || raw === 'auto') {
+    return redisEnabled ? 'bullmq' : 'memory';
+  }
+  if (raw === 'memory' || raw === 'in-memory' || raw === 'inmemory') {
+    return 'memory';
+  }
+  if (raw === 'bullmq' || raw === 'redis') {
+    if (!redisEnabled) {
+      throw new Error('IMPORT_QUEUE_DRIVER=bullmq requires REDIS_URL');
+    }
+    return 'bullmq';
+  }
+  throw new Error('IMPORT_QUEUE_DRIVER must be memory or bullmq');
+}
+
+function resolveWorkerEnabled(env: RedisEnv, queueUsesRedis: boolean): boolean {
+  if (!queueUsesRedis) {
     return false;
   }
   const raw = env.QUEUE_WORKER_ENABLED?.trim() ?? '';

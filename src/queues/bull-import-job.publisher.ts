@@ -176,7 +176,7 @@ export function createImportJobPublisher(
   settings: RedisSettings,
   connections: RedisConnectionRegistry,
 ): ImportJobPublisher | null {
-  if (!settings.enabled) {
+  if (!settings.enabled || settings.queueDriver !== 'bullmq') {
     return null;
   }
   return new BullImportJobPublisher(settings, connections);

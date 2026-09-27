@@ -51,7 +51,7 @@ export interface ManualWorker {
     token: string,
     options?: { block?: boolean },
   ): Promise<ManualJob | undefined>;
-  moveStalledJobsToWait(): Promise<void>;
+  moveStalledJobsToWait(): Promise<void | string[]>;
   close(): Promise<void>;
   on(event: 'error', listener: (error: Error) => void): void;
 }
@@ -84,7 +84,7 @@ export class ImportQueueWorker implements OnModuleInit {
   private readonly logger = new Logger(ImportQueueWorker.name);
   private readonly workers = new Map<string, ManualWorker>();
   private recoveryTimer?: ReturnType<typeof setInterval>;
-  private pollTimer?: ReturnType<typeof setInterval>;
+  private followUpTimer?: ReturnType<typeof setTimeout>;
   private connection?: {
     status: string;
     connect(): Promise<unknown>;
@@ -117,11 +117,6 @@ export class ImportQueueWorker implements OnModuleInit {
       this.settings.recoveryIntervalMs,
     );
     this.recoveryTimer.unref?.();
-    this.pollTimer = setInterval(
-      () => this.poll(),
-      this.settings.pollIntervalMs,
-    );
-    this.pollTimer.unref?.();
     await this.poll();
   }
 
@@ -164,11 +159,17 @@ export class ImportQueueWorker implements OnModuleInit {
     try {
       do {
         this.pollAgain = false;
+        let worked = false;
         for (const target of this.targets()) {
           if (this.closed) {
             return;
           }
-          await this.pollQueue(target);
+          if (await this.pollQueue(target)) {
+            worked = true;
+          }
+        }
+        if (worked) {
+          this.scheduleFollowUp();
         }
       } while (this.pollAgain && !this.closed);
     } finally {
@@ -176,16 +177,18 @@ export class ImportQueueWorker implements OnModuleInit {
     }
   }
 
-  private async pollQueue(target: QueueTarget): Promise<void> {
+  private async pollQueue(target: QueueTarget): Promise<boolean> {
     let worker: ManualWorker;
+    let worked = false;
     try {
       worker = await this.workerFor(target.logicalName);
-      await worker.moveStalledJobsToWait();
+      const stalled = await worker.moveStalledJobsToWait();
+      worked = Array.isArray(stalled) && stalled.length > 0;
     } catch (error) {
       this.logger.error(
         `Import poll failed for ${target.logicalName}: ${errorMessage(error)}`,
       );
-      return;
+      return false;
     }
 
     for (
@@ -201,13 +204,15 @@ export class ImportQueueWorker implements OnModuleInit {
         this.logger.error(
           `Import poll failed for ${target.logicalName}: ${errorMessage(error)}`,
         );
-        return;
+        return false;
       }
       if (!job) {
-        return;
+        return worked;
       }
+      worked = true;
       await this.finishJob(job, job.token || token);
     }
+    return worked;
   }
 
   private async finishJob(job: ManualJob, token: string): Promise<void> {
@@ -272,7 +277,7 @@ export class ImportQueueWorker implements OnModuleInit {
     });
     this.workers.set(logicalName, worker);
     this.logger.log(
-      `Import queue ${name} will be checked every ${this.settings.pollIntervalMs}ms`,
+      `Import queue ${name} is active for this process`,
     );
     return worker;
   }
@@ -304,6 +309,17 @@ export class ImportQueueWorker implements OnModuleInit {
     ];
   }
 
+  private scheduleFollowUp(): void {
+    if (this.closed || this.followUpTimer) {
+      return;
+    }
+    this.followUpTimer = setTimeout(() => {
+      this.followUpTimer = undefined;
+      void this.poll();
+    }, this.settings.pollIntervalMs);
+    this.followUpTimer.unref?.();
+  }
+
   private async recoverSafely(): Promise<void> {
     try {
       const recovered = await this.recovery.recoverStaleUploads();
@@ -320,9 +336,9 @@ export class ImportQueueWorker implements OnModuleInit {
       clearInterval(this.recoveryTimer);
       this.recoveryTimer = undefined;
     }
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = undefined;
+    if (this.followUpTimer) {
+      clearTimeout(this.followUpTimer);
+      this.followUpTimer = undefined;
     }
   }
 }

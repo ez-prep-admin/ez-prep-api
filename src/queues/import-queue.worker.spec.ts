@@ -152,11 +152,14 @@ describe('ImportQueueWorker', () => {
     );
     expect(connections.create).toHaveBeenCalledTimes(1);
     expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining('checked every 60000ms'),
+      expect.stringContaining('is active for this process'),
     );
 
-    await intervals[1]();
-    expect(manual.moveStalledJobsToWait.mock.calls.length).toBeGreaterThan(2);
+    const callsAfterStart = manual.moveStalledJobsToWait.mock.calls.length;
+    await worker.ensureStarted();
+    expect(manual.moveStalledJobsToWait.mock.calls.length).toBeGreaterThan(
+      callsAfterStart,
+    );
 
     manual.on.mock.calls.find(([event]) => event === 'error')?.[1](
       new Error(`worker ${REDIS_URL}`),
@@ -166,7 +169,6 @@ describe('ImportQueueWorker', () => {
 
     await worker.close();
     expect(manual.close).toHaveBeenCalled();
-    await intervals[1]();
     await worker.ensureStarted();
     expect(fetch.mock.calls.length).toBeGreaterThan(0);
   });
@@ -263,10 +265,10 @@ describe('ImportQueueWorker', () => {
     );
 
     const pending = worker.onModuleInit();
-    for (let attempt = 0; attempt < 10 && intervals.length < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 10 && intervals.length < 2; attempt += 1) {
       await new Promise(resolve => setImmediate(resolve));
     }
-    await intervals[2]?.();
+    await intervals[1]?.();
     releaseJob();
     await pending;
     expect(active.extendLock).toHaveBeenCalled();
@@ -422,10 +424,10 @@ describe('ImportQueueWorker', () => {
     );
 
     const pending = worker.onModuleInit();
-    for (let attempt = 0; attempt < 10 && intervals.length < 3; attempt += 1) {
+    for (let attempt = 0; attempt < 10 && intervals.length < 2; attempt += 1) {
       await new Promise(resolve => setImmediate(resolve));
     }
-    await intervals[2]?.();
+    await intervals[1]?.();
     await pending;
     expect(errorSpy.mock.calls.join(' ')).toContain('unknown');
     await worker.close();

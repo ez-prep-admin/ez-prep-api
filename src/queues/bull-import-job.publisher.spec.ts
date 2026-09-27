@@ -128,6 +128,16 @@ describe('BullImportJobPublisher', () => {
         {} as RedisConnectionRegistry,
       ),
     ).toBeNull();
+    expect(
+      createImportJobPublisher(
+        resolveRedisSettings({
+          REDIS_URL,
+          INSTANCE_ID: 'ezprep',
+          IMPORT_QUEUE_DRIVER: 'memory',
+        }),
+        {} as RedisConnectionRegistry,
+      ),
+    ).toBeNull();
   });
 
   it('enqueues instance-scoped jobs and reuses each queue connection', async () => {
