@@ -1,4 +1,4 @@
-import { IsString, IsMongoId } from 'class-validator';
+import { IsString, IsMongoId, ValidateIf } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateAnswerDto {
@@ -12,9 +12,12 @@ export class UpdateAnswerDto {
   questionId: string;
 
   @ApiProperty({
-    description: 'Selected option ID (UUID from option.id field)',
+    description:
+      'Selected option ID (UUID from option.id field). Send null to clear the answer so the question counts as unanswered.',
     example: 'fe99dedc-7c4b-445a-9c5f-03e5706bf184',
+    nullable: true,
   })
+  @ValidateIf((_, value) => value !== null)
   @IsString({ message: 'Selected option ID must be a string' })
-  selectedOptionId: string;
+  selectedOptionId: string | null;
 }

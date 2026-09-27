@@ -1213,7 +1213,8 @@ export class MockTestAttemptsService {
    * Update answer for a question in an attempt
    * @param attemptId - Attempt ID
    * @param userId - User ID
-   * @param updateAnswerDto - Contains questionId and selectedOptionId
+   * @param updateAnswerDto - Contains questionId and selectedOptionId. A null
+   * selectedOptionId clears the answer, so scoring treats it as unanswered.
    * @returns Success indicator
    */
   async updateAnswer(
