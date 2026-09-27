@@ -7,6 +7,7 @@ describe('resolveRedisSettings', () => {
   it('stays disabled until a Redis URL is configured', () => {
     const settings = resolveRedisSettings({ INSTANCE_ID: 'EzPrep' });
     expect(settings.enabled).toBe(false);
+    expect(settings.queueDriver).toBe('memory');
     expect(settings.workerEnabled).toBe(false);
     expect(settings.instanceId).toBe('ezprep');
     expect(settings.keyPrefix).toBe('ezprep');
@@ -101,6 +102,7 @@ describe('resolveRedisSettings', () => {
       QUEUE_WORKER_ENABLED: 'true',
     });
     expect(enabled.workerEnabled).toBe(true);
+    expect(enabled.queueDriver).toBe('bullmq');
     expect(tests.workerEnabled).toBe(false);
     expect(forced.workerEnabled).toBe(true);
     for (const value of ['1', 'yes', 'on']) {
@@ -121,6 +123,47 @@ describe('resolveRedisSettings', () => {
         }).workerEnabled,
       ).toBe(false);
     }
+  });
+
+  it('keeps Redis connected while the import queue stays in-process', () => {
+    const settings = resolveRedisSettings({
+      REDIS_URL,
+      INSTANCE_ID: 'ezprep',
+      NODE_ENV: 'production',
+      IMPORT_QUEUE_DRIVER: 'memory',
+    });
+    expect(settings.enabled).toBe(true);
+    expect(settings.queueDriver).toBe('memory');
+    expect(settings.workerEnabled).toBe(false);
+
+    expect(
+      resolveRedisSettings({
+        REDIS_URL,
+        INSTANCE_ID: 'ezprep',
+        IMPORT_QUEUE_DRIVER: 'in-memory',
+      }).queueDriver,
+    ).toBe('memory');
+    expect(
+      resolveRedisSettings({
+        REDIS_URL,
+        INSTANCE_ID: 'ezprep',
+        NODE_ENV: 'production',
+        IMPORT_QUEUE_DRIVER: 'bullmq',
+      }).queueDriver,
+    ).toBe('bullmq');
+    expect(() =>
+      resolveRedisSettings({
+        INSTANCE_ID: 'ezprep',
+        IMPORT_QUEUE_DRIVER: 'bullmq',
+      }),
+    ).toThrow(/requires REDIS_URL/);
+    expect(() =>
+      resolveRedisSettings({
+        REDIS_URL,
+        INSTANCE_ID: 'ezprep',
+        IMPORT_QUEUE_DRIVER: 'kafka',
+      }),
+    ).toThrow(/must be memory or bullmq/);
   });
 
   it('rejects malformed Redis URLs without echoing the secret', () => {

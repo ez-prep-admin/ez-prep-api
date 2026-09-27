@@ -8,18 +8,24 @@ MongoDB remains the source of truth for uploads, users, and questions. Redis hol
 
 ## Turn it on
 
-Leave `REDIS_URL` empty and parse/enrich run inside the API process, the same way they did before queues existed. Set `REDIS_URL` and those two jobs are stored in Redis and processed by this process.
+Leave `REDIS_URL` empty and Redis is off: health reports `disabled`, and parse/enrich run in this process.
+
+Set `REDIS_URL` and Redis is available for health and for any later feature that uses `RedisKeyBuilder`. The import queue is a separate choice:
 
 ```env
 INSTANCE_ID=ezprep
 REDIS_URL=rediss://default:TOKEN@ENDPOINT:6379
+
+# memory = original in-process uploads. Redis stays available for other features.
+# bullmq = durable import queue. Omit this line and a configured REDIS_URL uses bullmq.
+IMPORT_QUEUE_DRIVER=memory
 ```
 
 `rediss://` (two s) turns on TLS. Upstash rejects a plain `redis://` URL. Put the Redis URL in `REDIS_URL`, not the `redis-cli` command and not the REST URL.
 
 `INSTANCE_ID` is the namespace. EZ Prep and ExamFlex can share one Redis database only if their `INSTANCE_ID` values differ. Separate Upstash databases with different `REDIS_URL` values are isolated even when the ids match. Both are supported. Nothing else is hardcoded.
 
-The setting is read at process start. Removing `REDIS_URL` and restarting returns to in-process jobs. A restart is required. Jobs already sitting in Redis are not picked up by the in-process path.
+The setting is read at process start. `IMPORT_QUEUE_DRIVER=memory` returns uploads to the in-process path without clearing `REDIS_URL`. A restart is required. Jobs already sitting in Redis are not picked up by the in-process path.
 
 On a droplet, add `REDIS_URL` to the server `.env` and restart PM2. Nest reads that file itself. No Redis process is installed on the machine.
 
@@ -76,11 +82,11 @@ This app does not call `worker.run()`. It creates a worker with `autorun: false`
 1. `moveStalledJobsToWait()` — move a job whose worker died back to the wait list.
 2. `getNextJob(token, { block: false })` — take up to `IMPORT_PARSE_CONCURRENCY` or `IMPORT_ENRICH_CONCURRENCY` waiting jobs (default 2), one after another.
 
-A job that was just queued is also fetched immediately, on a background task, so the admin does not wait 60 seconds for the first attempt. The HTTP response has already been sent.
+A job that was just queued is also fetched immediately, on a background task, so the admin does not wait for the next check. The HTTP response has already been sent.
 
-While a job is running, the lock is extended once a minute (`extendLock`). Parse and enrich often take longer than a minute. The lock duration is 3 minutes, so a missed extension does not immediately hand the job to another process.
+There is no repeating Redis poll while the queues are idle. The chart of `EVALSHA`, `ZPOPMIN`, `RPOPLPUSH`, and `ZRANGE` was that idle poll: each "one script" is metered by Upstash as many commands, and two queues every 60 seconds was enough to spend tens of thousands of commands a day with zero uploads.
 
-Idle cost is on the order of a few Redis commands per minute for both queues, not thousands. The 60 second interval is `IMPORT_QUEUE_POLL_INTERVAL_MS` (minimum 15 seconds). Do not lower it to chase latency. These endpoints are admin imports.
+After a poll that actually moved a stalled job or finished an upload, one follow-up check is scheduled `IMPORT_QUEUE_POLL_INTERVAL_MS` later (default 60 seconds) so a delayed retry can run. If that follow-up finds nothing, it does not schedule another. Idle time after that costs zero Redis commands.
 
 ---
 
@@ -107,13 +113,13 @@ We use BullMQ as a durable job store, not as a long-running consumer.
 
 ### When a poll runs
 
-Three triggers, all of them call `poll()`:
+Redis is not read on a timer while the queues are empty. A poll runs only when there is a reason:
 
-1. Process start (`onModuleInit`), after the Mongo stale-upload recovery pass. This picks up a job that was queued before a restart.
-2. `setInterval` every `IMPORT_QUEUE_POLL_INTERVAL_MS` (default 60 seconds). The timer is `unref`'d so it does not keep a test process alive.
-3. `ensureStarted()`, invoked in the background by `BullImportJobPublisher` immediately after `Queue.add`. The HTTP handler has already been given the job id.
+1. Process start (`onModuleInit`), once, after the Mongo stale-upload recovery pass. This picks up a job that was queued before a restart. If both queues are empty, nothing else is scheduled.
+2. `ensureStarted()`, invoked in the background by `BullImportJobPublisher` immediately after `Queue.add`. The HTTP handler has already been given the job id.
+3. One follow-up, `IMPORT_QUEUE_POLL_INTERVAL_MS` after a poll that recovered a stalled job or finished an upload. That follow-up exists so a delayed retry can run. If it finds nothing, the chain stops.
 
-If `poll()` is already running when another enqueue arrives, it sets `pollAgain` and runs one extra pass when the current pass finishes. It does not start a second overlapping poll, and it does not wait 60 seconds for that extra pass.
+There is no `setInterval` for Redis. `scheduleFollowUp` stores a single `setTimeout` and will not stack another one. If `poll()` is already running when another enqueue arrives, it sets `pollAgain` and runs one extra pass when the current pass finishes. It does not start a second overlapping poll.
 
 Each pass walks parse, then enrich. For each queue:
 
@@ -205,22 +211,13 @@ A thrown error (or `UnrecoverableError` from a bad payload) calls `moveToFailed`
 
 ### Command budget
 
-Per idle minute, with both queues and the default interval:
+Per idle hour, after startup has finished and no upload is queued: **zero** Redis commands from BullMQ.
 
-| Action | Commands |
-| --- | --- |
-| Stalled check, parse | 1 |
-| Non-blocking fetch, parse | 1 |
-| Stalled check, enrich | 1 |
-| Non-blocking fetch, enrich | 1 |
+Startup runs one poll. Creating the workers the first time also loads BullMQ's Lua scripts once. That is a burst at process start, then silence.
 
-About four Redis commands a minute while nothing is queued. The first poll also loads BullMQ's Lua scripts once and keeps the workers. That is a one-time burst, not a loop.
+A poll that finds work costs the stalled check and the fetch, plus one `extendLock` per minute while that upload is actually running. A follow-up poll 60 seconds later costs another stalled check and fetch. If that follow-up is empty, the chain stops.
 
-During a job, add one `extendLock` per minute until `finishJob` returns. A five-minute parse is a handful of extra commands, not a poll per second.
-
-Delayed retries, crash recovery, and the regular idle check all share that same 60 second timer. There is no second Redis loop for health. Health pings only when `GET /api/v1/health` is called.
-
-Two API replicas with the worker enabled both poll. `getNextJob` is atomic, so only one of them receives a given job. Idle command use scales with the number of processes that have `QUEUE_WORKER_ENABLED` left at its default. Set `QUEUE_WORKER_ENABLED=false` on replicas that should only enqueue.
+`IMPORT_QUEUE_DRIVER=memory` does not create a publisher or a worker, so it issues none of these commands. `REDIS_URL` can still be set for health, and later for sessions or analytics.
 
 ### What we are not using
 
@@ -402,7 +399,13 @@ Spec files sit next to the source (`*.spec.ts`) unless noted. Nest modules have 
 
 | Branch | Result |
 | --- | --- |
-| `REDIS_URL` missing or blank | `enabled: false`, `workerEnabled: false`, `url: ''`. The rest of the numeric defaults are still applied |
+| `REDIS_URL` missing or blank | `enabled: false`, `queueDriver: memory`, `workerEnabled: false`, `url: ''` |
+| `IMPORT_QUEUE_DRIVER` unset or `auto` | `bullmq` when Redis is on, otherwise `memory` |
+| `IMPORT_QUEUE_DRIVER` `memory`, `in-memory`, or `inmemory` | In-process uploads even when `REDIS_URL` is set. Publisher is not created |
+| `IMPORT_QUEUE_DRIVER` `bullmq` or `redis` | Durable queue. Throws if `REDIS_URL` is missing |
+| Any other driver value | Throws `IMPORT_QUEUE_DRIVER must be memory or bullmq` |
+| `QUEUE_WORKER_ENABLED` unset and driver is `bullmq` | `true`, unless `NODE_ENV` is `test` |
+| `QUEUE_WORKER_ENABLED` unset and driver is `memory` | `false` |
 | `REDIS_URL` set | `assertRedisUrl`. Scheme must be `redis:` or `rediss:`. Host required. The raw URL is never included in the error |
 | `INSTANCE_ID` missing while Redis is on | Throws `INSTANCE_ID is required when REDIS_URL is set` |
 | `INSTANCE_ID` missing while Redis is off | Namespace `local` |
@@ -411,8 +414,7 @@ Spec files sit next to the source (`*.spec.ts`) unless noted. Nest modules have 
 | `REDIS_KEY_PREFIX` unset | `keyPrefix` equals `instanceId` |
 | `BULLMQ_PREFIX` set | `assertBullPrefix`. Must contain `{...}` with a non-empty tag |
 | `BULLMQ_PREFIX` unset | `{keyPrefix}:bull` |
-| `QUEUE_WORKER_ENABLED` unset and Redis on | `true`, unless `NODE_ENV` is `test` (`resolveWorkerEnabled`) |
-| `QUEUE_WORKER_ENABLED` set | `readBool`: `1/true/yes/on` or `0/false/no/off`. Anything else throws |
+| `QUEUE_WORKER_ENABLED` set and driver is `bullmq` | `readBool`: `1/true/yes/on` or `0/false/no/off`. Anything else throws |
 | Any integer setting empty | That setting's default |
 | Integer not digits, or outside min/max | Throws `must be an integer` or `must be between` (`readBoundedInt`) |
 
@@ -527,7 +529,8 @@ Schemas are `.strict()`, so extra keys fail.
 | Function | Branch |
 | --- | --- |
 | `defaultManualWorkerFactory` | `new Worker(name, null, { ...options, autorun: false })` |
-| `onModuleInit` | Returns immediately when Redis is off or `workerEnabled` is false. Otherwise runs recovery once, starts the recovery timer, starts the poll timer, then awaits one poll |
+| `onModuleInit` | Returns immediately when the driver is `memory` or `workerEnabled` is false. Otherwise runs recovery once, starts the Mongo recovery timer, then one poll. It does not start a Redis interval |
+| `scheduleFollowUp` | One `setTimeout` after a poll that did work. A later empty poll does not schedule another |
 | `ensureStarted` | Returns when Redis is off, the worker flag is off, or `close()` has run. Otherwise `poll()` |
 | `poll` | Returns if closed. If a poll is already running, sets `pollAgain` and returns. Otherwise loops `pollQueue` for parse then enrich. If `pollAgain` was set and the worker is still open, one more pass runs |
 | `pollQueue` setup | `workerFor` or `moveStalledJobsToWait` throws: log and skip this queue |
@@ -655,8 +658,9 @@ Defaults are applied when the variable is unset. Values outside the range preven
 | `INSTANCE_ID` | `local` if Redis is off; required if Redis is on | Namespace. Lowercased. |
 | `REDIS_KEY_PREFIX` | `INSTANCE_ID` | Override for keys and the hash tag. |
 | `BULLMQ_PREFIX` | `{PREFIX}:bull` | Must contain a non-empty hash tag, for example `{ezprep}:bull`. |
-| `QUEUE_WORKER_ENABLED` | `true` when Redis is on, except `NODE_ENV=test` | API-only replicas set `false` and only enqueue. |
-| `IMPORT_QUEUE_POLL_INTERVAL_MS` | `60000` | Non-blocking queue check. Minimum `15000`. |
+| `IMPORT_QUEUE_DRIVER` | `bullmq` when `REDIS_URL` is set, otherwise `memory` | `memory` keeps Redis and runs uploads in-process. `bullmq` is the durable queue. |
+| `QUEUE_WORKER_ENABLED` | `true` when the driver is `bullmq`, except `NODE_ENV=test` | `false` on API replicas that should only enqueue. Ignored when the driver is `memory`. |
+| `IMPORT_QUEUE_POLL_INTERVAL_MS` | `60000` | Delay before the single follow-up check after a job. Not an idle poll. Minimum `15000`. |
 | `IMPORT_QUEUE_LOCK_DURATION_MS` | `180000` | How long a running job keeps its lock. |
 | `IMPORT_QUEUE_STALE_MS` | `1800000` | How old a `parsing` or `processing` upload must be before recovery will fail it. |
 | `IMPORT_QUEUE_RECOVERY_INTERVAL_MS` | `60000` | How often recovery looks at MongoDB. |
