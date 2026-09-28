@@ -43,7 +43,10 @@ export class AdminUsersController {
       'Admin accounts are excluded in the query and again before the response is built. ' +
       'There is no `role` query parameter — this endpoint cannot list admins. ' +
       'Email and phone number are masked in the response; `search` still matches the stored name, email, or phone. ' +
-      '`testsAttendedCount` is a simple count of mock-test-attempt documents per user.',
+      '`testsAttendedCount` is every mock-test attempt for the learner. ' +
+      '`testActivity` splits that total by paper type (`FULL_EXAM` vs topic-wise) ' +
+      'and by whether the attempt is finished (`SUBMITTED` or `EXPIRED`) ' +
+      'or still open (started, in progress, or paused).',
   })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 12 })

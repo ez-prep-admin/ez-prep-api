@@ -276,9 +276,7 @@ export class ImportQueueWorker implements OnModuleInit {
       this.logger.error(`Import worker ${name} error: ${errorMessage(error)}`);
     });
     this.workers.set(logicalName, worker);
-    this.logger.log(
-      `Import queue ${name} is active for this process`,
-    );
+    this.logger.log(`Import queue ${name} is active for this process`);
     return worker;
   }
 

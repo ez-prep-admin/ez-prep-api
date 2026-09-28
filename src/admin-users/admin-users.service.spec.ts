@@ -10,6 +10,7 @@ import { SubscriptionStatus } from '../common/enums/subscription-status.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 import { Gender } from '../common/enums/gender.enum';
 import { APP_USER_ROLE } from './admin-users.guardrails';
+import { buildAttemptActivityPipeline } from './admin-users.attempt-counts';
 
 function chain(result: unknown) {
   const q: any = {
@@ -122,7 +123,17 @@ describe('AdminUsersService', () => {
     });
     userModel.find.mockReturnValue(chain([user]));
     userModel.countDocuments.mockReturnValue(chain(25));
-    attemptModel.aggregate.mockReturnValue(chain([{ _id: id, count: 7 }]));
+    attemptModel.aggregate.mockReturnValue(
+      chain([
+        {
+          _id: id,
+          fullExamFinished: 4,
+          fullExamOpen: 1,
+          topicWiseFinished: 2,
+          topicWiseOpen: 0,
+        },
+      ]),
+    );
 
     const result = await service.listAppUsers(2, 12);
 
@@ -142,6 +153,10 @@ describe('AdminUsersService', () => {
       phoneNumber: '+91**********',
       role: APP_USER_ROLE,
       testsAttendedCount: 7,
+      testActivity: {
+        fullExam: { finished: 4, open: 1 },
+        topicWise: { finished: 2, open: 0 },
+      },
       targetExam: { id: 'exam1', name: 'UPSC' },
       subscription: {
         plan: SubscriptionPlan.PREMIUM,
@@ -199,6 +214,10 @@ describe('AdminUsersService', () => {
 
     const result = await service.listAppUsers();
     expect(result.data[0].testsAttendedCount).toBe(0);
+    expect(result.data[0].testActivity).toEqual({
+      fullExam: { finished: 0, open: 0 },
+      topicWise: { finished: 0, open: 0 },
+    });
   });
 
   it('skips the attempts query when every row was an admin leak', async () => {
@@ -304,11 +323,25 @@ describe('AdminUsersService', () => {
     const user = learnerDoc({ id: 'u1', _id: 'u1', isActive: false });
     userModel.find.mockReturnValue(chain([user]));
     userModel.countDocuments.mockReturnValue(chain(1));
-    attemptModel.aggregate.mockReturnValue(chain([{ _id: 'u1', count: -2 }]));
+    attemptModel.aggregate.mockReturnValue(
+      chain([
+        {
+          _id: 'u1',
+          fullExamFinished: -2,
+          fullExamOpen: Number.NaN,
+          topicWiseFinished: 1.9,
+          topicWiseOpen: 3,
+        },
+      ]),
+    );
 
     const result = await service.listAppUsers();
     expect(result.data[0].isActive).toBe(false);
-    expect(result.data[0].testsAttendedCount).toBe(0);
+    expect(result.data[0].testActivity).toEqual({
+      fullExam: { finished: 0, open: 0 },
+      topicWise: { finished: 1, open: 3 },
+    });
+    expect(result.data[0].testsAttendedCount).toBe(4);
   });
 
   it('drops a document whose toObject reports an admin role', async () => {
@@ -350,15 +383,21 @@ describe('AdminUsersService', () => {
 
     await service.listAppUsers();
 
-    expect(attemptModel.aggregate).toHaveBeenCalledWith([
-      { $match: { user: { $in: ['u1'] } } },
-      { $group: { _id: '$user', count: { $sum: 1 } } },
-    ]);
+    expect(attemptModel.aggregate).toHaveBeenCalledWith(
+      buildAttemptActivityPipeline(['u1' as any]),
+    );
   });
 
   it('refuses to map an admin document even if toListItem is called directly', () => {
     const admin = learnerDoc({ role: UserRole.ADMIN, name: 'Root' });
-    expect((service as any).toListItem(admin, 9)).toBeNull();
+    expect(
+      (service as any).toListItem(admin, {
+        fullExamFinished: 9,
+        fullExamOpen: 0,
+        topicWiseFinished: 0,
+        topicWiseOpen: 0,
+      }),
+    ).toBeNull();
   });
 
   it('falls back to empty name and email when those fields are missing', async () => {
