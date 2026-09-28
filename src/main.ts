@@ -122,6 +122,10 @@ async function bootstrap() {
         'current-affairs',
         'Daily current affairs: one document per item, grouped by calendar date (YYYY-MM-DD). Admin CRUD; public GET for the user app.',
       )
+      .addTag(
+        'instance-config',
+        'Singleton display settings for this deployment (name, logo, favicon). Admin only. Read returns null until the document is created.',
+      )
       .addTag('tests', 'Test management endpoints (coming soon)')
       .addBearerAuth(
         {

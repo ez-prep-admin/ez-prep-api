@@ -23,6 +23,7 @@ import { AdminUsersModule } from './admin-users/admin-users.module';
 import { SearchModule } from './search/search.module';
 import { ImportModule } from './imports/import.module';
 import { CurrentAffairsModule } from './current-affairs/current-affairs.module';
+import { InstanceConfigModule } from './instance-config/instance-config.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { RedisModule } from './redis/redis.module';
@@ -106,6 +107,7 @@ const observeRootModule = createObserveRootModule();
     SearchModule,
     ImportModule,
     CurrentAffairsModule,
+    InstanceConfigModule,
   ],
   controllers: [AppController],
   providers: [
