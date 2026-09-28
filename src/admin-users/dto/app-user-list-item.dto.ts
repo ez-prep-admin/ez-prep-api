@@ -35,6 +35,36 @@ export class AppUserTargetExamDto {
   name: string;
 }
 
+export class AttemptStatusCountsDto {
+  @ApiProperty({
+    example: 2,
+    description: 'Attempts with status SUBMITTED or EXPIRED',
+  })
+  finished: number;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Attempts that are still started, in progress, or paused (any status other than SUBMITTED or EXPIRED)',
+  })
+  open: number;
+}
+
+export class AppUserTestActivityDto {
+  @ApiProperty({
+    type: AttemptStatusCountsDto,
+    description: 'Attempts on papers with paperType FULL_EXAM',
+  })
+  fullExam: AttemptStatusCountsDto;
+
+  @ApiProperty({
+    type: AttemptStatusCountsDto,
+    description:
+      'Attempts on topic-wise papers. Missing or unknown paperType counts here.',
+  })
+  topicWise: AttemptStatusCountsDto;
+}
+
 /**
  * Learner card payload for the admin users directory.
  * Intentionally omits admin-only fields (username, passwordHash) and
@@ -95,9 +125,13 @@ export class AppUserListItemDto {
 
   @ApiProperty({
     example: 3,
-    description: 'Documents in mocktestattempts for this user',
+    description:
+      'All mock-test attempts for this user. Equal to the sum of testActivity buckets.',
   })
   testsAttendedCount: number;
+
+  @ApiProperty({ type: AppUserTestActivityDto })
+  testActivity: AppUserTestActivityDto;
 
   @ApiProperty()
   createdAt: Date;

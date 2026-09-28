@@ -10,6 +10,13 @@ import {
 } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
+  AttemptActivityCounts,
+  buildAttemptActivityPipeline,
+  EMPTY_ATTEMPT_ACTIVITY,
+  normalizeAttemptActivity,
+  totalAttempts,
+} from './admin-users.attempt-counts';
+import {
   APP_USER_ROLE,
   buildAppUserFilter,
   clampLimit,
@@ -58,7 +65,10 @@ export class AdminUsersService {
 
     const data = learners
       .map(user =>
-        this.toListItem(user, attemptCounts.get(String(user._id)) ?? 0),
+        this.toListItem(
+          user,
+          attemptCounts.get(String(user._id)) ?? EMPTY_ATTEMPT_ACTIVITY,
+        ),
       )
       .filter((item): item is AppUserListItemDto => item !== null);
 
@@ -77,31 +87,29 @@ export class AdminUsersService {
 
   private async countAttemptsByUser(
     userIds: Types.ObjectId[],
-  ): Promise<Map<string, number>> {
-    const counts = new Map<string, number>();
+  ): Promise<Map<string, AttemptActivityCounts>> {
+    const counts = new Map<string, AttemptActivityCounts>();
     if (userIds.length === 0) {
       return counts;
     }
 
     const rows = await this.attemptModel
-      .aggregate<{
-        _id: Types.ObjectId;
-        count: number;
-      }>([
-        { $match: { user: { $in: userIds } } },
-        { $group: { _id: '$user', count: { $sum: 1 } } },
-      ])
+      .aggregate<
+        AttemptActivityCounts & {
+          _id: Types.ObjectId;
+        }
+      >(buildAttemptActivityPipeline(userIds))
       .exec();
 
     for (const row of rows) {
-      counts.set(String(row._id), row.count);
+      counts.set(String(row._id), normalizeAttemptActivity(row));
     }
     return counts;
   }
 
   private toListItem(
     user: UserDocument,
-    testsAttendedCount: number,
+    activity: AttemptActivityCounts,
   ): AppUserListItemDto | null {
     if (!isAppUserRole(user.role)) {
       return null;
@@ -139,6 +147,7 @@ export class AdminUsersService {
     const subscription = obj.subscription as
       | { plan?: SubscriptionPlan; status?: SubscriptionStatus }
       | undefined;
+    const counts = normalizeAttemptActivity(activity);
 
     return {
       id: String(obj.id ?? user._id),
@@ -159,7 +168,17 @@ export class AdminUsersService {
       badgesEarnedCount:
         typeof obj.badgesEarnedCount === 'number' ? obj.badgesEarnedCount : 0,
       targetExam,
-      testsAttendedCount: Math.max(0, testsAttendedCount),
+      testsAttendedCount: totalAttempts(counts),
+      testActivity: {
+        fullExam: {
+          finished: counts.fullExamFinished,
+          open: counts.fullExamOpen,
+        },
+        topicWise: {
+          finished: counts.topicWiseFinished,
+          open: counts.topicWiseOpen,
+        },
+      },
       createdAt: (obj.createdAt as Date) ?? new Date(0),
       updatedAt: (obj.updatedAt as Date) ?? new Date(0),
     };
