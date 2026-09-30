@@ -1,3 +1,4 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
@@ -59,7 +60,7 @@ function learnerDoc(overrides: Record<string, unknown> = {}) {
   };
   return {
     ...payload,
-    toObject: jest.fn().mockReturnValue({ ...payload }),
+    toObject: jest.fn(() => ({ ...payload })) as jest.Mock,
   };
 }
 
@@ -67,6 +68,7 @@ describe('AdminUsersService', () => {
   let service: AdminUsersService;
   const userModel: any = {
     find: jest.fn(),
+    findOne: jest.fn(),
     countDocuments: jest.fn(),
   };
   const attemptModel: any = {
@@ -433,5 +435,275 @@ describe('AdminUsersService', () => {
     expect(payload).not.toContain('+919876543210');
     expect(payload).not.toContain('9876543210');
     expect(payload).toContain('gmail.com');
+  });
+});
+
+describe('AdminUsersService.getAppUserDetails', () => {
+  let service: AdminUsersService;
+  const userModel: any = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    countDocuments: jest.fn(),
+  };
+  const attemptModel: any = {
+    aggregate: jest.fn(),
+  };
+  const learnerId = '507f1f77bcf86cd799439011';
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AdminUsersService,
+        { provide: getModelToken(User.name), useValue: userModel },
+        {
+          provide: getModelToken(MockTestAttempt.name),
+          useValue: attemptModel,
+        },
+      ],
+    }).compile();
+
+    service = module.get(AdminUsersService);
+    jest.clearAllMocks();
+  });
+
+  function detailUser(overrides: Record<string, unknown> = {}) {
+    return learnerDoc({
+      id: learnerId,
+      _id: learnerId,
+      bio: '  Prelims this year  ',
+      dateOfBirth: new Date('1998-04-05T00:00:00.000Z'),
+      targetExamDate: new Date('2026-05-24T00:00:00.000Z'),
+      targetExam: { id: 'exam1', name: 'UPSC' },
+      preferences: {
+        studyTime: 'morning',
+        weeklyStudyGoalHours: 12,
+        notifications: { email: false, promotionalOffers: true },
+      },
+      subscription: {
+        plan: SubscriptionPlan.PREMIUM,
+        status: SubscriptionStatus.ACTIVE,
+        startedAt: new Date('2026-01-01T00:00:00.000Z'),
+        autoRenew: true,
+      },
+      interactions: { likedTopics: ['secret-topic'] },
+      googleSub: 'google-sub',
+      ...overrides,
+    });
+  }
+
+  function performanceAggregate() {
+    const topicAttempt = {
+      _id: 'attempt-1',
+      mockTest: 'paper-1',
+      testTitle: 'Polity set',
+      paperType: 'TOPIC_WISE',
+      status: 'SUBMITTED',
+      score: 40,
+      totalMarks: 100,
+      correct: 8,
+      incorrect: 2,
+      unanswered: 0,
+      totalQuestions: 10,
+      passingScore: 35,
+      examName: 'UPSC',
+      subjectName: 'Polity',
+      topicName: 'Constitution',
+      timeConsumed: 600,
+      durationInMinutes: 20,
+      startedAt: new Date('2026-03-01T10:00:00.000Z'),
+      submittedAt: new Date('2026-03-01T10:20:00.000Z'),
+    };
+    return {
+      recentTopicWise: [topicAttempt],
+      recentFullExam: [],
+      recentOverall: [topicAttempt],
+      stats: [
+        {
+          _id: 'TOPIC_WISE',
+          finishedCount: 1,
+          totalScore: 40,
+          totalMarks: 100,
+          percentageSum: 40,
+          percentageCount: 1,
+          bestPercentage: 40,
+          correct: 8,
+          incorrect: 2,
+          unanswered: 0,
+          passedCount: 1,
+          gradedCount: 1,
+        },
+      ],
+    };
+  }
+
+  function mockAggregates(
+    performance: unknown = performanceAggregate(),
+    activity: unknown = {
+      _id: learnerId,
+      fullExamFinished: 1,
+      fullExamOpen: 2,
+      topicWiseFinished: 3,
+      topicWiseOpen: 0,
+    },
+  ) {
+    attemptModel.aggregate.mockImplementation((pipeline: unknown) => {
+      const text = JSON.stringify(pipeline);
+      if (text.includes('fullExamFinished')) {
+        return chain(activity == null ? [] : [activity]);
+      }
+      return chain(performance == null ? [] : [performance]);
+    });
+  }
+
+  it('rejects an invalid id before querying', async () => {
+    await expect(service.getAppUserDetails('not-an-id')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(userModel.findOne).not.toHaveBeenCalled();
+    expect(attemptModel.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal admins or missing learners', async () => {
+    userModel.findOne.mockReturnValue(chain(null));
+
+    await expect(service.getAppUserDetails(learnerId)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(userModel.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: UserRole.USER,
+        isDeleted: { $ne: true },
+      }),
+    );
+    expect(JSON.stringify(userModel.findOne.mock.calls[0][0])).not.toContain(
+      '"role":"admin"',
+    );
+    expect(attemptModel.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('treats an admin document as not found', async () => {
+    userModel.findOne.mockReturnValue(
+      chain(detailUser({ role: UserRole.ADMIN, name: 'Root Admin' })),
+    );
+
+    await expect(service.getAppUserDetails(learnerId)).rejects.toThrow(
+      'Learner not found',
+    );
+    expect(attemptModel.aggregate).not.toHaveBeenCalled();
+  });
+
+  it('returns masked profile details, recent finished attempts, and analysis', async () => {
+    const user = detailUser();
+    const findChain = chain(user);
+    userModel.findOne.mockReturnValue(findChain);
+    mockAggregates();
+
+    const result = await service.getAppUserDetails(learnerId);
+    const payload = JSON.stringify(result);
+
+    expect(findChain.populate).toHaveBeenCalledWith('targetExam', 'name');
+    expect(result.profile).toMatchObject({
+      id: learnerId,
+      name: 'Anita Sharma',
+      email: 'a***@example.com',
+      phoneNumber: '+91**********',
+      role: APP_USER_ROLE,
+      bio: 'Prelims this year',
+      targetExam: { id: 'exam1', name: 'UPSC' },
+      testsAttendedCount: 6,
+      testActivity: {
+        fullExam: { finished: 1, open: 2 },
+        topicWise: { finished: 3, open: 0 },
+      },
+      subscription: {
+        plan: SubscriptionPlan.PREMIUM,
+        status: SubscriptionStatus.ACTIVE,
+        autoRenew: true,
+      },
+      study: { studyTime: 'morning', weeklyStudyGoalHours: 12 },
+    });
+    expect(result.profile.dateOfBirth).toEqual(
+      new Date('1998-04-05T00:00:00.000Z'),
+    );
+    expect(result.recentTopicWiseAttempts).toHaveLength(1);
+    expect(result.recentTopicWiseAttempts[0]).toMatchObject({
+      id: 'attempt-1',
+      title: 'Polity set',
+      score: 40,
+      totalMarks: 100,
+      percentage: 40,
+      passed: true,
+      topicName: 'Constitution',
+    });
+    expect(result.recentFullExamAttempts).toEqual([]);
+    expect(result.analysis.topicWise).toMatchObject({
+      finishedCount: 1,
+      percentage: 40,
+      accuracy: 80,
+      passedCount: 1,
+      gradedCount: 1,
+      trend: 'insufficient',
+    });
+    expect(result.analysis.fullExam.finishedCount).toBe(0);
+    expect(result.analysis.overall.finishedCount).toBe(1);
+    expect(payload).not.toContain('anita@example.com');
+    expect(payload).not.toContain('+919876543210');
+    expect(payload).not.toContain('secret');
+    expect(payload).not.toContain('google-sub');
+    expect(payload).not.toContain('should-not-leak');
+    expect(payload).not.toContain('promotionalOffers');
+    expect(result.profile).not.toHaveProperty('passwordHash');
+    expect(result.profile).not.toHaveProperty('username');
+    expect(result.profile).not.toHaveProperty('interactions');
+  });
+
+  it('returns empty attempt lists when the learner has not finished a test', async () => {
+    userModel.findOne.mockReturnValue(chain(detailUser({ bio: '   ' })));
+    mockAggregates(null, null);
+
+    const result = await service.getAppUserDetails(learnerId);
+
+    expect(result.profile.bio).toBeUndefined();
+    expect(result.recentTopicWiseAttempts).toEqual([]);
+    expect(result.recentFullExamAttempts).toEqual([]);
+    expect(result.analysis.overall).toMatchObject({
+      finishedCount: 0,
+      percentage: null,
+      trend: 'insufficient',
+    });
+    expect(result.profile.testsAttendedCount).toBe(0);
+  });
+
+  it('omits study preferences that are not usable', async () => {
+    userModel.findOne.mockReturnValue(
+      chain(
+        detailUser({
+          preferences: { studyTime: 'whenever', weeklyStudyGoalHours: 0 },
+        }),
+      ),
+    );
+    mockAggregates(null, null);
+
+    const result = await service.getAppUserDetails(learnerId);
+
+    expect(result.profile.study).toBeUndefined();
+  });
+
+  it('does not return a learner whose serialized role is admin', async () => {
+    const user = detailUser();
+    user.toObject.mockReturnValue({
+      id: learnerId,
+      _id: learnerId,
+      name: 'Sneaky',
+      email: 'sneaky@example.com',
+      role: UserRole.ADMIN,
+      passwordHash: 'secret',
+    });
+    userModel.findOne.mockReturnValue(chain(user));
+    mockAggregates();
+
+    await expect(service.getAppUserDetails(learnerId)).rejects.toThrow(
+      'Learner not found',
+    );
   });
 });

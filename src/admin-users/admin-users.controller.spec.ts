@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminUsersService } from './admin-users.service';
@@ -10,6 +11,7 @@ describe('AdminUsersController', () => {
   let controller: AdminUsersController;
   const adminUsersService = {
     listAppUsers: jest.fn(),
+    getAppUserDetails: jest.fn(),
   };
 
   const pagination = {
@@ -87,5 +89,35 @@ describe('AdminUsersController', () => {
 
     const result = await controller.list(1, 12);
     expect(result.data.every(item => item.role === UserRole.USER)).toBe(true);
+  });
+
+  it('wraps one learner detail from the service', async () => {
+    const detail = {
+      profile: learner,
+      recentTopicWiseAttempts: [],
+      recentFullExamAttempts: [],
+      analysis: {},
+    };
+    adminUsersService.getAppUserDetails.mockResolvedValue(detail);
+
+    await expect(
+      controller.getOne('507f1f77bcf86cd799439011'),
+    ).resolves.toEqual({
+      message: 'App user retrieved successfully',
+      data: detail,
+    });
+    expect(adminUsersService.getAppUserDetails).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439011',
+    );
+  });
+
+  it('leaves missing learners to the service', async () => {
+    adminUsersService.getAppUserDetails.mockRejectedValue(
+      new NotFoundException('Learner not found'),
+    );
+
+    await expect(controller.getOne('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
