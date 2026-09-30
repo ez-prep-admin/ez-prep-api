@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   ParseIntPipe,
   Query,
   UseGuards,
@@ -11,8 +12,10 @@ import {
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -22,6 +25,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { AdminUsersService } from './admin-users.service';
+import { AppUserDetailApiResponseDto } from './dto/app-user-detail.dto';
 import { AppUsersListApiResponseDto } from './dto/paginated-app-users-response.dto';
 
 @ApiTags('admin-users')
@@ -72,6 +76,29 @@ export class AdminUsersController {
       message: 'App users retrieved successfully',
       data: result.data,
       pagination: result.pagination,
+    };
+  }
+
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Get one app learner with performance (Admin only)',
+    description:
+      'Profile for a student account (`role=user` only). Admin accounts and unknown ids are not found. ' +
+      'Email and phone number are masked. ' +
+      '`recentTopicWiseAttempts` and `recentFullExamAttempts` are the newest finished attempts ' +
+      '(`SUBMITTED` or `EXPIRED`), at most five each. A shorter list is returned when fewer finished attempts exist. ' +
+      'Started, in-progress, and paused attempts are counted on `profile.testActivity` and are not scored. ' +
+      '`analysis` covers every finished attempt: marks obtained out of marks available, accuracy, pass rate, and recent form.',
+  })
+  @ApiParam({ name: 'id', description: 'Learner user id' })
+  @ApiOkResponse({ type: AppUserDetailApiResponseDto })
+  @ApiNotFoundResponse({ description: 'Learner not found' })
+  async getOne(@Param('id') id: string): Promise<AppUserDetailApiResponseDto> {
+    const data = await this.adminUsersService.getAppUserDetails(id);
+    return {
+      message: 'App user retrieved successfully',
+      data,
     };
   }
 }

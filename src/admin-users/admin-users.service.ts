@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
+import { StudyTimePreference } from '../common/enums/study-time-preference.enum';
 import { SubscriptionPlan } from '../common/enums/subscription-plan.enum';
 import { SubscriptionStatus } from '../common/enums/subscription-status.enum';
 import {
@@ -26,6 +31,15 @@ import {
   maskEmail,
   maskPhoneNumber,
 } from './admin-users.guardrails';
+import {
+  buildUserPerformancePipeline,
+  mapUserPerformance,
+  UserPerformanceAggregate,
+} from './admin-users.performance';
+import {
+  AppUserDetailDto,
+  AppUserDetailProfileDto,
+} from './dto/app-user-detail.dto';
 import { AppUserListItemDto } from './dto/app-user-list-item.dto';
 import { PaginatedAppUsersResponseDto } from './dto/paginated-app-users-response.dto';
 
@@ -83,6 +97,64 @@ export class AdminUsersService {
     };
 
     return { data, pagination };
+  }
+
+  /**
+   * Learner profile plus finished-attempt performance for the admin detail page.
+   * Admins and unknown ids are not found. Open attempts stay in `testActivity`
+   * only; the recent lists and analysis use finished attempts.
+   */
+  async getAppUserDetails(id: string): Promise<AppUserDetailDto> {
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
+    let userId: Types.ObjectId;
+    try {
+      userId = new Types.ObjectId(id);
+    } catch {
+      throw new BadRequestException('Invalid user ID format');
+    }
+
+    const user = await this.userModel
+      .findOne({
+        ...buildAppUserFilter(),
+        _id: userId,
+      })
+      .populate('targetExam', 'name')
+      .exec();
+
+    if (!user || !isAppUserRole(user.role)) {
+      throw new NotFoundException('Learner not found');
+    }
+
+    const learnerId = user._id as Types.ObjectId;
+    const [attemptCounts, performanceRows] = await Promise.all([
+      this.countAttemptsByUser([learnerId]),
+      this.attemptModel
+        .aggregate<UserPerformanceAggregate>(
+          buildUserPerformancePipeline(learnerId),
+        )
+        .exec(),
+    ]);
+
+    const activity =
+      attemptCounts.get(String(user._id)) ?? EMPTY_ATTEMPT_ACTIVITY;
+    const listItem = this.toListItem(user, activity);
+    if (!listItem) {
+      throw new NotFoundException('Learner not found');
+    }
+
+    const performance = mapUserPerformance(
+      Array.isArray(performanceRows) ? performanceRows[0] : undefined,
+    );
+
+    return {
+      profile: this.toDetailProfile(user, listItem),
+      recentTopicWiseAttempts: performance.recentTopicWiseAttempts,
+      recentFullExamAttempts: performance.recentFullExamAttempts,
+      analysis: performance.analysis,
+    };
   }
 
   private async countAttemptsByUser(
@@ -183,4 +255,100 @@ export class AdminUsersService {
       updatedAt: (obj.updatedAt as Date) ?? new Date(0),
     };
   }
+
+  private toDetailProfile(
+    user: UserDocument,
+    listItem: AppUserListItemDto,
+  ): AppUserDetailProfileDto {
+    const obj = user.toObject() as Record<string, unknown>;
+    const subscription = (obj.subscription ?? {}) as Record<string, unknown>;
+    const preferences = (obj.preferences ?? {}) as Record<string, unknown>;
+    const study = studyPreference(preferences);
+    const profile: AppUserDetailProfileDto = {
+      ...listItem,
+      subscription: {
+        plan: listItem.subscription?.plan ?? SubscriptionPlan.FREE,
+        status: listItem.subscription?.status ?? SubscriptionStatus.ACTIVE,
+        startedAt: asOptionalDate(subscription.startedAt),
+        expiresAt: asOptionalDate(subscription.expiresAt),
+        trialEndsAt: asOptionalDate(subscription.trialEndsAt),
+        ...(typeof subscription.autoRenew === 'boolean'
+          ? { autoRenew: subscription.autoRenew }
+          : {}),
+      },
+    };
+
+    const bio = asOptionalString(obj.bio);
+    const dateOfBirth = asOptionalDate(obj.dateOfBirth);
+    const targetExamDate = asOptionalDate(obj.targetExamDate);
+    const lastTierUpdatedAt = asOptionalDate(obj.lastTierUpdatedAt);
+    if (bio) {
+      profile.bio = bio;
+    }
+    if (dateOfBirth) {
+      profile.dateOfBirth = dateOfBirth;
+    }
+    if (targetExamDate) {
+      profile.targetExamDate = targetExamDate;
+    }
+    if (lastTierUpdatedAt) {
+      profile.lastTierUpdatedAt = lastTierUpdatedAt;
+    }
+    if (study) {
+      profile.study = study;
+    }
+    return profile;
+  }
+}
+
+const STUDY_TIMES = new Set<string>(Object.values(StudyTimePreference));
+
+function asOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function asOptionalDate(value: unknown): Date | undefined {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return date;
+    }
+  }
+  return undefined;
+}
+
+function asStudyHours(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const hours = Math.trunc(value);
+  if (hours < 1 || hours > 100) {
+    return undefined;
+  }
+  return hours;
+}
+
+function studyPreference(
+  preferences: Record<string, unknown>,
+): AppUserDetailProfileDto['study'] {
+  const studyTime = asOptionalString(preferences.studyTime);
+  const weeklyStudyGoalHours = asStudyHours(preferences.weeklyStudyGoalHours);
+  const knownStudyTime =
+    studyTime && STUDY_TIMES.has(studyTime)
+      ? (studyTime as StudyTimePreference)
+      : undefined;
+  if (!knownStudyTime && weeklyStudyGoalHours == null) {
+    return undefined;
+  }
+  return {
+    ...(knownStudyTime ? { studyTime: knownStudyTime } : {}),
+    ...(weeklyStudyGoalHours != null ? { weeklyStudyGoalHours } : {}),
+  };
 }
