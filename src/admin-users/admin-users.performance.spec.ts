@@ -69,10 +69,10 @@ describe('buildUserPerformancePipeline', () => {
       { $limit: RECENT_FINISHED_ATTEMPT_LIMIT },
     ]);
     expect(RECENT_FINISHED_ATTEMPT_LIMIT).toBe(5);
-    expect(serialized.match(/"\$limit":5/g)).toHaveLength(3);
+    expect(serialized.match(/"\$limit":5/g)).toHaveLength(4);
   });
 
-  it('reads paper type and related names, and keeps unknown papers topic-wise', () => {
+  it('reads paper type and related names, and matches each paper type exactly', () => {
     expect(serialized).toContain('"from":"mocktests"');
     expect(serialized).toContain('"from":"exams"');
     expect(serialized).toContain('"from":"subjects"');
@@ -141,6 +141,9 @@ describe('mapFinishedAttempt', () => {
     expect(mapFinishedAttempt(attempt({ _id: '' }))).toBeNull();
     expect(
       mapFinishedAttempt(attempt({ _id: undefined, status: 'SUBMITTED' })),
+    ).toBeNull();
+    expect(
+      mapFinishedAttempt(attempt({ paperType: 'UNKNOWN' as 'TOPIC_WISE' })),
     ).toBeNull();
   });
 
@@ -259,6 +262,71 @@ describe('mapUserPerformance', () => {
     });
     expect(mapped.analysis.fullExam.finishedCount).toBe(0);
     expect(mapped.analysis.overall.finishedCount).toBe(6);
+  });
+
+  it('adds sprint marks into the overall total', () => {
+    const mapped = mapUserPerformance({
+      recentTopicWise: [],
+      recentFullExam: [],
+      recentSprint: [
+        attempt({
+          _id: 's1',
+          paperType: 'SPRINT',
+          score: 8,
+          totalMarks: 10,
+        }),
+      ],
+      recentOverall: [
+        attempt({
+          _id: 's1',
+          paperType: 'SPRINT',
+          score: 8,
+          totalMarks: 10,
+        }),
+      ],
+      stats: [
+        {
+          _id: 'TOPIC_WISE',
+          finishedCount: 1,
+          totalScore: 4,
+          totalMarks: 10,
+          percentageSum: 40,
+          percentageCount: 1,
+          bestPercentage: 40,
+          correct: 4,
+          incorrect: 1,
+          unanswered: 0,
+          passedCount: 0,
+          gradedCount: 0,
+        },
+        {
+          _id: 'SPRINT',
+          finishedCount: 2,
+          totalScore: 16,
+          totalMarks: 20,
+          percentageSum: 80,
+          percentageCount: 2,
+          bestPercentage: 80,
+          correct: 16,
+          incorrect: 2,
+          unanswered: 0,
+          passedCount: 0,
+          gradedCount: 0,
+        },
+      ],
+    });
+
+    expect(mapped.recentSprintAttempts).toHaveLength(1);
+    expect(mapped.analysis.sprint).toMatchObject({
+      finishedCount: 2,
+      score: 16,
+      totalMarks: 20,
+    });
+    expect(mapped.analysis.overall).toMatchObject({
+      finishedCount: 3,
+      score: 20,
+      totalMarks: 30,
+    });
   });
 
   it('analyses full mocks separately and still returns a short list', () => {

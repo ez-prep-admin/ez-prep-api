@@ -153,6 +153,7 @@ export class AdminUsersService {
       profile: this.toDetailProfile(user, listItem),
       recentTopicWiseAttempts: performance.recentTopicWiseAttempts,
       recentFullExamAttempts: performance.recentFullExamAttempts,
+      recentSprintAttempts: performance.recentSprintAttempts,
       analysis: performance.analysis,
     };
   }
@@ -249,6 +250,10 @@ export class AdminUsersService {
         topicWise: {
           finished: counts.topicWiseFinished,
           open: counts.topicWiseOpen,
+        },
+        sprint: {
+          finished: counts.sprintFinished,
+          open: counts.sprintOpen,
         },
       },
       createdAt: (obj.createdAt as Date) ?? new Date(0),

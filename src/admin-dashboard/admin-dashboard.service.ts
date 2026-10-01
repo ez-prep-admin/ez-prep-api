@@ -21,6 +21,10 @@ import {
   FullMockTestDraftDocument,
 } from '../full-mock-tests/schemas/full-mock-test-draft.schema';
 import {
+  SprintTestDraft,
+  SprintTestDraftDocument,
+} from '../sprint-tests/schemas/sprint-test-draft.schema';
+import {
   MockTestAttempt,
   MockTestAttemptDocument,
 } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
@@ -37,6 +41,7 @@ import {
   AdminDashboardMockTestsDto,
   AdminDashboardQuestionsDto,
   AdminDashboardSubjectsDto,
+  AdminDashboardSprintTestsDto,
   AdminDashboardSummaryDto,
   AdminDashboardTagsDto,
   AdminDashboardTopicsDto,
@@ -72,6 +77,8 @@ export class AdminDashboardService {
     private readonly mockTestModel: Model<MockTestDocument>,
     @InjectModel(FullMockTestDraft.name)
     private readonly draftModel: Model<FullMockTestDraftDocument>,
+    @InjectModel(SprintTestDraft.name)
+    private readonly sprintDraftModel: Model<SprintTestDraftDocument>,
     @InjectModel(MockTestAttempt.name)
     private readonly attemptModel: Model<MockTestAttemptDocument>,
     @InjectModel(Exam.name) private readonly examModel: Model<ExamDocument>,
@@ -88,6 +95,7 @@ export class AdminDashboardService {
       failedQuestions,
       mockTests,
       fullMockTests,
+      sprintTests,
       attempts,
       exams,
       subjects,
@@ -105,6 +113,10 @@ export class AdminDashboardService {
         paperType: PaperType.FULL_EXAM,
         ...NOT_DELETED,
       }),
+      this.mockTestModel.countDocuments({
+        paperType: PaperType.SPRINT,
+        ...NOT_DELETED,
+      }),
       this.attemptModel.countDocuments({}),
       this.examModel.countDocuments(ACTIVE),
       this.subjectModel.countDocuments(ACTIVE),
@@ -118,6 +130,7 @@ export class AdminDashboardService {
       failedQuestions,
       mockTests,
       fullMockTests,
+      sprintTests,
       attempts,
       exams,
       subjects,
@@ -264,6 +277,32 @@ export class AdminDashboardService {
       this.mockTestModel.countDocuments(match),
       this.groupByExam(this.mockTestModel, match),
       this.draftModel.aggregate<{ _id: string; count: number }>([
+        {
+          $group: {
+            _id: { $ifNull: ['$status', 'unknown'] },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { count: -1 } },
+      ]),
+    ]);
+
+    return {
+      totalPublished,
+      byExam,
+      draftsByStatus: draftsByStatus.map(row => ({
+        name: row._id || 'unknown',
+        count: row.count,
+      })),
+    };
+  }
+
+  async getSprintTests(): Promise<AdminDashboardSprintTestsDto> {
+    const match = { paperType: PaperType.SPRINT, ...NOT_DELETED };
+    const [totalPublished, byExam, draftsByStatus] = await Promise.all([
+      this.mockTestModel.countDocuments(match),
+      this.groupByExam(this.mockTestModel, match),
+      this.sprintDraftModel.aggregate<{ _id: string; count: number }>([
         {
           $group: {
             _id: { $ifNull: ['$status', 'unknown'] },

@@ -26,10 +26,13 @@ import {
 } from './dto/paginated-mock-tests-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
-import { PaperType } from '../common/enums/paper-type.enum';
+import {
+  PaperType,
+  TOPIC_WISE_PAPER_MATCH,
+} from '../common/enums/paper-type.enum';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
-  paperType: { $ne: PaperType.FULL_EXAM },
+  ...TOPIC_WISE_PAPER_MATCH,
   isDeleted: { $ne: true },
 };
 

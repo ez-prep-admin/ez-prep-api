@@ -45,7 +45,7 @@ export class MockTestsController {
     summary: 'Get all mock tests with pagination and search',
     description: `
     Retrieves a paginated list of **topic-wise** mock tests (\`paperType: TOPIC_WISE\`).
-    Full-exam papers are excluded — use \`GET /full-mock-tests\` for those.
+    Sprint papers and full-exam papers are excluded — use \`GET /sprint-tests\` and \`GET /full-mock-tests\`.
 
     Each row includes \`userAttemptAction\` (\`START\` | \`RESUME\` | \`RETAKE\`).
     Take the test with \`POST /mock-test-attempts/start\` (or resume if RESUME).
@@ -141,7 +141,7 @@ export class MockTestsController {
     - Distribution by generation mode (STATIC/DYNAMIC)
     - Total questions by difficulty level across all tests
     
-    Full-exam papers are excluded. Requires admin privileges.
+    Full-exam and sprint papers are excluded. Requires admin privileges.
     `,
   })
   @ApiResponse({
@@ -196,7 +196,7 @@ export class MockTestsController {
     summary: 'Get active mock tests only',
     description: `
     Retrieves only active **topic-wise** mock tests with pagination.
-    Full-exam papers are excluded. Sorted by newest first.
+    Full-exam and sprint papers are excluded. Sorted by newest first.
     `,
   })
   @ApiQuery({
@@ -246,7 +246,8 @@ export class MockTestsController {
     summary: 'Get mock tests by exam',
     description: `
     Retrieves **topic-wise** mock tests filtered by exam ID with pagination.
-    Full-exam papers for this exam are **not** included (see \`GET /full-mock-tests?examId=\`).
+    Full-exam and sprint papers for this exam are **not** included
+    (see \`GET /full-mock-tests?examId=\` and \`GET /sprint-tests?examId=\`).
     
     Returns populated exam, subject, and topic details (excludes questionIds and difficultyDistribution).
     
@@ -327,7 +328,7 @@ export class MockTestsController {
     summary: 'Get mock tests by subject',
     description: `
     Retrieves **topic-wise** mock tests filtered by subject ID with pagination.
-    Full-exam papers (multi-subject) are excluded.
+    Full-exam and sprint papers are excluded.
     `,
   })
   @ApiParam({
@@ -384,7 +385,7 @@ export class MockTestsController {
     summary: 'Get mock tests by exam and subject',
     description: `
     Retrieves **topic-wise** mock tests filtered by both exam and subject ID with pagination.
-    Useful for showing subject-specific topic papers within an exam. Full-exam papers are excluded.
+    Useful for showing subject-specific topic papers within an exam. Full-exam and sprint papers are excluded.
     `,
   })
   @ApiParam({
@@ -448,8 +449,9 @@ export class MockTestsController {
     summary: 'Get a single mock test by ID',
     description: `
     Retrieves detailed information about a specific **topic-wise** mock test.
-    Returns 404 if the mock test doesn't exist, was soft-deleted, or is a \`FULL_EXAM\` paper
-    (use \`GET /full-mock-tests/:id\` for those).
+    Returns 404 if the mock test doesn't exist, was soft-deleted, is a \`SPRINT\` paper
+    (use \`GET /sprint-tests/:id\`), or is a \`FULL_EXAM\` paper
+    (use \`GET /full-mock-tests/:id\`).
     `,
   })
   @ApiParam({

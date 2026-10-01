@@ -38,6 +38,13 @@ import { DraftListItemDto } from './dto/draft-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { SearchQuestionItemDto } from './dto/search-question-item.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import {
+  assertDraftEditable,
+  assertIncomingEligible,
+  assertQuestionId,
+  assertReplacementRules,
+  duplicateQuestionSummary,
+} from '../common/papers/question-replacement';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
@@ -378,71 +385,26 @@ export class FullMockTestsService {
     allowCrossSubject = false,
   ): Promise<DraftResponseDto> {
     const draft = await this.loadDraft(draftId);
-    if (draft.status !== 'REVIEW') {
-      throw new BadRequestException({
-        message: 'Draft is not editable',
-        error: 'DRAFT_NOT_EDITABLE',
-      });
-    }
+    assertDraftEditable(draft.status);
 
     const slot = draft.questions.find(q => q.position === position);
     if (!slot) {
       throw new BadRequestException(`No question at position ${position}`);
     }
 
-    if (!Types.ObjectId.isValid(questionId)) {
-      throw new BadRequestException({
-        message: 'Invalid question ID',
-        error: 'QUESTION_NOT_ELIGIBLE',
-      });
-    }
-
+    assertQuestionId(questionId);
     const incoming = await this.questionModel.findById(questionId).exec();
-    if (
-      !incoming ||
-      !incoming.isActive ||
-      !incoming.difficultyLevel ||
-      !['easy', 'medium', 'hard'].includes(incoming.difficultyLevel)
-    ) {
-      throw new BadRequestException({
-        message: 'Question is not eligible',
-        error: 'QUESTION_NOT_ELIGIBLE',
-      });
-    }
-
-    if (
-      !allowCrossSubject &&
-      incoming.subject?.toString() !== slot.subject.toString()
-    ) {
-      throw new BadRequestException({
-        message: 'Replacement question must belong to the same subject',
-        error: 'SUBJECT_MISMATCH',
-      });
-    }
-
-    if (!this.isTaggedToExam(incoming.exams, draft.exam)) {
-      throw new BadRequestException({
-        message: 'Replacement question must be tagged to this exam',
-        error: 'EXAM_MISMATCH',
-      });
-    }
-
-    const existingSlot = draft.questions.find(
-      q =>
-        q.position !== position &&
-        q.question?.toString() === incoming._id.toString(),
-    );
-    if (existingSlot) {
-      throw new BadRequestException({
-        message: `This question is already on the paper at position ${existingSlot.position + 1}`,
-        error: 'DUPLICATE_QUESTION',
-        details: {
-          questionId: incoming._id.toString(),
-          existingPosition: existingSlot.position,
-          attemptedPosition: position,
-        },
-      });
-    }
+    assertIncomingEligible(incoming);
+    assertReplacementRules({
+      slotSubjectId: slot.subject.toString(),
+      incomingSubjectId: incoming.subject?.toString(),
+      incomingQuestionId: incoming._id.toString(),
+      draftExamId: draft.exam,
+      incomingExams: incoming.exams,
+      allowCrossSubject,
+      questions: draft.questions,
+      position,
+    });
 
     slot.replacedFrom = slot.question;
     slot.question = incoming._id as Types.ObjectId;
@@ -1056,35 +1018,10 @@ export class FullMockTestsService {
     };
   }
 
-  private isTaggedToExam(
-    exams: Array<{ toString(): string }> | undefined,
-    examId: { toString(): string },
-  ): boolean {
-    const target = examId.toString();
-    return (exams || []).some(id => id?.toString() === target);
-  }
-
   private assertNoDuplicateQuestions(
     questions: Array<{ question?: { toString(): string }; position?: number }>,
   ): void {
-    const positionsById = new Map<string, number[]>();
-    questions.forEach((row, index) => {
-      const id = row.question?.toString();
-      if (!id) {
-        return;
-      }
-      const positions = positionsById.get(id) || [];
-      positions.push(row.position ?? index);
-      positionsById.set(id, positions);
-    });
-
-    const duplicates = [...positionsById.entries()]
-      .filter(([, positions]) => positions.length > 1)
-      .map(([questionId, positions]) => ({
-        questionId,
-        positions,
-        displayPositions: positions.map(position => position + 1),
-      }));
+    const duplicates = duplicateQuestionSummary(questions);
 
     if (duplicates.length === 0) {
       return;

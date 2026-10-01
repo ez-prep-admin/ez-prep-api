@@ -219,6 +219,7 @@ describe('AdminUsersService', () => {
     expect(result.data[0].testActivity).toEqual({
       fullExam: { finished: 0, open: 0 },
       topicWise: { finished: 0, open: 0 },
+      sprint: { finished: 0, open: 0 },
     });
   });
 
@@ -342,6 +343,7 @@ describe('AdminUsersService', () => {
     expect(result.data[0].testActivity).toEqual({
       fullExam: { finished: 0, open: 0 },
       topicWise: { finished: 1, open: 3 },
+      sprint: { finished: 0, open: 0 },
     });
     expect(result.data[0].testsAttendedCount).toBe(4);
   });

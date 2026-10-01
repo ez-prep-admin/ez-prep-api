@@ -533,7 +533,7 @@ Students only see active papers. Admins also see inactive ones. \`examId\` is op
   @ApiOperation({
     summary: 'Get one published full mock test',
     description: `
-Returns a single published \`FULL_EXAM\` paper (404 if the id is topic-wise).
+Returns a single published \`FULL_EXAM\` paper (404 if the id is topic-wise or a sprint).
 
 Includes \`userAttemptAction\` / \`resumeAttemptId\` and \`subjectConfig\` (question counts and \`questionIds\` per subject).
 

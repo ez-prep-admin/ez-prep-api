@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { MockTestAttemptsModule } from './mock-test-attempts/mock-test-attempts.module';
 import { FullMockTestsModule } from './full-mock-tests/full-mock-tests.module';
+import { SprintTestsModule } from './sprint-tests/sprint-tests.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ExamsModule } from './exams/exams.module';
 import { ExamGroupsModule } from './exam-groups/exam-groups.module';
@@ -94,6 +95,7 @@ const observeRootModule = createObserveRootModule();
     MockTestsModule,
     MockTestAttemptsModule,
     FullMockTestsModule,
+    SprintTestsModule,
     CategoriesModule,
     ExamsModule,
     ExamGroupsModule,

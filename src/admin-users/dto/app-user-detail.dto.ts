@@ -57,8 +57,8 @@ export class FinishedAttemptSummaryDto {
   @ApiProperty({ example: 'Polity practice set' })
   title: string;
 
-  @ApiProperty({ enum: ['TOPIC_WISE', 'FULL_EXAM'] })
-  paperType: 'TOPIC_WISE' | 'FULL_EXAM';
+  @ApiProperty({ enum: ['TOPIC_WISE', 'FULL_EXAM', 'SPRINT'] })
+  paperType: 'TOPIC_WISE' | 'FULL_EXAM' | 'SPRINT';
 
   @ApiProperty({ enum: ['SUBMITTED', 'EXPIRED'] })
   status: 'SUBMITTED' | 'EXPIRED';
@@ -196,6 +196,9 @@ export class UserPerformanceAnalysisDto {
   fullExam: PaperPerformanceDto;
 
   @ApiProperty({ type: PaperPerformanceDto })
+  sprint: PaperPerformanceDto;
+
+  @ApiProperty({ type: PaperPerformanceDto })
   overall: PaperPerformanceDto;
 }
 
@@ -216,6 +219,13 @@ export class AppUserDetailDto {
       'Newest finished full mock attempts (paperType FULL_EXAM), at most five.',
   })
   recentFullExamAttempts: FinishedAttemptSummaryDto[];
+
+  @ApiProperty({
+    type: [FinishedAttemptSummaryDto],
+    description:
+      'Newest finished sprint attempts (paperType SPRINT), at most five.',
+  })
+  recentSprintAttempts: FinishedAttemptSummaryDto[];
 
   @ApiProperty({ type: UserPerformanceAnalysisDto })
   analysis: UserPerformanceAnalysisDto;
