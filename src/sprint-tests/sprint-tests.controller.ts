@@ -62,16 +62,19 @@ export class SprintTestsController {
     summary:
       'Draft a sprint test from the newest exam-tagged questions (Admin)',
     description: `
-Samples the most recent active questions tagged to the exam (\`createdAt\` descending, \`_id\` as the tie-break).
-Size and duration must be 10, 15, 20, 25, or 30. No subject, topic, or difficulty quota.
-The result is a draft in \`sprinttestdrafts\` with status \`REVIEW\`. Nothing is written to \`mocktests\` until publish.
+When \`questionIds\` is omitted, samples the most recent active questions tagged to the exam (\`createdAt\` descending, \`_id\` as the tie-break).
+When \`questionIds\` is set, those questions are frozen in that order. The array length must equal \`totalQuestions\` (10, 15, 20, 25, or 30). Each question must be active, have a difficulty, have a subject, and be tagged to \`examId\`.
+No subject, topic, or difficulty quota. The result is a draft in \`sprinttestdrafts\` with status \`REVIEW\`. Nothing is written to \`mocktests\` until publish.
 Correct answers and explanations are not returned.
 
-Error codes (400): \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOUND\`.
+Error codes (400): \`BANK_SHORTAGE\` (sampled path), \`QUESTION_COUNT_MISMATCH\`, \`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`, \`EXAM_MISMATCH\`. 404: \`EXAM_NOT_FOUND\`.
     `,
   })
   @ApiCreatedResponse({ type: SprintDraftResponseDto })
-  @ApiBadRequestResponse({ description: 'Invalid size or duration, or not enough eligible questions' })
+  @ApiBadRequestResponse({
+    description:
+      'Invalid size or duration, not enough eligible questions, or hand-picked questions are ineligible',
+  })
   @ApiNotFoundResponse({ description: 'Exam not found or inactive' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
   async createDraft(
@@ -176,7 +179,8 @@ Correct answers and explanations are not returned.
   })
   @ApiOkResponse({ type: SprintSearchQuestionItemDto, isArray: true })
   @ApiBadRequestResponse({
-    description: 'Missing subjectId, allowCrossSubject without draftId, or an invalid id',
+    description:
+      'Missing subjectId, allowCrossSubject without draftId, or an invalid id',
   })
   @ApiForbiddenResponse({ description: 'Admin role required' })
   async searchQuestions(
@@ -286,7 +290,8 @@ Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test
   @ApiParam({ name: 'id', description: 'Draft ID' })
   @ApiOkResponse({ type: PublishSprintDraftResultDto })
   @ApiBadRequestResponse({
-    description: 'Draft not editable, duplicate questions, or a question is no longer eligible',
+    description:
+      'Draft not editable, duplicate questions, or a question is no longer eligible',
   })
   @ApiNotFoundResponse({ description: 'Draft not found' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
@@ -313,7 +318,9 @@ Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test
   })
   @ApiParam({ name: 'id', description: 'Draft ID' })
   @ApiOkResponse({ description: 'Draft discarded' })
-  @ApiBadRequestResponse({ description: 'Published drafts cannot be discarded' })
+  @ApiBadRequestResponse({
+    description: 'Published drafts cannot be discarded',
+  })
   @ApiNotFoundResponse({ description: 'Draft not found' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
   async discardDraft(@Param('id') id: string): Promise<{ message: string }> {
@@ -393,7 +400,8 @@ Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test
   @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Soft delete a published sprint test (Admin)',
-    description: 'Sets isDeleted and isActive false. Topic-wise and full-exam ids return 404.',
+    description:
+      'Sets isDeleted and isActive false. Topic-wise and full-exam ids return 404.',
   })
   @ApiParam({ name: 'id', description: 'Published sprint test ID' })
   @ApiOkResponse({ description: 'Sprint test deleted' })
