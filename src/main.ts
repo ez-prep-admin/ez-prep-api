@@ -107,7 +107,7 @@ async function bootstrap() {
       .addTag('auth', 'Authentication endpoints')
       .addTag(
         'mock-tests',
-        'Topic-wise papers only (paperType TOPIC_WISE). Full-exam papers are never returned here — use full-mock-tests. Start an attempt with POST /mock-test-attempts/start.',
+        'Topic-wise papers only (paperType TOPIC_WISE). Sprint and full-exam papers are never returned here — use /sprint-tests and /full-mock-tests. Start an attempt with POST /mock-test-attempts/start.',
       )
       .addTag(
         'full-mock-tests',
@@ -119,7 +119,7 @@ async function bootstrap() {
       )
       .addTag(
         'mock-test-attempts',
-        'Student take-test APIs for both topic-wise and full-exam papers. Branch on mockTestData.isSessionWise. Session-wise: show one subject at a time using sessionOrder / sessions[].questionIds; complete a session before the next. GET .../resume unpauses if PAUSED.',
+        'Student take-test APIs for topic-wise, sprint, and full-exam papers. Sprint papers use one timer and POST .../submit, the same as topic-wise. Branch on mockTestData.isSessionWise. Session-wise full exams only: show one subject at a time using sessionOrder / sessions[].questionIds; complete a session before the next. GET .../resume unpauses if PAUSED.',
       )
       .addTag('imports', 'Question paper import endpoints')
       .addTag(

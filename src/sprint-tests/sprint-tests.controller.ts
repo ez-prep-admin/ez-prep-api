@@ -62,14 +62,17 @@ export class SprintTestsController {
     summary:
       'Draft a sprint test from the newest exam-tagged questions (Admin)',
     description: `
-Samples the most recent active questions tagged to the exam (\`createdAt\` descending).
+Samples the most recent active questions tagged to the exam (\`createdAt\` descending, \`_id\` as the tie-break).
 Size and duration must be 10, 15, 20, 25, or 30. No subject, topic, or difficulty quota.
-The result is a draft. Nothing is written to \`mocktests\` until publish.
+The result is a draft in \`sprinttestdrafts\` with status \`REVIEW\`. Nothing is written to \`mocktests\` until publish.
+Correct answers and explanations are not returned.
 
 Error codes (400): \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOUND\`.
     `,
   })
   @ApiCreatedResponse({ type: SprintDraftResponseDto })
+  @ApiBadRequestResponse({ description: 'Invalid size or duration, or not enough eligible questions' })
+  @ApiNotFoundResponse({ description: 'Exam not found or inactive' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
   async createDraft(
     @Body() dto: CreateSprintDraftDto,
@@ -85,11 +88,27 @@ Error codes (400): \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOUND\`.
   @Get('drafts')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'List open sprint drafts (Admin)' })
-  @ApiQuery({ name: 'examId', required: false })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiOperation({
+    summary: 'List open sprint drafts (Admin)',
+    description:
+      'Drafts still in REVIEW, GENERATING, or PUBLISHING. Discarded and published drafts are excluded.',
+  })
+  @ApiQuery({
+    name: 'examId',
+    required: false,
+    description: 'When set, only drafts for this exam',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: '1–100, default 10',
+    example: 10,
+  })
   @ApiOkResponse({ type: SprintDraftListItemDto, isArray: true })
+  @ApiBadRequestResponse({ description: 'examId is not a valid id' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async listDrafts(
     @Query('examId') examId: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -117,24 +136,49 @@ Error codes (400): \`BANK_SHORTAGE\`. 404: \`EXAM_NOT_FOUND\`.
   @ApiOperation({
     summary: 'Search questions for sprint draft replacement (Admin)',
     description: `
-Same contract as full-mock replacement search.
-\`subjectId\` is required unless \`allowCrossSubject=true\`.
-\`draftId\` scopes the bank to that draft's exam and excludes questions already on the paper.
-Cross-subject replacements must still be tagged to the exam.
+Same guards as full-mock replacement search.
+\`subjectId\` is required unless \`allowCrossSubject=true\` (and then \`draftId\` is required).
+\`draftId\` limits results to questions tagged to that draft's exam and excludes ids already on the paper.
+Results are paginated (default 20, max 50) and ordered by \`updatedAt\` descending, then \`createdAt\`.
+Correct answers and explanations are not returned.
     `,
   })
-  @ApiQuery({ name: 'subjectId', required: false })
-  @ApiQuery({ name: 'draftId', required: false })
+  @ApiQuery({
+    name: 'subjectId',
+    required: false,
+    description: 'Required unless allowCrossSubject is true',
+  })
+  @ApiQuery({
+    name: 'draftId',
+    required: false,
+    description:
+      'Scopes the bank to this draft exam and excludes questions already on the paper. Required when allowCrossSubject is true.',
+  })
   @ApiQuery({ name: 'allowCrossSubject', required: false, type: Boolean })
-  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Case-insensitive match on English or Malayalam question text',
+  })
   @ApiQuery({ name: 'topicId', required: false })
   @ApiQuery({
     name: 'difficultyLevel',
     required: false,
     enum: ['easy', 'medium', 'hard'],
   })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: '1–50, default 20',
+    example: 20,
+  })
+  @ApiOkResponse({ type: SprintSearchQuestionItemDto, isArray: true })
+  @ApiBadRequestResponse({
+    description: 'Missing subjectId, allowCrossSubject without draftId, or an invalid id',
+  })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async searchQuestions(
     @Query('subjectId') subjectId?: string,
     @Query('draftId') draftId?: string,
@@ -170,9 +214,15 @@ Cross-subject replacements must still be tagged to the exam.
   @Get('drafts/:id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get a sprint draft for review (Admin)' })
-  @ApiParam({ name: 'id' })
+  @ApiOperation({
+    summary: 'Get a sprint draft for review (Admin)',
+    description:
+      'Questions are grouped by slot subject. Positions stay 0-based across the paper. Keys and explanations are omitted. Discarded drafts return 404.',
+  })
+  @ApiParam({ name: 'id', description: 'Draft ID' })
   @ApiOkResponse({ type: SprintDraftResponseDto })
+  @ApiNotFoundResponse({ description: 'Draft not found or discarded' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async getDraft(
     @Param('id') id: string,
   ): Promise<{ message: string; data: SprintDraftResponseDto }> {
@@ -187,12 +237,25 @@ Cross-subject replacements must still be tagged to the exam.
     summary: 'Replace one question in a sprint draft (Admin)',
     description: `
 Guards match full mocks: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`,
-\`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`. \`allowCrossSubject\` keeps the slot subject
-and marks, and still requires the exam tag.
+\`DUPLICATE_QUESTION\`, \`QUESTION_NOT_ELIGIBLE\`. \`allowCrossSubject\` allows a question whose subject
+is not the slot subject and is not one of the exam blueprint subjects. The question must still be
+tagged to this exam. The slot keeps its subject, marks, negative marking, and position.
+Usage counts are not incremented.
     `,
   })
-  @ApiParam({ name: 'id' })
-  @ApiParam({ name: 'position' })
+  @ApiParam({ name: 'id', description: 'Draft ID' })
+  @ApiParam({
+    name: 'position',
+    description: '0-based index across the whole paper',
+    example: 0,
+  })
+  @ApiOkResponse({ type: SprintDraftResponseDto })
+  @ApiBadRequestResponse({
+    description:
+      'Draft not editable, subject mismatch, exam mismatch, duplicate, or ineligible question',
+  })
+  @ApiNotFoundResponse({ description: 'Draft not found' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async replaceQuestion(
     @Param('id') id: string,
     @Param('position', ParseIntPipe) position: number,
@@ -213,11 +276,20 @@ and marks, and still requires the exam tag.
   @ApiOperation({
     summary: 'Publish a sprint draft (Admin)',
     description: `
-Writes \`paperType: SPRINT\` into \`mocktests\`. One timer, no subject sessions.
-Does not increment full-mock usage counts. Question count and duration stay as drafted.
+Writes \`paperType: SPRINT\` into \`mocktests\`. One timer, no \`subjectConfig\`, and \`isSessionWise\` is false.
+Does not increment \`fullMockUsageCount\`. Question count and duration stay as drafted.
+The draft must be \`REVIEW\`. On failure the draft returns to \`REVIEW\`.
+
+Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test-attempts/start\` and \`POST .../submit\`.
     `,
   })
+  @ApiParam({ name: 'id', description: 'Draft ID' })
   @ApiOkResponse({ type: PublishSprintDraftResultDto })
+  @ApiBadRequestResponse({
+    description: 'Draft not editable, duplicate questions, or a question is no longer eligible',
+  })
+  @ApiNotFoundResponse({ description: 'Draft not found' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async publishDraft(
     @Param('id') id: string,
     @Body() dto: PublishSprintDraftDto,
@@ -234,7 +306,16 @@ Does not increment full-mock usage counts. Question count and duration stay as d
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Discard a sprint draft (Admin)' })
+  @ApiOperation({
+    summary: 'Discard a sprint draft (Admin)',
+    description:
+      'Sets status to DISCARDED. Does not change question usage. Published drafts cannot be discarded.',
+  })
+  @ApiParam({ name: 'id', description: 'Draft ID' })
+  @ApiOkResponse({ description: 'Draft discarded' })
+  @ApiBadRequestResponse({ description: 'Published drafts cannot be discarded' })
+  @ApiNotFoundResponse({ description: 'Draft not found' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async discardDraft(@Param('id') id: string): Promise<{ message: string }> {
     await this.sprintTestsService.discardDraft(id);
     return { message: 'Draft discarded successfully' };
@@ -244,11 +325,23 @@ Does not increment full-mock usage counts. Question count and duration stay as d
   @ApiOperation({
     summary: 'List published sprint tests',
     description:
-      'Students see active papers. Admins also see inactive ones. Take the test with POST /mock-test-attempts/start. Sprint papers use one timer and POST .../submit.',
+      'Students see active papers. Admins also see inactive ones. Each row includes userAttemptAction (START, RESUME, or RETAKE). Take the test with POST /mock-test-attempts/start, or resume when the action is RESUME. Sprint papers use one timer and POST .../submit. Topic-wise and full-exam papers are not included.',
   })
-  @ApiQuery({ name: 'examId', required: false })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({
+    name: 'examId',
+    required: false,
+    description: 'When set, only sprint papers for this exam',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: '1–100, default 10',
+    example: 10,
+  })
+  @ApiOkResponse({ type: SprintTestListItemDto, isArray: true })
+  @ApiBadRequestResponse({ description: 'examId is not a valid id' })
   async listPublished(
     @Query('examId') examId: string | undefined,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
@@ -277,9 +370,10 @@ Does not increment full-mock usage counts. Question count and duration stay as d
   @ApiOperation({
     summary: 'Get one published sprint test',
     description:
-      '404 if the id is topic-wise or a full exam. Admins also receive safe question stems.',
+      '404 if the id is topic-wise, a full exam, or deleted. Includes userAttemptAction. Admins also receive safe question stems in paper order (no correctAnswer or explanation). Students start or resume an attempt to receive the paper.',
   })
-  @ApiParam({ name: 'id' })
+  @ApiParam({ name: 'id', description: 'Published sprint test ID' })
+  @ApiOkResponse({ type: SprintTestListItemDto })
   @ApiNotFoundResponse({ description: 'Not a published sprint paper' })
   @ApiBadRequestResponse({ description: 'Invalid ID' })
   async findOne(
@@ -297,7 +391,15 @@ Does not increment full-mock usage counts. Question count and duration stay as d
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'Soft delete a published sprint test (Admin)' })
+  @ApiOperation({
+    summary: 'Soft delete a published sprint test (Admin)',
+    description: 'Sets isDeleted and isActive false. Topic-wise and full-exam ids return 404.',
+  })
+  @ApiParam({ name: 'id', description: 'Published sprint test ID' })
+  @ApiOkResponse({ description: 'Sprint test deleted' })
+  @ApiNotFoundResponse({ description: 'Not a published sprint paper' })
+  @ApiBadRequestResponse({ description: 'Invalid ID' })
+  @ApiForbiddenResponse({ description: 'Admin role required' })
   async remove(@Param('id') id: string): Promise<{ message: string }> {
     return this.sprintTestsService.removePublished(id);
   }

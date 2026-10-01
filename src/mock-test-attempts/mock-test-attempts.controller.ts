@@ -50,14 +50,15 @@ export class MockTestAttemptsController {
   @ApiOperation({
     summary: 'Start a new mock test attempt',
     description: `
-Starts an attempt for a **topic-wise** paper (\`GET /mock-tests\`) or a **published full exam** (\`GET /full-mock-tests\`). Same endpoint. Drafts are not attemptable.
+Starts an attempt for a **topic-wise** paper (\`GET /mock-tests\`), a **published sprint** (\`GET /sprint-tests\`), or a **published full exam** (\`GET /full-mock-tests\`). Same endpoint. Drafts are not attemptable.
 
 **Do not call start** when the catalog \`userAttemptAction\` is \`RESUME\` — use \`GET /mock-test-attempts/{resumeAttemptId}/resume\` instead.
 
-### Topic-wise and mixed full exams (\`isSessionWise\` is false)
+### Topic-wise, sprint, and mixed full exams (\`isSessionWise\` is false)
 - One timer: \`mockTestData.durationInMinutes\`
 - Render **all** \`questions\`
 - \`sessions\` and \`currentSessionIndex\` are omitted
+- \`paperType\` is \`TOPIC_WISE\`, \`SPRINT\`, or \`FULL_EXAM\`
 - Mixed full exams may still include \`sessionOrder\` on questions (subject-block index) for grouping. Still one timer; do **not** call sessions/complete.
 
 ### Session-wise full exams (\`isSessionWise\` is true)
@@ -272,7 +273,7 @@ Freezes the clock and keeps all saved answers. Cannot answer until resume.
   @ApiOperation({
     summary: 'Finish the current subject session (session-wise only)',
     description: `
-**Only for \`isSessionWise: true\`.** Topic-wise and mixed papers must use \`POST .../submit\`.
+**Only for \`isSessionWise: true\`.** Topic-wise, sprint, and mixed papers must use \`POST .../submit\`.
 
 Locks the current subject (answers kept, not scored yet). The student cannot go back or skip ahead.
 
@@ -327,6 +328,7 @@ Locks the current subject (answers kept, not scored yet). The student cannot go 
     description: `
 Scores the attempt. Use this for:
 - Topic-wise papers
+- Sprint papers (one timer)
 - Mixed full exams (one timer)
 - Session-wise papers **only on the last session**
 
