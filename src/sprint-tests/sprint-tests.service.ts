@@ -46,6 +46,7 @@ import {
   duplicateQuestionSummary,
   isTaggedToExam,
 } from '../common/papers/question-replacement';
+import { SPRINT_SIZE_OPTIONS } from './dto/create-sprint-draft.dto';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
@@ -90,10 +91,16 @@ export class SprintTestsService {
 
     const marksPerQuestion = dto.marksPerQuestion ?? 1;
     const negativeMarking = dto.negativeMarking ?? 0;
-    const picked = await this.sampleRecentQuestions(
-      exam._id as Types.ObjectId,
-      dto.totalQuestions,
-    );
+    const picked = dto.questionIds?.length
+      ? await this.loadHandPickedQuestions(
+          exam._id as Types.ObjectId,
+          dto.totalQuestions,
+          dto.questionIds,
+        )
+      : await this.sampleRecentQuestions(
+          exam._id as Types.ObjectId,
+          dto.totalQuestions,
+        );
 
     const questions: SprintDraftQuestion[] = picked.map(
       (question, position) => ({
@@ -504,6 +511,84 @@ export class SprintTestsService {
     }
 
     return { message: 'Sprint test deleted successfully' };
+  }
+
+  private async loadHandPickedQuestions(
+    examId: Types.ObjectId,
+    totalQuestions: number,
+    questionIds: string[],
+  ): Promise<
+    Array<{
+      _id: Types.ObjectId;
+      subject?: Types.ObjectId;
+      topic?: Types.ObjectId;
+      difficultyLevel?: string;
+    }>
+  > {
+    if (
+      !(SPRINT_SIZE_OPTIONS as readonly number[]).includes(
+        questionIds.length,
+      ) ||
+      questionIds.length !== totalQuestions
+    ) {
+      throw new BadRequestException({
+        message: `questionIds length (${questionIds.length}) must equal totalQuestions and be one of ${SPRINT_SIZE_OPTIONS.join(', ')}`,
+        error: 'QUESTION_COUNT_MISMATCH',
+        details: {
+          totalQuestions,
+          actual: questionIds.length,
+          allowed: [...SPRINT_SIZE_OPTIONS],
+        },
+      });
+    }
+
+    const unique = new Set(questionIds);
+    if (unique.size !== questionIds.length) {
+      throw new BadRequestException({
+        message: 'questionIds contains duplicates',
+        error: 'DUPLICATE_QUESTION',
+      });
+    }
+
+    const docs = await this.questionModel
+      .find({ _id: { $in: questionIds.map(id => new Types.ObjectId(id)) } })
+      .select('_id subject topic difficultyLevel exams isActive')
+      .exec();
+    const byId = new Map(
+      docs.map(question => [question._id.toString(), question]),
+    );
+
+    return questionIds.map(id => {
+      const question = byId.get(id);
+      if (
+        !question ||
+        !question.isActive ||
+        !question.subject ||
+        !question.difficultyLevel ||
+        !(ELIGIBLE_DIFFICULTY_LEVELS as readonly string[]).includes(
+          question.difficultyLevel,
+        )
+      ) {
+        throw new BadRequestException({
+          message: 'One or more selected questions are not eligible',
+          error: 'QUESTION_NOT_ELIGIBLE',
+          details: { questionId: id },
+        });
+      }
+      if (!isTaggedToExam(question.exams, examId)) {
+        throw new BadRequestException({
+          message: 'Every selected question must be tagged to this exam',
+          error: 'EXAM_MISMATCH',
+          details: { questionId: id },
+        });
+      }
+      return {
+        _id: question._id as Types.ObjectId,
+        subject: question.subject as Types.ObjectId,
+        topic: question.topic as Types.ObjectId | undefined,
+        difficultyLevel: question.difficultyLevel,
+      };
+    });
   }
 
   private async sampleRecentQuestions(

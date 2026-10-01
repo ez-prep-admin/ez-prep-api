@@ -12,7 +12,8 @@ import { Transform } from 'class-transformer';
 
 export class PublishSprintDraftDto {
   @ApiPropertyOptional({
-    description: 'Overrides the draft title. Question count and duration cannot change here.',
+    description:
+      'Overrides the draft title. Question count and duration cannot change here.',
   })
   @IsOptional()
   @IsString()
@@ -28,7 +29,8 @@ export class PublishSprintDraftDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Overrides marks for every correct answer on the published paper',
+    description:
+      'Overrides marks for every correct answer on the published paper',
     example: 1,
   })
   @IsOptional()
@@ -38,7 +40,8 @@ export class PublishSprintDraftDto {
   marksPerQuestion?: number;
 
   @ApiPropertyOptional({
-    description: 'Overrides the deduction for a wrong answer. Unanswered stays 0.',
+    description:
+      'Overrides the deduction for a wrong answer. Unanswered stays 0.',
     example: 0.25,
   })
   @IsOptional()
@@ -56,7 +59,10 @@ export class PublishSprintDraftDto {
   @Min(0)
   passingScore?: number;
 
-  @ApiPropertyOptional({ description: 'Overrides whether another attempt can be started after one is finished' })
+  @ApiPropertyOptional({
+    description:
+      'Overrides whether another attempt can be started after one is finished',
+  })
   @IsOptional()
   @IsBoolean()
   allowRetake?: boolean;
@@ -66,7 +72,9 @@ export class PublishSprintDraftDto {
   @IsBoolean()
   shuffleOptions?: boolean;
 
-  @ApiPropertyOptional({ description: 'Include keys and explanations immediately after submit' })
+  @ApiPropertyOptional({
+    description: 'Include keys and explanations immediately after submit',
+  })
   @IsOptional()
   @IsBoolean()
   showResultsImmediately?: boolean;

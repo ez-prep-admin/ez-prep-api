@@ -188,6 +188,98 @@ describe('SprintTestsService', () => {
     expect(payload.durationInMinutes).toBe(15);
   });
 
+  it('freezes hand-picked question ids in order and skips recency sampling', async () => {
+    const rows = Array.from({ length: 10 }, () =>
+      questionRow(new Types.ObjectId().toString()),
+    );
+    examModel.findById.mockReturnValue(
+      chainable({
+        _id: new Types.ObjectId(EXAM_ID),
+        name: 'CGL',
+        isActive: true,
+      }),
+    );
+    const findQuery = chainable(rows);
+    questionModel.find.mockReturnValue(findQuery);
+    draftModel.create.mockImplementation(
+      async (payload: { questions: unknown[] }) =>
+        makeDraft({ totalQuestions: 10, questions: payload.questions }),
+    );
+
+    const ids = rows.map(row => row._id.toString());
+    await service.createDraft(
+      {
+        examId: EXAM_ID,
+        totalQuestions: 10,
+        durationInMinutes: 15,
+        questionIds: ids,
+      },
+      USER_ID,
+    );
+
+    expect(findQuery.sort).not.toHaveBeenCalled();
+    const payload = draftModel.create.mock.calls[0][0];
+    expect(
+      payload.questions.map((row: { question: Types.ObjectId }) =>
+        row.question.toString(),
+      ),
+    ).toEqual(ids);
+  });
+
+  it('rejects a hand-picked question that is not tagged to the exam', async () => {
+    const rows = Array.from({ length: 10 }, () =>
+      questionRow(new Types.ObjectId().toString()),
+    );
+    rows[3] = { ...rows[3], exams: [new Types.ObjectId(USER_ID)] };
+    examModel.findById.mockReturnValue(
+      chainable({
+        _id: new Types.ObjectId(EXAM_ID),
+        name: 'CGL',
+        isActive: true,
+      }),
+    );
+    questionModel.find.mockReturnValue(chainable(rows));
+
+    await expect(
+      service.createDraft(
+        {
+          examId: EXAM_ID,
+          totalQuestions: 10,
+          durationInMinutes: 10,
+          questionIds: rows.map(row => row._id.toString()),
+        },
+        USER_ID,
+      ),
+    ).rejects.toMatchObject({ response: { error: 'EXAM_MISMATCH' } });
+    expect(draftModel.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a hand-picked set whose length does not match the paper', async () => {
+    examModel.findById.mockReturnValue(
+      chainable({
+        _id: new Types.ObjectId(EXAM_ID),
+        name: 'CGL',
+        isActive: true,
+      }),
+    );
+
+    await expect(
+      service.createDraft(
+        {
+          examId: EXAM_ID,
+          totalQuestions: 15,
+          durationInMinutes: 15,
+          questionIds: Array.from({ length: 10 }, () =>
+            new Types.ObjectId().toString(),
+          ),
+        },
+        USER_ID,
+      ),
+    ).rejects.toMatchObject({ response: { error: 'QUESTION_COUNT_MISMATCH' } });
+    expect(questionModel.find).not.toHaveBeenCalled();
+    expect(draftModel.create).not.toHaveBeenCalled();
+  });
+
   it('does not write a draft when the exam bank is short', async () => {
     examModel.findById.mockReturnValue(
       chainable({
