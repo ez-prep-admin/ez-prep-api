@@ -13,6 +13,7 @@ describe('AdminDashboardController', () => {
     getFailedQuestions: jest.fn(),
     getMockTests: jest.fn(),
     getFullMockTests: jest.fn(),
+    getSprintTests: jest.fn(),
     getAttempts: jest.fn(),
     getExams: jest.fn(),
     getSubjects: jest.fn(),
@@ -46,6 +47,9 @@ describe('AdminDashboardController', () => {
     adminDashboardService.getFullMockTests.mockResolvedValue({
       totalPublished: 0,
     });
+    adminDashboardService.getSprintTests.mockResolvedValue({
+      totalPublished: 0,
+    });
     adminDashboardService.getAttempts.mockResolvedValue({ total: 0 });
     adminDashboardService.getExams.mockResolvedValue({ totalActive: 0 });
     adminDashboardService.getSubjects.mockResolvedValue({ totalActive: 0 });
@@ -68,6 +72,9 @@ describe('AdminDashboardController', () => {
       data: { total: 0 },
     });
     await expect(controller.getFullMockTests()).resolves.toMatchObject({
+      data: { totalPublished: 0 },
+    });
+    await expect(controller.getSprintTests()).resolves.toMatchObject({
       data: { totalPublished: 0 },
     });
     await expect(controller.getAttempts()).resolves.toMatchObject({

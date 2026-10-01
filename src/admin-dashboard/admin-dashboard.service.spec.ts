@@ -9,6 +9,7 @@ import { Question } from '../mock-test-attempts/schemas/question.schema';
 import { FailedQuestion } from '../imports/schemas/failed-question.schema';
 import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { FullMockTestDraft } from '../full-mock-tests/schemas/full-mock-test-draft.schema';
+import { SprintTestDraft } from '../sprint-tests/schemas/sprint-test-draft.schema';
 import { MockTestAttempt } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
 import { Exam } from '../exams/schemas/exam.schema';
 import { Subject } from '../subjects/schemas/subject.schema';
@@ -39,6 +40,7 @@ describe('AdminDashboardService', () => {
   const failedQuestionModel = createModel();
   const mockTestModel = createModel();
   const draftModel = createModel();
+  const sprintDraftModel = createModel();
   const attemptModel = createModel();
   const examModel = createModel();
   const subjectModel = createModel();
@@ -61,6 +63,10 @@ describe('AdminDashboardService', () => {
           useValue: draftModel,
         },
         {
+          provide: getModelToken(SprintTestDraft.name),
+          useValue: sprintDraftModel,
+        },
+        {
           provide: getModelToken(MockTestAttempt.name),
           useValue: attemptModel,
         },
@@ -79,6 +85,7 @@ describe('AdminDashboardService', () => {
       failedQuestionModel,
       mockTestModel,
       draftModel,
+      sprintDraftModel,
       attemptModel,
       examModel,
       subjectModel,
@@ -123,6 +130,7 @@ describe('AdminDashboardService', () => {
       failedQuestions: 0,
       mockTests: 0,
       fullMockTests: 0,
+      sprintTests: 0,
       attempts: 0,
       exams: 0,
       subjects: 0,
@@ -213,6 +221,23 @@ describe('AdminDashboardService', () => {
     const result = await service.getFullMockTests();
     expect(result.totalPublished).toBe(1);
     expect(result.draftsByStatus).toEqual([{ name: 'REVIEW', count: 4 }]);
+  });
+
+  it('counts published sprint papers separately from topic-wise and full mocks', async () => {
+    mockTestModel.countDocuments.mockResolvedValue(3);
+    mockTestModel.aggregate.mockResolvedValue([
+      { _id: 'e1', count: 3, exam: { name: 'CGL' } },
+    ]);
+    sprintDraftModel.aggregate.mockResolvedValue([{ _id: 'REVIEW', count: 2 }]);
+
+    const result = await service.getSprintTests();
+    expect(mockTestModel.countDocuments).toHaveBeenCalledWith({
+      paperType: PaperType.SPRINT,
+      isDeleted: { $ne: true },
+    });
+    expect(result.totalPublished).toBe(3);
+    expect(result.byExam).toEqual([{ id: 'e1', name: 'CGL', count: 3 }]);
+    expect(result.draftsByStatus).toEqual([{ name: 'REVIEW', count: 2 }]);
   });
 
   it('splits attempts into submitted, expired, and in-progress', async () => {

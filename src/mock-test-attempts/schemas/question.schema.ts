@@ -174,6 +174,10 @@ export class Question {
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
 
+// Sprint drafts pick the newest exam-tagged questions with a single limit.
+QuestionSchema.index({ exams: 1, createdAt: -1 });
+QuestionSchema.index({ exams: 1, updatedAt: -1 });
+
 // Virtual for id field
 QuestionSchema.virtual('id').get(function () {
   return this._id.toHexString();

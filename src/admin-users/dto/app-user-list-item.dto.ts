@@ -59,10 +59,15 @@ export class AppUserTestActivityDto {
 
   @ApiProperty({
     type: AttemptStatusCountsDto,
-    description:
-      'Attempts on topic-wise papers. Missing or unknown paperType counts here.',
+    description: 'Attempts on papers with paperType TOPIC_WISE.',
   })
   topicWise: AttemptStatusCountsDto;
+
+  @ApiProperty({
+    type: AttemptStatusCountsDto,
+    description: 'Attempts on papers with paperType SPRINT',
+  })
+  sprint: AttemptStatusCountsDto;
 }
 
 /**

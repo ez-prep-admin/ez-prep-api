@@ -23,20 +23,24 @@ describe('normalizeAttemptActivity', () => {
       fullExamOpen: 0,
       topicWiseFinished: 2,
       topicWiseOpen: 0,
+      sprintFinished: 0,
+      sprintOpen: 0,
     });
   });
 });
 
 describe('totalAttempts', () => {
-  it('sums the four buckets after clamping', () => {
+  it('sums every paper-type bucket after clamping', () => {
     expect(
       totalAttempts({
         fullExamFinished: 4,
         fullExamOpen: 1,
         topicWiseFinished: 2,
         topicWiseOpen: 3,
+        sprintFinished: 5,
+        sprintOpen: 1,
       }),
-    ).toBe(10);
+    ).toBe(16);
     expect(totalAttempts(EMPTY_ATTEMPT_ACTIVITY)).toBe(0);
   });
 });
@@ -55,8 +59,9 @@ describe('buildAttemptActivityPipeline', () => {
         as: 'paper',
       },
     });
-    expect(JSON.stringify(pipeline[2])).toContain(PaperType.TOPIC_WISE);
+    expect(JSON.stringify(pipeline[3])).toContain(PaperType.TOPIC_WISE);
     expect(JSON.stringify(pipeline[3])).toContain(PaperType.FULL_EXAM);
+    expect(JSON.stringify(pipeline[3])).toContain(PaperType.SPRINT);
     for (const status of FINISHED_ATTEMPT_STATUSES) {
       expect(JSON.stringify(pipeline[3])).toContain(status);
     }

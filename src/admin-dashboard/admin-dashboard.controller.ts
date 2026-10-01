@@ -25,6 +25,7 @@ import {
   AdminDashboardFullMockTestsDto,
   AdminDashboardMockTestsDto,
   AdminDashboardQuestionsDto,
+  AdminDashboardSprintTestsDto,
   AdminDashboardSubjectsDto,
   AdminDashboardSummaryDto,
   AdminDashboardTagsDto,
@@ -123,6 +124,23 @@ export class AdminDashboardController {
     const data = await this.adminDashboardService.getFullMockTests();
     return {
       message: 'Full mock test dashboard details retrieved successfully',
+      data,
+    };
+  }
+
+  @Get('sprint-tests')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Published sprint papers by exam and draft status counts',
+  })
+  @ApiOkResponse({ type: AdminDashboardSprintTestsDto })
+  async getSprintTests(): Promise<{
+    message: string;
+    data: AdminDashboardSprintTestsDto;
+  }> {
+    const data = await this.adminDashboardService.getSprintTests();
+    return {
+      message: 'Sprint test dashboard details retrieved successfully',
       data,
     };
   }

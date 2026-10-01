@@ -164,7 +164,7 @@ export class ExamsService {
                   $expr: { $eq: ['$exam', '$$examId'] },
                   isActive: true,
                   isDeleted: false,
-                  paperType: { $ne: 'FULL_EXAM' },
+                  paperType: 'TOPIC_WISE',
                 },
               },
               { $count: 'count' },

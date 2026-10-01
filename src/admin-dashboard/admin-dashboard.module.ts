@@ -20,6 +20,10 @@ import {
   FullMockTestDraftSchema,
 } from '../full-mock-tests/schemas/full-mock-test-draft.schema';
 import {
+  SprintTestDraft,
+  SprintTestDraftSchema,
+} from '../sprint-tests/schemas/sprint-test-draft.schema';
+import {
   MockTestAttempt,
   MockTestAttemptSchema,
 } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
@@ -36,6 +40,7 @@ import { Tag, TagSchema } from '../tags/schemas/tag.schema';
       { name: FailedQuestion.name, schema: FailedQuestionSchema },
       { name: MockTest.name, schema: MockTestSchema },
       { name: FullMockTestDraft.name, schema: FullMockTestDraftSchema },
+      { name: SprintTestDraft.name, schema: SprintTestDraftSchema },
       { name: MockTestAttempt.name, schema: MockTestAttemptSchema },
       { name: Exam.name, schema: ExamSchema },
       { name: Subject.name, schema: SubjectSchema },

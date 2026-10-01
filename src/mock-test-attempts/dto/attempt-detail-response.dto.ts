@@ -121,10 +121,10 @@ class TestMetadataDto {
 
   @ApiPropertyOptional({
     description:
-      'TOPIC_WISE opens Daily Practice; FULL_EXAM opens Full Mocks for this exam.',
-    enum: ['TOPIC_WISE', 'FULL_EXAM'],
+      'TOPIC_WISE opens Daily Practice; FULL_EXAM opens Full Mocks; SPRINT opens Sprint Tests.',
+    enum: ['TOPIC_WISE', 'FULL_EXAM', 'SPRINT'],
   })
-  paperType?: 'TOPIC_WISE' | 'FULL_EXAM';
+  paperType?: 'TOPIC_WISE' | 'FULL_EXAM' | 'SPRINT';
 
   @ApiProperty({ description: 'Exam information', type: BasicInfoDto })
   exam: BasicInfoDto;

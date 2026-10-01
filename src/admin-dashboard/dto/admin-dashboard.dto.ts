@@ -17,6 +17,9 @@ export class AdminDashboardSummaryDto {
   fullMockTests: number;
 
   @ApiProperty()
+  sprintTests: number;
+
+  @ApiProperty()
   attempts: number;
 
   @ApiProperty()
@@ -127,6 +130,17 @@ export class AdminDashboardMockTestsDto {
 }
 
 export class AdminDashboardFullMockTestsDto {
+  @ApiProperty()
+  totalPublished: number;
+
+  @ApiProperty({ type: [NamedCountDto] })
+  byExam: NamedCountDto[];
+
+  @ApiProperty({ type: [NamedCountDto] })
+  draftsByStatus: NamedCountDto[];
+}
+
+export class AdminDashboardSprintTestsDto {
   @ApiProperty()
   totalPublished: number;
 

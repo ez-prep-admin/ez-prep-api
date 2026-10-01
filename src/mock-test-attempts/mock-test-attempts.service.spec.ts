@@ -268,6 +268,29 @@ describe('MockTestAttemptsService', () => {
       expect(created.questions[0].sessionOrder).toBeUndefined();
     });
 
+    it('should start a sprint paper on one timer without sessions', async () => {
+      mockTestModel.findById.mockReturnValue(
+        chainable(makeTest({ paperType: 'SPRINT' })),
+      );
+      attemptModel.findOne.mockReturnValue(chainable(null));
+      attemptModel.create.mockResolvedValue(
+        makeAttempt({ id: ATTEMPT_ID, startedAt: new Date() }),
+      );
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2, 'b')]),
+      );
+
+      const result = await service.startAttempt(
+        { mockTestId: TEST_ID },
+        USER_ID,
+      );
+
+      expect(result.mockTestData.paperType).toBe('SPRINT');
+      expect(result.mockTestData.isSessionWise).toBe(false);
+      expect(result.mockTestData.sessions).toBeUndefined();
+      expect(result.mockTestData.currentSessionIndex).toBeUndefined();
+    });
+
     it('should start a session-wise full exam with per-question marks', async () => {
       const test = makeTest({
         isSessionWise: true,

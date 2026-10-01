@@ -99,7 +99,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle(`${instanceName} API`)
       .setDescription(
-        `${instanceName} API. Topic-wise papers: /mock-tests. Full-exam papers: /full-mock-tests (admin draft → publish). Students take both via /mock-test-attempts. Session-wise full exams: one subject timer at a time; filter questions by sessionOrder / sessions[].questionIds; POST .../sessions/complete before the next subject. GET .../resume unpauses a paused attempt.`,
+        `${instanceName} API. Topic-wise papers: /mock-tests. Full-exam papers: /full-mock-tests (admin draft → publish). Sprint papers: /sprint-tests (newest exam-tagged questions, admin draft → publish, one timer). Students take all three via /mock-test-attempts. Session-wise full exams: one subject timer at a time; filter questions by sessionOrder / sessions[].questionIds; POST .../sessions/complete before the next subject. GET .../resume unpauses a paused attempt.`,
       )
       .setVersion('1.0.0')
       .addTag('health', 'Health check endpoints')
@@ -112,6 +112,10 @@ async function bootstrap() {
       .addTag(
         'full-mock-tests',
         'Exam-blueprint papers (paperType FULL_EXAM). Admin: generate draft, replace questions, publish. Student: list/get published papers, then take them via mock-test-attempts (same start/answer/submit as topic-wise; session-wise adds sessions/complete).',
+      )
+      .addTag(
+        'sprint-tests',
+        'Sprint papers (paperType SPRINT). Admin drafts the newest exam-tagged questions (10–30), replaces with the same guards as full mocks, then publishes a single-timer paper. Students list/get published papers and take them via mock-test-attempts submit (no sessions).',
       )
       .addTag(
         'mock-test-attempts',

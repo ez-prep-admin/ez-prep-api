@@ -18,7 +18,7 @@ export type PerformanceTrend =
   | 'steady'
   | 'insufficient';
 
-export type DetailPaperType = 'TOPIC_WISE' | 'FULL_EXAM';
+export type DetailPaperType = 'TOPIC_WISE' | 'FULL_EXAM' | 'SPRINT';
 
 export interface FinishedAttemptSummary {
   id: string;
@@ -67,12 +67,14 @@ export interface PaperPerformance {
 export interface UserPerformanceAnalysis {
   topicWise: PaperPerformance;
   fullExam: PaperPerformance;
+  sprint: PaperPerformance;
   overall: PaperPerformance;
 }
 
 export interface MappedUserPerformance {
   recentTopicWiseAttempts: FinishedAttemptSummary[];
   recentFullExamAttempts: FinishedAttemptSummary[];
+  recentSprintAttempts: FinishedAttemptSummary[];
   analysis: UserPerformanceAnalysis;
 }
 
@@ -116,6 +118,7 @@ export interface RawPaperStats {
 export interface UserPerformanceAggregate {
   recentTopicWise?: RawFinishedAttempt[] | null;
   recentFullExam?: RawFinishedAttempt[] | null;
+  recentSprint?: RawFinishedAttempt[] | null;
   recentOverall?: RawFinishedAttempt[] | null;
   stats?: RawPaperStats[] | null;
 }
@@ -218,7 +221,8 @@ function recentAttemptProject(): Record<string, unknown> {
  * Each recent list is the newest finished attempts of that paper type,
  * capped at {@link RECENT_FINISHED_ATTEMPT_LIMIT}. Stats cover every
  * finished attempt, not only the recent window.
- * A paper with no type, or any type other than FULL_EXAM, is topic-wise.
+ * Topic-wise, full exam, and sprint lists match that paper type exactly.
+ * Overall totals add all three.
  */
 export function buildUserPerformancePipeline(
   userId: Types.ObjectId,
@@ -267,12 +271,7 @@ export function buildUserPerformancePipeline(
     },
     {
       $addFields: {
-        paperType: {
-          $ifNull: [
-            { $arrayElemAt: ['$paper.paperType', 0] },
-            PaperType.TOPIC_WISE,
-          ],
-        },
+        paperType: { $arrayElemAt: ['$paper.paperType', 0] },
         examName: {
           $ifNull: [{ $arrayElemAt: ['$examDoc.name', 0] }, null],
         },
@@ -341,11 +340,15 @@ export function buildUserPerformancePipeline(
     {
       $facet: {
         recentTopicWise: [
-          { $match: { paperType: { $ne: PaperType.FULL_EXAM } } },
+          { $match: { paperType: PaperType.TOPIC_WISE } },
           { $limit: limit },
         ],
         recentFullExam: [
           { $match: { paperType: PaperType.FULL_EXAM } },
+          { $limit: limit },
+        ],
+        recentSprint: [
+          { $match: { paperType: PaperType.SPRINT } },
           { $limit: limit },
         ],
         recentOverall: [{ $limit: limit }],
@@ -353,11 +356,23 @@ export function buildUserPerformancePipeline(
           {
             $group: {
               _id: {
-                $cond: [
-                  { $eq: ['$paperType', PaperType.FULL_EXAM] },
-                  PaperType.FULL_EXAM,
-                  PaperType.TOPIC_WISE,
-                ],
+                $switch: {
+                  branches: [
+                    {
+                      case: { $eq: ['$paperType', PaperType.FULL_EXAM] },
+                      then: PaperType.FULL_EXAM,
+                    },
+                    {
+                      case: { $eq: ['$paperType', PaperType.SPRINT] },
+                      then: PaperType.SPRINT,
+                    },
+                    {
+                      case: { $eq: ['$paperType', PaperType.TOPIC_WISE] },
+                      then: PaperType.TOPIC_WISE,
+                    },
+                  ],
+                  default: null,
+                },
               },
               finishedCount: { $sum: 1 },
               totalScore: { $sum: { $ifNull: ['$score', 0] } },
@@ -513,8 +528,15 @@ function isFinishedStatus(status: unknown): status is 'SUBMITTED' | 'EXPIRED' {
   return status === 'SUBMITTED' || status === 'EXPIRED';
 }
 
-function paperTypeOf(value: unknown): DetailPaperType {
-  return value === PaperType.FULL_EXAM ? 'FULL_EXAM' : 'TOPIC_WISE';
+function paperTypeOf(value: unknown): DetailPaperType | null {
+  if (
+    value === PaperType.FULL_EXAM ||
+    value === PaperType.SPRINT ||
+    value === PaperType.TOPIC_WISE
+  ) {
+    return value;
+  }
+  return null;
 }
 
 function idOf(value: unknown): string {
@@ -540,6 +562,10 @@ export function mapFinishedAttempt(
   if (!id) {
     return null;
   }
+  const paperType = paperTypeOf(raw.paperType);
+  if (!paperType) {
+    return null;
+  }
 
   const score = finiteNumber(raw.score, 0);
   const totalMarks = finiteNumber(raw.totalMarks, 0);
@@ -551,7 +577,7 @@ export function mapFinishedAttempt(
     id,
     mockTestId: idOf(raw.mockTest),
     title: asLabel(raw.testTitle) ?? 'Untitled test',
-    paperType: paperTypeOf(raw.paperType),
+    paperType,
     status: raw.status,
     score,
     totalMarks: Math.max(0, totalMarks),
@@ -691,17 +717,21 @@ function paperPerformance(
 function statsByPaper(rows: RawPaperStats[] | null | undefined): {
   topicWise: Totals;
   fullExam: Totals;
+  sprint: Totals;
 } {
   let topicWise = emptyTotals();
   let fullExam = emptyTotals();
+  let sprint = emptyTotals();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (row?._id === PaperType.FULL_EXAM) {
       fullExam = totalsFromStats(row);
+    } else if (row?._id === PaperType.SPRINT) {
+      sprint = totalsFromStats(row);
     } else if (row?._id === PaperType.TOPIC_WISE) {
       topicWise = totalsFromStats(row);
     }
   }
-  return { topicWise, fullExam };
+  return { topicWise, fullExam, sprint };
 }
 
 export function mapUserPerformance(
@@ -709,23 +739,30 @@ export function mapUserPerformance(
 ): MappedUserPerformance {
   const recentTopicWiseAttempts = mapRecent(raw?.recentTopicWise, 'TOPIC_WISE');
   const recentFullExamAttempts = mapRecent(raw?.recentFullExam, 'FULL_EXAM');
+  const recentSprintAttempts = mapRecent(raw?.recentSprint, 'SPRINT');
   const recentOverall =
     raw?.recentOverall == null
       ? mapRecent([
           ...(raw?.recentTopicWise ?? []),
           ...(raw?.recentFullExam ?? []),
+          ...(raw?.recentSprint ?? []),
         ])
       : mapRecent(raw.recentOverall);
 
-  const { topicWise, fullExam } = statsByPaper(raw?.stats);
+  const { topicWise, fullExam, sprint } = statsByPaper(raw?.stats);
 
   return {
     recentTopicWiseAttempts,
     recentFullExamAttempts,
+    recentSprintAttempts,
     analysis: {
       topicWise: paperPerformance(topicWise, recentTopicWiseAttempts),
       fullExam: paperPerformance(fullExam, recentFullExamAttempts),
-      overall: paperPerformance(addTotals(topicWise, fullExam), recentOverall),
+      sprint: paperPerformance(sprint, recentSprintAttempts),
+      overall: paperPerformance(
+        addTotals(addTotals(topicWise, fullExam), sprint),
+        recentOverall,
+      ),
     },
   };
 }
