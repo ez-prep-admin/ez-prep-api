@@ -4,14 +4,23 @@ import {
   IsNumber,
   IsBoolean,
   IsArray,
+  IsIn,
   ValidateNested,
+  Validate,
   MinLength,
   MaxLength,
   Min,
+  Max,
+  ArrayMinSize,
+  ArrayMaxSize,
   IsMongoId,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  PERFORMANCE_BAND_KEYS,
+  PerformanceBandsConstraint,
+} from '../performance-bands';
 
 export class ExamSubjectDto {
   @ApiProperty({
@@ -64,6 +73,27 @@ export class ExamSubjectDto {
   @IsNumber()
   @Min(0)
   sessionTime?: number;
+}
+
+export class PerformanceBandDto {
+  @ApiProperty({
+    description: 'Result message this cutoff unlocks',
+    enum: PERFORMANCE_BAND_KEYS,
+    example: 'good',
+  })
+  @IsIn(PERFORMANCE_BAND_KEYS)
+  key: (typeof PERFORMANCE_BAND_KEYS)[number];
+
+  @ApiProperty({
+    description: 'Minimum score percent (marks earned / max marks) for this message',
+    example: 40,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  minPercent: number;
 }
 
 export class CreateExamDto {
@@ -169,4 +199,18 @@ export class CreateExamDto {
   @IsOptional()
   @IsBoolean()
   trending?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Score-percent cutoffs for result messages. All four keys are required when set: needs_improvement at 0, then strictly increasing good, very_good, and excellent.',
+    type: [PerformanceBandDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(4)
+  @ArrayMaxSize(4)
+  @ValidateNested({ each: true })
+  @Type(() => PerformanceBandDto)
+  @Validate(PerformanceBandsConstraint)
+  performanceBands?: PerformanceBandDto[];
 }

@@ -2,6 +2,7 @@ import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CategoryResponseDto } from '../../categories/dto/category-response.dto';
 import { ExamGroupResponseDto } from '../../exam-groups/dto/exam-group-response.dto';
+import { PERFORMANCE_BAND_KEYS } from '../performance-bands';
 
 export class ExamSubjectResponseDto {
   @ApiProperty({ description: 'Subject ID', example: '64f123...' })
@@ -34,6 +35,23 @@ export class ExamSubjectResponseDto {
   @ApiPropertyOptional({ description: 'Session time in minutes', example: 60 })
   @Expose()
   sessionTime?: number;
+}
+
+export class PerformanceBandResponseDto {
+  @ApiProperty({
+    description: 'Result message this cutoff unlocks',
+    enum: PERFORMANCE_BAND_KEYS,
+    example: 'good',
+  })
+  @Expose()
+  key: string;
+
+  @ApiProperty({
+    description: 'Minimum score percent for this message',
+    example: 40,
+  })
+  @Expose()
+  minPercent: number;
 }
 
 export class ExamResponseDto {
@@ -129,6 +147,15 @@ export class ExamResponseDto {
   })
   @Expose()
   trending: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Score-percent cutoffs for result messages. Omitted when the exam uses app defaults.',
+    type: [PerformanceBandResponseDto],
+  })
+  @Expose()
+  @Type(() => PerformanceBandResponseDto)
+  performanceBands?: PerformanceBandResponseDto[];
 
   @ApiProperty({
     description: 'Creation timestamp',
