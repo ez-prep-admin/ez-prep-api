@@ -23,6 +23,7 @@ import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { GoogleSignInDto } from './dto/google-sign-in.dto';
+import { GoogleMobileSignInDto } from './dto/google-mobile-sign-in.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
@@ -117,6 +118,49 @@ already added that email to an OTP account continues in the same account.
     data: AuthResponseDto;
   }> {
     const authResponse = await this.authService.signInWithGoogle(dto);
+    const message = authResponse.isNewUser
+      ? 'Account created and authenticated successfully'
+      : 'Authentication successful';
+
+    return {
+      message,
+      data: authResponse,
+    };
+  }
+
+  @Post('google/mobile')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Sign in with Google on the mobile app',
+    description: `
+Mobile-only. Verifies a Google ID token from the native Sign-In SDK and returns
+the same student JWT as OTP login.
+
+The web endpoint \`POST /auth/google\` is unchanged and still requires an
+authorization code, redirect URI, and PKCE verifier. This route never accepts
+that code and never uses the client secret.
+    `,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Google sign-in succeeded',
+    type: AuthResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Missing or malformed ID token' })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid ID token, unverified email, or deactivated account',
+  })
+  @ApiConflictResponse({
+    description: 'Email is already linked to a different Google account',
+  })
+  async signInWithGoogleMobile(
+    @Body() dto: GoogleMobileSignInDto,
+  ): Promise<{
+    message: string;
+    data: AuthResponseDto;
+  }> {
+    const authResponse = await this.authService.signInWithGoogleIdToken(dto);
     const message = authResponse.isNewUser
       ? 'Account created and authenticated successfully'
       : 'Authentication successful';

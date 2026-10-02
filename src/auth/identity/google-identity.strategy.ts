@@ -31,15 +31,36 @@ export class GoogleIdentityStrategy {
 
     const payload = await this.verifier.verify(idToken, audiences);
     assertGooglePayload(payload, audiences);
-
-    return {
-      provider: StudentAuthProvider.GOOGLE,
-      googleSub: payload.sub,
-      email: payload.email!.trim().toLowerCase(),
-      name: displayNameFromGoogle(payload.name, payload.email),
-      avatarUrl: safeHttpsAvatar(payload.picture),
-    };
+    return identityFromPayload(payload);
   }
+
+  /**
+   * Verifies an ID token from the mobile Google Sign-In SDK.
+   * Audience stays the web client id. The Android client is the `azp` and is
+   * not required to equal the web client id.
+   */
+  async verifyMobile(idToken: string): Promise<VerifiedStudentIdentity> {
+    const audiences = readGoogleClientIds(this.configService);
+    if (audiences.length === 0) {
+      throw new ServiceUnavailableException('Google sign-in is not configured');
+    }
+
+    const payload = await this.verifier.verify(idToken, audiences);
+    assertGooglePayload(payload, audiences, {
+      androidClientIds: readGoogleAndroidClientIds(this.configService),
+    });
+    return identityFromPayload(payload);
+  }
+}
+
+function identityFromPayload(payload: TokenPayload): VerifiedStudentIdentity {
+  return {
+    provider: StudentAuthProvider.GOOGLE,
+    googleSub: payload.sub,
+    email: payload.email!.trim().toLowerCase(),
+    name: displayNameFromGoogle(payload.name, payload.email),
+    avatarUrl: safeHttpsAvatar(payload.picture),
+  };
 }
 
 export function readGoogleClientIds(configService: ConfigService): string[] {
@@ -60,9 +81,24 @@ export function readGoogleClientIds(configService: ConfigService): string[] {
   return [...seen];
 }
 
+export function readGoogleAndroidClientIds(
+  configService: ConfigService,
+): string[] {
+  const raw = configService.get<string>('GOOGLE_ANDROID_CLIENT_IDS') ?? '';
+  const seen = new Set<string>();
+  for (const part of raw.split(',')) {
+    const id = part.trim();
+    if (id) {
+      seen.add(id);
+    }
+  }
+  return [...seen];
+}
+
 export function assertGooglePayload(
   payload: TokenPayload,
   audiences: string[],
+  options?: { androidClientIds?: string[] },
 ): void {
   if (!payload.iss || !GOOGLE_ISSUERS.has(payload.iss)) {
     throw new UnauthorizedException('Invalid Google sign-in');
@@ -74,8 +110,15 @@ export function assertGooglePayload(
     throw new UnauthorizedException('Invalid Google sign-in');
   }
 
-  if (payload.azp && !audiences.includes(payload.azp)) {
-    throw new UnauthorizedException('Invalid Google sign-in');
+  const androidClientIds = options?.androidClientIds ?? [];
+  if (payload.azp) {
+    const azpAllowed =
+      audiences.includes(payload.azp) || androidClientIds.includes(payload.azp);
+    const allowUnlistedAndroidClient =
+      options !== undefined && androidClientIds.length === 0;
+    if (!azpAllowed && !allowUnlistedAndroidClient) {
+      throw new UnauthorizedException('Invalid Google sign-in');
+    }
   }
 
   const sub = typeof payload.sub === 'string' ? payload.sub.trim() : '';

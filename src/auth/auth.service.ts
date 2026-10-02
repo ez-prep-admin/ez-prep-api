@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { GoogleSignInDto } from './dto/google-sign-in.dto';
+import { GoogleMobileSignInDto } from './dto/google-mobile-sign-in.dto';
 import { OtpIdentityStrategy } from './identity/otp-identity.strategy';
 import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
 import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
@@ -91,6 +92,27 @@ export class AuthService {
       }
 
       this.logger.error('Unexpected error during Google sign-in:', error.message);
+      throw new UnauthorizedException('Authentication failed');
+    }
+  }
+
+  /**
+   * Mobile-only Google sign-in. Verifies the SDK ID token with Google and
+   * issues the same student JWT. The web code + PKCE endpoint is not used.
+   */
+  async signInWithGoogleIdToken(
+    dto: GoogleMobileSignInDto,
+  ): Promise<AuthResponseDto> {
+    try {
+      const identity = await this.googleIdentity.verifyMobile(dto.idToken);
+      const { user, isNewUser } = await this.studentAccounts.resolve(identity);
+      return this.issueStudentToken(user, isNewUser);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      this.logger.error('Unexpected error during mobile Google sign-in');
       throw new UnauthorizedException('Authentication failed');
     }
   }
