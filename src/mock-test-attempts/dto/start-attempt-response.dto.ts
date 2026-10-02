@@ -143,6 +143,20 @@ export class ExamSummaryDto {
     example: false,
   })
   hasMultiLingualSupport: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Score-percent cutoffs for result messages. Omitted when the exam uses app defaults.',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', example: 'good' },
+        minPercent: { type: 'number', example: 40 },
+      },
+    },
+  })
+  performanceBands?: { key: string; minPercent: number }[];
 }
 
 export class SubjectSummaryDto {
