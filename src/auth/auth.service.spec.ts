@@ -48,6 +48,7 @@ describe('AuthService', () => {
 
   const mockGoogleIdentity = {
     verify: jest.fn(),
+    verifyMobile: jest.fn(),
   };
 
   const mockGoogleCodes = {
@@ -284,6 +285,47 @@ describe('AuthService', () => {
       await expect(service.signInWithGoogle(dto)).rejects.toThrow(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('signInWithGoogleIdToken', () => {
+    const dto = { idToken: 'mobile-id-token' };
+    const googleUser = {
+      ...mockUsers.validStudent,
+      email: 'student@gmail.com',
+      phoneNumber: undefined,
+    };
+
+    it('verifies the mobile ID token and does not exchange an authorization code', async () => {
+      mockGoogleIdentity.verifyMobile.mockResolvedValue({
+        provider: StudentAuthProvider.GOOGLE,
+        googleSub: 'google-sub-1',
+        email: 'student@gmail.com',
+        name: 'Student',
+      });
+      mockUsersService.findAuthByGoogleSub.mockResolvedValue({
+        user: googleUser,
+        googleSub: 'google-sub-1',
+      });
+      mockJwtService.sign.mockReturnValue('mock-jwt-token');
+
+      const result = await service.signInWithGoogleIdToken(dto);
+
+      expect(mockGoogleCodes.exchange).not.toHaveBeenCalled();
+      expect(mockGoogleIdentity.verify).not.toHaveBeenCalled();
+      expect(mockGoogleIdentity.verifyMobile).toHaveBeenCalledWith(dto.idToken);
+      expect(result.accessToken).toBe('mock-jwt-token');
+    });
+
+    it('does not create an account when the ID token is rejected', async () => {
+      mockGoogleIdentity.verifyMobile.mockRejectedValue(
+        new UnauthorizedException('Invalid Google sign-in'),
+      );
+
+      await expect(service.signInWithGoogleIdToken(dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(mockUsersService.findAuthByGoogleSub).not.toHaveBeenCalled();
     });
   });
 

@@ -105,6 +105,22 @@ describe('GoogleIdentityStrategy', () => {
     ).toThrow(UnauthorizedException);
 
     expect(() =>
+      assertGooglePayload(
+        payload({ azp: 'android.apps.googleusercontent.com' }),
+        audiences,
+        { androidClientIds: ['android.apps.googleusercontent.com'] },
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      assertGooglePayload(
+        payload({ azp: 'android.apps.googleusercontent.com' }),
+        audiences,
+        { androidClientIds: [] },
+      ),
+    ).not.toThrow();
+
+    expect(() =>
       assertGooglePayload(payload({ sub: '  ' }), audiences),
     ).toThrow(UnauthorizedException);
 
