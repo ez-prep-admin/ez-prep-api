@@ -66,6 +66,12 @@ class AttemptQuestionDto {
   subject: string;
 
   @ApiPropertyOptional({
+    description: 'Question difficulty',
+    enum: ['easy', 'medium', 'hard'],
+  })
+  difficultyLevel?: 'easy' | 'medium' | 'hard';
+
+  @ApiPropertyOptional({
     description:
       'Which subject block this question belongs to (sessions[].order when session-wise). Omitted for topic-wise papers.',
     example: 0,
