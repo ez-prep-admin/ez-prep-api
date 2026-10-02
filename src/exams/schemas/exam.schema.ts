@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types, Query } from 'mongoose';
+import {
+  PERFORMANCE_BAND_KEYS,
+  PerformanceBandKey,
+} from '../performance-bands';
 
 export type ExamDocument = Exam & Document;
 
@@ -26,6 +30,18 @@ export class ExamSubject {
 }
 
 export const ExamSubjectSchema = SchemaFactory.createForClass(ExamSubject);
+
+@Schema({ _id: false })
+export class PerformanceBand {
+  @Prop({ required: true, enum: PERFORMANCE_BAND_KEYS })
+  key: PerformanceBandKey;
+
+  @Prop({ required: true, min: 0, max: 100 })
+  minPercent: number;
+}
+
+export const PerformanceBandSchema =
+  SchemaFactory.createForClass(PerformanceBand);
 
 @Schema({
   timestamps: true,
@@ -79,6 +95,10 @@ export class Exam {
   /** Nearby exam or one with a high number of sign-ups. Missing values are treated as false. */
   @Prop({ default: false })
   trending: boolean;
+
+  /** Score-percent cutoffs for student result messages. Missing values use app defaults. */
+  @Prop({ type: [PerformanceBandSchema], default: undefined })
+  performanceBands?: PerformanceBand[];
 
   @Prop({ default: false })
   isDeleted: boolean;

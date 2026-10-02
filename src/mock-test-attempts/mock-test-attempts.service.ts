@@ -32,6 +32,7 @@ import { PopulatedDocument } from '../common/types/populated-document.interface'
 import { knownPaperType } from '../common/enums/paper-type.enum';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { mapPerformanceBands } from '../exams/performance-bands';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -402,7 +403,10 @@ export class MockTestAttemptsService {
     // Step 2: Fetch the mock test with populated exam, subject, and topic
     const test = await this.mockTestModel
       .findById(mockTestId)
-      .populate('exam', '_id name description hasMultiLingualSupport')
+      .populate(
+        'exam',
+        '_id name description hasMultiLingualSupport performanceBands',
+      )
       .populate('subject', '_id name description')
       .populate('topic', '_id name')
       .exec();
@@ -565,6 +569,7 @@ export class MockTestAttemptsService {
               }
             )?.hasMultiLingualSupport,
           ),
+          performanceBands: mapPerformanceBands(examDoc?.performanceBands),
         },
         subject: subjectDoc?._id
           ? {
@@ -718,7 +723,10 @@ export class MockTestAttemptsService {
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
-      .populate('exam', 'name description hasMultiLingualSupport')
+      .populate(
+        'exam',
+        'name description hasMultiLingualSupport performanceBands',
+      )
       .populate('subject', 'name description')
       .populate('topic', 'name description')
       .populate('mockTest', 'paperType')
@@ -821,6 +829,7 @@ export class MockTestAttemptsService {
           name: examDoc?.name || '',
           description: examDoc?.description,
           hasMultiLingualSupport: Boolean(examDoc?.hasMultiLingualSupport),
+          performanceBands: mapPerformanceBands(examDoc?.performanceBands),
         },
         subject: {
           id: (subjectDoc?._id as Types.ObjectId)?.toString() || '',
@@ -901,7 +910,10 @@ export class MockTestAttemptsService {
         _id: attemptId,
         user: new Types.ObjectId(userId),
       })
-      .populate('exam', '_id name description hasMultiLingualSupport')
+      .populate(
+        'exam',
+        '_id name description hasMultiLingualSupport performanceBands',
+      )
       .populate('subject', '_id name description')
       .populate('topic', '_id name')
       .populate('mockTest', 'paperType')
@@ -1001,6 +1013,9 @@ export class MockTestAttemptsService {
           hasMultiLingualSupport: Boolean(
             (examDoc as { hasMultiLingualSupport?: boolean })
               ?.hasMultiLingualSupport,
+          ),
+          performanceBands: mapPerformanceBands(
+            (examDoc as { performanceBands?: unknown })?.performanceBands,
           ),
         },
         subject: subjectDoc?._id

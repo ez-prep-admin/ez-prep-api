@@ -19,6 +19,12 @@ class BasicInfoDto {
       'Present on exam refs. When false, clients should hide the language toggle.',
   })
   hasMultiLingualSupport?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Present on exam refs. Score-percent cutoffs for result messages.',
+  })
+  performanceBands?: { key: string; minPercent: number }[];
 }
 
 class QuestionOptionDto {
@@ -58,6 +64,12 @@ class AttemptQuestionDto {
 
   @ApiProperty({ description: 'Subject ID' })
   subject: string;
+
+  @ApiPropertyOptional({
+    description: 'Question difficulty',
+    enum: ['easy', 'medium', 'hard'],
+  })
+  difficultyLevel?: 'easy' | 'medium' | 'hard';
 
   @ApiPropertyOptional({
     description:
