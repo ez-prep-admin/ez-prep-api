@@ -22,6 +22,7 @@ describe('UsersController', () => {
     updateSubscription: jest.fn(),
     toggleUserStatus: jest.fn(),
     softDelete: jest.fn(),
+    softDeleteMe: jest.fn(),
     restore: jest.fn(),
     hardDelete: jest.fn(),
   };
@@ -134,6 +135,15 @@ describe('UsersController', () => {
     });
     const result = await controller.toggleStatus('u1');
     expect(result.message).toContain('deactivated');
+  });
+
+  it('softDeleteMe wraps the service result', async () => {
+    mockUsersService.softDeleteMe.mockResolvedValue(user);
+    await expect(controller.softDeleteMe(user as any)).resolves.toMatchObject({
+      message: 'Account deleted successfully',
+      data: user,
+    });
+    expect(mockUsersService.softDeleteMe).toHaveBeenCalledWith('u1');
   });
 
   it('softDelete wraps the service result', async () => {

@@ -286,11 +286,27 @@ export class UsersService {
     return this.toResponseDto(updatedUser);
   }
 
+  /**
+   * Soft-delete a user and release unique identity fields so the same phone /
+   * email / Google account can create a new student later.
+   * Email stays required+unique on the schema, so it is tombstoned rather than unset.
+   */
   async softDelete(id: string): Promise<UserResponseDto> {
+    const tombstoneEmail = `deleted.${id}@deleted.ezprep.local`;
     const deletedUser = await this.userModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        {
+          $set: {
+            isDeleted: true,
+            isActive: false,
+            email: tombstoneEmail,
+          },
+          $unset: {
+            phoneNumber: 1,
+            googleSub: 1,
+          },
+        },
         { new: true },
       )
       .exec();
@@ -300,6 +316,11 @@ export class UsersService {
     }
 
     return this.toResponseDto(deletedUser);
+  }
+
+  /** Authenticated student deletes their own account (Play / in-app deletion). */
+  async softDeleteMe(userId: string): Promise<UserResponseDto> {
+    return this.softDelete(userId);
   }
 
   async restore(id: string): Promise<UserResponseDto> {
