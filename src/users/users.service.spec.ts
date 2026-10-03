@@ -335,17 +335,54 @@ describe('UsersService', () => {
   });
 
   describe('softDelete', () => {
-    it('should soft delete a user', async () => {
+    it('should soft delete a user and release identity fields', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(
-        chain(mockUserDocument({ isDeleted: true })),
+        chain(
+          mockUserDocument({
+            isDeleted: true,
+            isActive: false,
+            email: `deleted.${OID}@deleted.ezprep.local`,
+          }),
+        ),
       );
       await expect(service.softDelete(OID)).resolves.toBeDefined();
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        OID,
+        {
+          $set: {
+            isDeleted: true,
+            isActive: false,
+            email: `deleted.${OID}@deleted.ezprep.local`,
+          },
+          $unset: {
+            phoneNumber: 1,
+            googleSub: 1,
+          },
+        },
+        { new: true },
+      );
     });
 
     it('should throw NotFoundException', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(null));
       await expect(service.softDelete('missing')).rejects.toThrow(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('softDeleteMe', () => {
+    it('delegates to softDelete for the current user', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ isDeleted: true })),
+      );
+      await expect(service.softDeleteMe(OID)).resolves.toBeDefined();
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        OID,
+        expect.objectContaining({
+          $set: expect.objectContaining({ isDeleted: true }),
+        }),
+        { new: true },
       );
     });
   });
@@ -482,6 +519,20 @@ describe('UsersService', () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(null));
       await expect(service.updateMe(OID, { name: 'X' })).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('should $unset targetExam when null is sent', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ name: 'Ada' })),
+      );
+
+      await service.updateMe(OID, { targetExam: null });
+
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        { $unset: { targetExam: 1 } },
+        { new: true },
       );
     });
   });

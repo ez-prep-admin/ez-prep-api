@@ -174,6 +174,32 @@ export class UsersController {
     return { message: 'Profile retrieved successfully', data: user };
   }
 
+  @Delete('me')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Soft-delete own account',
+    description:
+      'Marks the authenticated student as deleted, deactivates the account, and releases ' +
+      'phone / email / Google identity so the same credentials can create a new account later. ' +
+      'Attempt history remains on the old user id (soft-delete v1).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account soft-deleted successfully',
+    type: UserResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async softDeleteMe(@GetUser() currentUser: UserResponseDto): Promise<{
+    message: string;
+    data: UserResponseDto;
+  }> {
+    const user = await this.usersService.softDeleteMe(currentUser.id);
+    return { message: 'Account deleted successfully', data: user };
+  }
+
   @Patch('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

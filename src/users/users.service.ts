@@ -286,11 +286,27 @@ export class UsersService {
     return this.toResponseDto(updatedUser);
   }
 
+  /**
+   * Soft-delete a user and release unique identity fields so the same phone /
+   * email / Google account can create a new student later.
+   * Email stays required+unique on the schema, so it is tombstoned rather than unset.
+   */
   async softDelete(id: string): Promise<UserResponseDto> {
+    const tombstoneEmail = `deleted.${id}@deleted.ezprep.local`;
     const deletedUser = await this.userModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        {
+          $set: {
+            isDeleted: true,
+            isActive: false,
+            email: tombstoneEmail,
+          },
+          $unset: {
+            phoneNumber: 1,
+            googleSub: 1,
+          },
+        },
         { new: true },
       )
       .exec();
@@ -300,6 +316,11 @@ export class UsersService {
     }
 
     return this.toResponseDto(deletedUser);
+  }
+
+  /** Authenticated student deletes their own account (Play / in-app deletion). */
+  async softDeleteMe(userId: string): Promise<UserResponseDto> {
+    return this.softDelete(userId);
   }
 
   async restore(id: string): Promise<UserResponseDto> {
@@ -387,6 +408,7 @@ export class UsersService {
     }
 
     const $set: Record<string, unknown> = {};
+    const $unset: Record<string, 1> = {};
 
     // Core identity
     if (dto.name !== undefined) $set.name = dto.name;
@@ -400,13 +422,26 @@ export class UsersService {
       $set.dateOfBirth = new Date(dto.dateOfBirth);
     if (dto.gender !== undefined) $set.gender = dto.gender;
     if (dto.location !== undefined) $set.location = dto.location;
-    if (dto.targetExam !== undefined)
-      $set.targetExam = new Types.ObjectId(dto.targetExam);
+    if (dto.targetExam !== undefined) {
+      if (dto.targetExam === null) {
+        $unset.targetExam = 1;
+      } else {
+        $set.targetExam = new Types.ObjectId(dto.targetExam);
+      }
+    }
     if (dto.targetExamDate !== undefined)
       $set.targetExamDate = new Date(dto.targetExamDate);
 
+    const update: Record<string, unknown> = {};
+    if (Object.keys($set).length > 0) {
+      update.$set = $set;
+    }
+    if (Object.keys($unset).length > 0) {
+      update.$unset = $unset;
+    }
+
     const user = await this.userModel
-      .findByIdAndUpdate(new Types.ObjectId(id), { $set }, { new: true })
+      .findByIdAndUpdate(new Types.ObjectId(id), update, { new: true })
       .exec();
 
     if (!user) {

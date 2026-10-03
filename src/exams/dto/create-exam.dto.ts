@@ -85,7 +85,8 @@ export class PerformanceBandDto {
   key: (typeof PERFORMANCE_BAND_KEYS)[number];
 
   @ApiProperty({
-    description: 'Minimum score percent (marks earned / max marks) for this message',
+    description:
+      'Minimum score percent (marks earned / max marks) for this message',
     example: 40,
     minimum: 0,
     maximum: 100,
