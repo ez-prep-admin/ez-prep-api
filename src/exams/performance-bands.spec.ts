@@ -33,7 +33,9 @@ describe('performanceBands', () => {
 
   it('accepts a strictly increasing ladder', async () => {
     const errors = await validate(examDto(validBands));
-    expect(errors.find(error => error.property === 'performanceBands')).toBeUndefined();
+    expect(
+      errors.find(error => error.property === 'performanceBands'),
+    ).toBeUndefined();
   });
 
   it('rejects a ladder that is not strictly increasing', async () => {
@@ -45,7 +47,9 @@ describe('performanceBands', () => {
         { key: 'excellent', minPercent: 85 },
       ]),
     );
-    expect(errors.some(error => error.property === 'performanceBands')).toBe(true);
+    expect(errors.some(error => error.property === 'performanceBands')).toBe(
+      true,
+    );
   });
 
   it('rejects needs_improvement above zero', async () => {
@@ -57,6 +61,8 @@ describe('performanceBands', () => {
         { key: 'excellent', minPercent: 85 },
       ]),
     );
-    expect(errors.some(error => error.property === 'performanceBands')).toBe(true);
+    expect(errors.some(error => error.property === 'performanceBands')).toBe(
+      true,
+    );
   });
 });

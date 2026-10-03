@@ -7,6 +7,7 @@ import {
   MinLength,
   MaxLength,
   IsMongoId,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -114,12 +115,15 @@ export class UpdateMeDto {
   location?: LocationDto;
 
   @ApiPropertyOptional({
-    description: 'ID of the target exam',
+    description:
+      'ID of the target exam. Send null to clear the selected target exam.',
     example: '64f123456789abcdef123456',
+    nullable: true,
   })
   @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsMongoId()
-  targetExam?: string;
+  targetExam?: string | null;
 
   @ApiPropertyOptional({
     description: 'Target exam date (ISO 8601)',

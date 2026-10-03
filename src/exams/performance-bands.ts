@@ -41,7 +41,9 @@ export function mapPerformanceBands(
 }
 
 @ValidatorConstraint({ name: 'performanceBands', async: false })
-export class PerformanceBandsConstraint implements ValidatorConstraintInterface {
+export class PerformanceBandsConstraint
+  implements ValidatorConstraintInterface
+{
   validate(value: unknown): boolean {
     if (!Array.isArray(value)) return false;
 
@@ -65,7 +67,9 @@ export class PerformanceBandsConstraint implements ValidatorConstraintInterface 
     const [needs, good, veryGood, excellent] = PERFORMANCE_BAND_KEYS.map(
       key => byKey.get(key) as number,
     );
-    return needs === 0 && needs < good && good < veryGood && veryGood < excellent;
+    return (
+      needs === 0 && needs < good && good < veryGood && veryGood < excellent
+    );
   }
 
   defaultMessage(): string {

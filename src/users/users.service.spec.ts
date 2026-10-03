@@ -484,6 +484,20 @@ describe('UsersService', () => {
         NotFoundException,
       );
     });
+
+    it('should $unset targetExam when null is sent', async () => {
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ name: 'Ada' })),
+      );
+
+      await service.updateMe(OID, { targetExam: null });
+
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        { $unset: { targetExam: 1 } },
+        { new: true },
+      );
+    });
   });
 
   describe('updateProfile', () => {
