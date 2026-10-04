@@ -1,0 +1,147 @@
+# Commerce / Payments — STATUS
+
+**Single source of truth** for implementation progress, developer ops (scripts, instance config, Razorpay, migrations), and **phase completion confirmation**.
+
+Update this file at the **end of every phase session**. A phase is not `done` until the developer confirmation block is filled.
+
+Related: [`engineering-rules.md`](engineering-rules.md) · [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) · [`unknowns.md`](unknowns.md) · [`phases/README.md`](phases/README.md)  
+Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
+
+---
+
+## Program snapshot
+
+| Field | Value |
+| --- | --- |
+| Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
+| Current phase | 00 done — next **01** |
+| Enforcement mode | Not implemented (default `LEGACY` until phase 15) |
+| Payments live | No |
+| Environments | local + production only |
+| GST invoices live | No |
+| Billing address | **Always required** at checkout (D-10) |
+
+---
+
+## How to close a phase (mandatory)
+
+1. Finish code + tests per the phase file.
+2. Append a **Session log** entry using the template below.
+3. Complete the **Developer ops** checkboxes for that phase (or mark N/A with reason).
+4. Add **Developer confirmation** (name + date). Without this, status stays `pending` / `in_progress`.
+5. Only then set the phase board row to `done` and set “Next phase”.
+6. If any CA/compliance item was deferred, ensure [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) has it and code has `TODO(golive): <id>` where relevant.
+
+### Session log template
+
+```markdown
+### YYYY-MM-DD — Phase NN — <title>
+
+**Code:** repos / branches / PRs  
+**Tests:** api Jest / admin Vitest / app checklist — pass/fail  
+
+**Developer ops (manual) — confirm each:**
+- [ ] <script or config step from phase>
+- [ ] <env / dashboard step>
+- [ ] N/A items listed with reason: …
+
+**Developer confirmation:**  
+I, <name>, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: YYYY-MM-DD
+
+**DoD:** met  
+**Deviations:** …  
+**GOLIVE_TODOS touched:** … / none  
+**Next:** phase NN+1
+```
+
+---
+
+## Phase board
+
+| # | Phase | Status | Completed | Developer confirmation |
+| --- | --- | --- | --- | --- |
+| 00 | Foundation docs | **done** | 2026-10-04 | Docs-only; no runtime ops |
+| 01 | Access mode + invariants | pending | | Pending: FREE backfill + mismatch report |
+| 02 | Entitlements + access service | pending | | Pending: `ACCESS_ENFORCEMENT_MODE=LEGACY` in `.env` |
+| 03 | Enforce access gates | pending | | Pending: local ENFORCED smoke note |
+| 04 | Products + Offers API | pending | | Pending: record paise convention |
+| 05 | Admin commerce UI | pending | | Pending: optional smoke create product |
+| 06 | Admin entitlements UI | pending | | Pending: grant/revoke on test user |
+| 07 | Orders + TaxService + FakeGateway | pending | | Pending: seed **local** seller/taxConfig; billing includes address |
+| 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
+| 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
+| 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
+| 11 | Admin refunds | pending | | Pending: document Zoho credit-note step (U-GST-04) |
+| 12 | Reconciliation + audit | pending | | Pending: recon env flag noted |
+| 13 | User access UI | pending | | Pending: manual UI checklist |
+| 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
+| 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED |
+
+---
+
+## Standing developer / owner ops (by theme)
+
+### A. Scripts (API repo)
+
+| Script / command | When | Record in session log |
+| --- | --- | --- |
+| FREE backfill for `accessMode` | Phase 01 — each DB (local, later prod) | Counts updated |
+| Exam category mismatch report | Phase 01 | Zero mismatches or fixes applied |
+| Optional ENTITLED manifest | Phase 15 only if used | Manifest path |
+
+### B. Instance config (Mongo)
+
+| When | What |
+| --- | --- |
+| Phase 07/10 local | Seed test `seller` + `taxConfig` (not production GSTIN unless intentional) |
+| Phase 15 prod | Real values — `U-OPS-01` / GOLIVE_TODOS |
+
+### C. Env / Razorpay
+
+| When | What |
+| --- | --- |
+| Phase 02+ | `ACCESS_ENFORCEMENT_MODE` |
+| Phase 08/14 local | Test Razorpay keys; optional webhook tunnel |
+| Phase 15 prod | Live keys + webhook — `U-OPS-02` |
+
+### D. Accounting (Zoho)
+
+| When | What |
+| --- | --- |
+| Every filing-relevant refund | Credit note outside app until U-GST-04 cleared — log here |
+
+---
+
+## Compliance / go-live gate
+
+Tracked in detail in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md). Phase 15 cannot mark production live while that board has open **must-clear** rows (unless CA waiver logged).
+
+Development of phases 01–14 **continues** while those rows are open.
+
+---
+
+## Session log
+
+### 2026-10-04 — Phase 00 — Foundation docs + compliance + STATUS/GOLIVE policy
+
+**Code:** `docs/payment-gateway/**` only  
+**Tests:** n/a  
+
+**Developer ops (manual) — confirm each:**
+- [x] N/A — documentation phase only
+
+**Developer confirmation:**  
+Phase 00 is docs-only; no runtime developer ops. Marked done as pack authoring complete.  
+Date: 2026-10-04
+
+**DoD:** met  
+**Deviations:** FY invoice series; always collect billing address; GOLIVE_TODOS non-blocking policy (D-21)  
+**GOLIVE_TODOS touched:** created board  
+**Next:** phase 01
+
+### 2026-10-04 — Plan lock
+
+- Owner locked the execution pack for development.
+- CA confirmation proceeds in parallel against [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) / [`unknowns.md`](unknowns.md); does not block phase 01+.
+- Start implementation at [`phases/phase-01-access-mode-and-invariants.md`](phases/phase-01-access-mode-and-invariants.md).
