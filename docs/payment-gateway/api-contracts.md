@@ -92,16 +92,49 @@ Server loads Offer + Product, computes effective **inclusive** amount (paise), r
 
 **Never accept `amount` from client as authoritative.** State list comes from `GET /meta/indian-states` only.
 
+**Amount floor:** Razorpay rejects below **100 paise**; server must reject create-order below that (do not open Checkout for invalid totals).
+
+### Create order response (illustrative)
+
+```json
+{
+  "message": "Order created",
+  "data": {
+    "id": "<ourOrderId>",
+    "status": "PENDING_PAYMENT",
+    "amount": 99900,
+    "currency": "INR",
+    "provider": "razorpay",
+    "providerData": {
+      "razorpayOrderId": "order_...",
+      "amount": 99900,
+      "currency": "INR",
+      "keyId": "rzp_test_..."
+    }
+  }
+}
+```
+
+`keyId` may be returned from server config for convenience, but the Next.js client still only uses public env / non-secret values — never `RAZORPAY_KEY_SECRET`.
+
 ### Verify body (Razorpay shape isolated in adapter mapping)
 
-Provider-neutral:
+Provider-neutral envelope:
 
 ```json
 {
   "provider": "razorpay",
-  "providerPayload": { }
+  "providerPayload": {
+    "razorpay_order_id": "order_...",
+    "razorpay_payment_id": "pay_...",
+    "razorpay_signature": "..."
+  }
 }
 ```
+
+Adapter verifies: `HMAC-SHA256(order_id + "|" + payment_id, KEY_SECRET) === signature`. Mismatch or missing fields → **400**, order not marked paid.
+
+**Note vs Razorpay quickstart paths:** sample apps use `/api/create-order` and `/api/verify-payment`. EZ Prep uses the routes in the table above under `api/v1` with auth, billing, and idempotency — same Standard Checkout mechanics, richer commerce contract.
 
 ---
 

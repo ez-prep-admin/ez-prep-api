@@ -21,7 +21,7 @@ Implement Order and Payment domain with strict state machines, idempotent order 
 
 ## Target behavior
 
-1. `POST /checkout/orders` with `{ offerId, billing, idempotencyKey }` → billing **must** include name, stateCode, addressLine1, city, pincode (D-10); server loads offer/product, computes effective **inclusive** amount (paise), calls `TaxService.calculateInclusiveTax`, snapshots grants + tax + billing, creates Order CREATED→PENDING_PAYMENT via FakeGateway.createOrder.
+1. `POST /checkout/orders` with `{ offerId, billing, idempotencyKey }` → billing **must** include name, stateCode, addressLine1, city, pincode (D-10); server loads offer/product, computes effective **inclusive** amount (paise), calls `TaxService.calculateInclusiveTax`, snapshots grants + tax + billing, creates Order CREATED→PENDING_PAYMENT via FakeGateway.createOrder. Reject if amount `< 100` paise (Razorpay floor; FakeGateway should mirror the same guard so tests catch cheap offers early).
 2. Idempotent replay returns same order.
 3. Reject unpublished product / inactive offer / missing billing.
 4. `PaymentGateway` interface + `PaymentGatewayRegistry` + `FakeGateway`.

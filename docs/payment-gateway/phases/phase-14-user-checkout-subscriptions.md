@@ -26,11 +26,17 @@ Implement provider-neutral checkout in ezprep-app (Razorpay adapter behind a che
 ## Target behavior
 
 1. Checkout page: load offer/product; show price (effective); billing **name + state + full address** (line1, optional line2, city, pincode) — all required except line2; states from meta API; prefill billing profile; Pay CTA.
-2. `CheckoutService.startCheckout` → POST order → open provider adapter (Razorpay Checkout.js) with server-provided order data.
-3. On success: verify endpoint → refresh entitlements → navigate to success state / subscriptions.
-4. Handle failure, dismiss/cancel, duplicate clicks, expired order, network errors.
-5. Subscriptions page: active entitlements list (product name, scope summary, dates); order history; invoice PDF download links.
-6. No refund UI.
+2. `CheckoutService.startCheckout` → POST `/checkout/orders` → open provider adapter (Razorpay Checkout.js) with server-provided order data.
+3. **Razorpay Standard Checkout (adapter internals):**
+   - Load script once: `https://checkout.razorpay.com/v1/checkout.js` (dynamic script tag or documented loader; do not bundle the SDK into the app bag).
+   - Open modal with options from server `providerData` + public `NEXT_PUBLIC_RAZORPAY_KEY_ID` as `key` (never secret).
+   - Required success handler fields: `razorpay_payment_id`, `razorpay_order_id`, `razorpay_signature` → POST verify with those three inside `providerPayload`.
+   - Handle **modal dismiss / user cancel** (no verify; order stays pending; webhook/recon may later settle or expire).
+   - Handle **`payment.failed`** event: show error; do not call verify as success; no entitlement.
+4. On success: verify endpoint → refresh entitlements → navigate to success state / subscriptions.
+5. Handle failure, dismiss/cancel, duplicate clicks, expired order, network errors.
+6. Subscriptions page: active entitlements list (product name, scope summary, dates); order history; invoice PDF download links.
+7. No refund UI.
 
 ## Files to create
 
@@ -89,8 +95,9 @@ components/subscriptions/*
 - [ ] Prefill billing profile
 - [ ] State required
 - [ ] Pay success path end-to-end
-- [ ] Verify failure shows error; no access
-- [ ] User closes modal → order pending; webhook/recon later noted
+- [ ] Verify failure (bad/tampered signature) shows error; no access
+- [ ] User closes modal / dismiss → order pending; webhook/recon later noted
+- [ ] `payment.failed` path shows error; no access; no invoice
 - [ ] Duplicate Pay click guarded
 - [ ] Expired order message
 - [ ] Subscriptions shows active entitlement
@@ -98,6 +105,7 @@ components/subscriptions/*
 - [ ] No refund control visible
 - [ ] Mobile layout
 - [ ] Locked card → View plans → Buy → success unlocks
+- [ ] Confirm `NEXT_PUBLIC_RAZORPAY_KEY_ID` only in client env; secret absent from app bundle
 
 ## Risks
 

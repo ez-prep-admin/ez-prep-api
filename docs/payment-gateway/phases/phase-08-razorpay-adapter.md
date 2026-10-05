@@ -23,10 +23,16 @@ Implement `RazorpayGateway` behind the PaymentGateway port: create order, verify
 ## Target behavior
 
 1. When `PAYMENT_PROVIDER=razorpay`, checkout uses RazorpayGateway.createOrder (amount in paise).
-2. `POST /checkout/orders/:id/verify` maps providerPayload through adapter.verifyPayment; on success → mark paid path.
-3. `POST /webhooks/payments/razorpay` verifies signature, records webhook_events, idempotent process, mark paid if capture event.
-4. Invalid signatures → 400/401; no state change.
-5. Secrets from env only.
+2. Adapter calls Razorpay Orders API `POST /v1/orders` with `{ amount, currency: 'INR', receipt }` where `amount` is the **server-computed** order total in paise and `receipt` maps to our internal order id (or short stable receipt string). Never trust a client-supplied amount.
+3. Reject create if amount `< 100` paise (Razorpay minimum). Prefer also preventing such offers at catalog/admin validation.
+4. `POST /checkout/orders/:id/verify` maps `providerPayload` through adapter.verifyPayment; on success → mark paid path.
+5. **Verify signature algorithm (Razorpay Standard Checkout):**  
+   `HMAC-SHA256(razorpay_order_id + "|" + razorpay_payment_id, RAZORPAY_KEY_SECRET)`  
+   Compare digest to `razorpay_signature` (timing-safe compare). Mismatch → **400**, do **not** mark paid / provision.
+6. Missing verify fields (`razorpay_order_id` / `razorpay_payment_id` / `razorpay_signature`) → **400**.
+7. `POST /webhooks/payments/razorpay` verifies webhook signature (`RAZORPAY_WEBHOOK_SECRET`), records webhook_events, idempotent process, mark paid if capture event. (Prompt’s Standard Checkout checklist omits webhooks — **we still require them** as authoritative backup when the browser never hits verify.)
+8. Invalid signatures → 400/401; no state change. Razorpay API/auth failures from createOrder → map to 502/500 (or 401 only if our keys are wrong at boot — prefer fail-fast config validation).
+9. Secrets from env only: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. SDK (`razorpay` npm) installed in **API only**.
 
 ## Files to create
 
@@ -51,11 +57,11 @@ Fixture JSON for tests; signature helper tests.
 
 ## Implementation tasks
 
-1. Add official Razorpay SDK dependency in API only.
-2. Implement adapter methods.
+1. Add official Razorpay SDK dependency in API only (`npm install razorpay`).
+2. Implement adapter methods: createOrder, verifyPayment (HMAC as above), webhook parse/verify, refund stub/real for phase 11.
 3. Webhook controller + idempotency.
-4. Wire verify endpoint.
-5. Jest with mocked HTTP/SDK + signature fixtures.
+4. Wire verify endpoint; DTO validates required Razorpay payload keys when `provider=razorpay`.
+5. Jest with mocked HTTP/SDK + signature fixtures (valid + tampered HMAC).
 6. Document local tunnel webhook setup (ngrok/Cloudflare) in STATUS.md; production webhook is permanent HTTPS on prod API only.
 
 ## Requirements
@@ -63,6 +69,7 @@ Fixture JSON for tests; signature helper tests.
 - Adapter-internal mapping from Razorpay statuses → normalized enums.
 - Do not log secrets or full webhook PII.
 - Webhook returns 200 on duplicate after ignore.
+- **Route mapping vs Razorpay quickstart:** their sample uses `POST /api/create-order` + `POST /api/verify-payment`. Ours map to `POST /api/v1/checkout/orders` and `POST /api/v1/checkout/orders/:id/verify` (JWT + offer/billing/idempotency). Do **not** add parallel naive endpoints.
 
 ## Acceptance criteria
 
@@ -73,13 +80,14 @@ Fixture JSON for tests; signature helper tests.
 
 ## Tests (Jest)
 
-1. createOrder builds correct paise amount.
-2. verifyPayment success → CAPTURED.
-3. verifyPayment bad signature → fail.
-4. webhook valid → PROCESSED + order PAID (if pending).
-5. webhook duplicate → IGNORED, single PAID.
-6. webhook invalid signature → error, order unchanged.
-7. Registry selects razorpay vs fake by config.
+1. createOrder builds correct paise amount; amount `< 100` rejected.
+2. verifyPayment success → CAPTURED (HMAC of `order_id|payment_id` with test secret).
+3. verifyPayment bad signature → fail; order unchanged.
+4. verifyPayment missing fields → 400; order unchanged.
+5. webhook valid → PROCESSED + order PAID (if pending).
+6. webhook duplicate → IGNORED, single PAID.
+7. webhook invalid signature → error, order unchanged.
+8. Registry selects razorpay vs fake by config.
 
 ## Risks
 
