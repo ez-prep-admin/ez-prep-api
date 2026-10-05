@@ -11,6 +11,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 
 const SIZE_OPTIONS = [10, 15, 20, 25, 30] as const;
 
@@ -32,6 +33,16 @@ export class DifficultyDistributionInputDto {
 }
 
 export class CreateTopicWiseMockTestDto {
+  @ApiPropertyOptional({
+    description:
+      'Paper access mode. FREE = no entitlement required; ENTITLED = requires covering entitlement. Defaults to FREE.',
+    enum: AccessMode,
+    default: AccessMode.FREE,
+  })
+  @IsOptional()
+  @IsEnum(AccessMode)
+  accessMode?: AccessMode;
+
   @ApiProperty({ enum: SIZE_OPTIONS })
   @IsIn(SIZE_OPTIONS)
   totalQuestions: number;

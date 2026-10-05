@@ -381,6 +381,7 @@ describe('MockTestsService', () => {
           topic: null,
           generationMode: 'STATIC',
           marksPerQuestion: 1,
+          accessMode: 'FREE',
         }),
       );
     });

@@ -1,5 +1,6 @@
 import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
 
 export class ExamSummaryDto {
@@ -71,6 +72,15 @@ export class MockTestListItemDto {
   })
   @Expose()
   id: string;
+
+  @ApiProperty({
+    description:
+      'Paper access mode. FREE = no entitlement required; ENTITLED = requires covering entitlement.',
+    enum: AccessMode,
+    example: AccessMode.FREE,
+  })
+  @Expose()
+  accessMode: AccessMode;
 
   @ApiPropertyOptional({
     description: 'Title of the mock test',

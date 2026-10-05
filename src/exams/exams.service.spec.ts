@@ -83,7 +83,9 @@ describe('ExamsService', () => {
   describe('create', () => {
     it('creates an exam with computed totals', async () => {
       categoryModel.findById.mockReturnValue(chain({ _id: OID }));
-      examGroupModel.findById.mockReturnValue(chain({ _id: OID2 }));
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: OID }),
+      );
       examModel.findOne.mockReturnValue(chain(null));
       examModel.create.mockResolvedValue(examDoc({ name: 'SBI PO' }));
 
@@ -109,9 +111,23 @@ describe('ExamsService', () => {
       );
     });
 
+    it('throws when exam category does not match exam group category', async () => {
+      const otherCategory = '507f1f77bcf86cd799439099';
+      categoryModel.findById.mockReturnValue(chain({ _id: OID }));
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: otherCategory }),
+      );
+      await expect(service.create(dto as any)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(examModel.create).not.toHaveBeenCalled();
+    });
+
     it('throws ConflictException on duplicate name', async () => {
       categoryModel.findById.mockReturnValue(chain({ _id: OID }));
-      examGroupModel.findById.mockReturnValue(chain({ _id: OID2 }));
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: OID }),
+      );
       examModel.findOne.mockReturnValue(chain({ name: 'SBI PO' }));
       await expect(service.create(dto as any)).rejects.toThrow(
         ConflictException,
@@ -211,8 +227,12 @@ describe('ExamsService', () => {
   describe('update', () => {
     it('updates an exam', async () => {
       categoryModel.findById.mockReturnValue(chain({ _id: OID }));
-      examGroupModel.findById.mockReturnValue(chain({ _id: OID2 }));
-      examModel.findById.mockReturnValue(chain({ name: 'Old', category: OID }));
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: OID }),
+      );
+      examModel.findById.mockReturnValue(
+        chain({ name: 'Old', category: OID, examGroup: OID2 }),
+      );
       examModel.findOne.mockReturnValue(chain(null));
       examModel.findByIdAndUpdate.mockReturnValue(
         chain(examDoc({ name: 'New' })),
@@ -240,6 +260,46 @@ describe('ExamsService', () => {
       await expect(
         service.update(OID, { examGroup: OID2 } as any),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when updated category does not match exam group category', async () => {
+      const otherCategory = '507f1f77bcf86cd799439099';
+      categoryModel.findById.mockReturnValue(chain({ _id: otherCategory }));
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: OID }),
+      );
+      examModel.findById.mockReturnValue(
+        chain({ name: 'Old', category: OID, examGroup: OID2 }),
+      );
+      await expect(
+        service.update(OID, { category: otherCategory } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(examModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws when updated exam group category does not match exam category', async () => {
+      const otherCategory = '507f1f77bcf86cd799439099';
+      examGroupModel.findById.mockReturnValue(
+        chain({ _id: OID2, category: otherCategory }),
+      );
+      examModel.findById.mockReturnValue(
+        chain({ name: 'Old', category: OID, examGroup: OID2 }),
+      );
+      await expect(
+        service.update(OID, { examGroup: OID2 } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(examModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequest when updating category on exam missing examGroup', async () => {
+      categoryModel.findById.mockReturnValue(chain({ _id: OID }));
+      examModel.findById.mockReturnValue(
+        chain({ name: 'Legacy', category: OID, examGroup: null }),
+      );
+      await expect(
+        service.update(OID, { category: OID } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(examModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when exam missing during duplicate check', async () => {

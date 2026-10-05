@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 00 done — next **01** |
+| Current phase | 01 **done** — next **02** |
 | Enforcement mode | Not implemented (default `LEGACY` until phase 15) |
 | Payments live | No |
 | Environments | local + production only |
@@ -62,7 +62,7 @@ Date: YYYY-MM-DD
 | # | Phase | Status | Completed | Developer confirmation |
 | --- | --- | --- | --- | --- |
 | 00 | Foundation docs | **done** | 2026-10-04 | Docs-only; no runtime ops |
-| 01 | Access mode + invariants | pending | | Pending: FREE backfill + mismatch report |
+| 01 | Access mode + invariants | **done** | 2026-10-05 | Sharun — local backfill + mismatch report |
 | 02 | Entitlements + access service | pending | | Pending: `ACCESS_ENFORCEMENT_MODE=LEGACY` in `.env` |
 | 03 | Enforce access gates | pending | | Pending: local ENFORCED smoke note |
 | 04 | Products + Offers API | pending | | Pending: record paise convention |
@@ -86,8 +86,8 @@ Date: YYYY-MM-DD
 
 | Script / command | When | Record in session log |
 | --- | --- | --- |
-| FREE backfill for `accessMode` | Phase 01 — each DB (local, later prod) | Counts updated |
-| Exam category mismatch report | Phase 01 | Zero mismatches or fixes applied |
+| `npm run commerce:backfill-access-mode-free` | Phase 01 — each DB (local, later prod) | Counts updated (`matchedCount` / `modifiedCount`) |
+| `npm run commerce:report-exam-category-mismatches` | Phase 01 | Zero mismatches or fixes applied |
 | Optional ENTITLED manifest | Phase 15 only if used | Manifest path |
 
 ### B. Instance config (Mongo)
@@ -145,3 +145,34 @@ Date: 2026-10-04
 - Owner locked the execution pack for development.
 - CA confirmation proceeds in parallel against [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) / [`unknowns.md`](unknowns.md); does not block phase 01+.
 - Start implementation at [`phases/phase-01-access-mode-and-invariants.md`](phases/phase-01-access-mode-and-invariants.md).
+
+### 2026-10-05 — Phase 01 — Access mode + invariants
+
+**Code:** `ez-prep-api` on developer branch `payment-gateway` (git ops owned by developer)  
+**Tests:** Jest — exams invariant, accessMode DTO, backfill/report helpers, mock-tests service — pass  
+
+**Shipped:**
+- `AccessMode` enum (`FREE` \| `ENTITLED`); MockTest `accessMode` default `FREE` + index
+- Threaded through topic-wise create/update DTOs + response/list DTOs; full/sprint publish
+- Exam create/update rejects `exam.category !== examGroup.category`
+- Kept ops tools (not throwaway):
+  - `src/common/commerce/*` pure helpers (Jest-tested)
+  - `scripts/backfill-mocktest-access-mode-free.ts` + `scripts/report-exam-category-mismatches.ts`
+  - npm scripts `commerce:backfill-access-mode-free`, `commerce:report-exam-category-mismatches`
+
+**Developer ops (manual) — confirm each:**
+- [x] Run `npm run commerce:backfill-access-mode-free` against **local** Mongo; record `matchedCount` / `modifiedCount` below
+- [x] Run `npm run commerce:report-exam-category-mismatches` against **local** Mongo; confirm zero mismatches or apply intentional fixes and re-run
+- [x] N/A — no `.env` flags for this phase; no admin/app UI; no Razorpay/GST
+
+**Backfill counts:** matchedCount=169 modifiedCount=169  
+**Mismatch report:** 0 mismatches (after owner data fix: assigned missing examGroup/category on RRB exams; scannedExams=19)
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-05
+
+**DoD:** met  
+**Deviations:** schema default FREE until phase 15; mismatch report hardened for missing examGroup  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 02

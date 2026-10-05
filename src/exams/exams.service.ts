@@ -56,6 +56,11 @@ export class ExamsService {
       );
     }
 
+    this.assertCategoryMatchesExamGroup(
+      createExamDto.category,
+      examGroup.category,
+    );
+
     // Check for duplicate name within same category
     const existing = await this.examModel
       .findOne({
@@ -270,15 +275,55 @@ export class ExamsService {
       }
     }
 
+    let examGroupDoc: ExamGroupDocument | null = null;
     if (updateExamDto.examGroup) {
-      const examGroup = await this.examGroupModel
+      examGroupDoc = await this.examGroupModel
         .findById(updateExamDto.examGroup)
         .exec();
-      if (!examGroup) {
+      if (!examGroupDoc) {
         throw new BadRequestException(
           `Exam group with ID "${updateExamDto.examGroup}" not found`,
         );
       }
+    }
+
+    // When category and/or examGroup change, enforce category === examGroup.category
+    if (updateExamDto.category || updateExamDto.examGroup) {
+      const existingExam = await this.examModel.findById(id).exec();
+      if (!existingExam) {
+        throw new NotFoundException(`Exam with ID "${id}" not found`);
+      }
+
+      const effectiveCategoryId = (
+        updateExamDto.category || existingExam.category
+      )?.toString();
+      if (!effectiveCategoryId) {
+        throw new BadRequestException(
+          'Exam category is required and must match the exam group category',
+        );
+      }
+
+      if (!examGroupDoc) {
+        const examGroupId = (
+          updateExamDto.examGroup || existingExam.examGroup
+        )?.toString();
+        if (!examGroupId) {
+          throw new BadRequestException(
+            'Exam group is required when updating category; set examGroup as well',
+          );
+        }
+        examGroupDoc = await this.examGroupModel.findById(examGroupId).exec();
+        if (!examGroupDoc) {
+          throw new BadRequestException(
+            `Exam group with ID "${examGroupId}" not found`,
+          );
+        }
+      }
+
+      this.assertCategoryMatchesExamGroup(
+        effectiveCategoryId,
+        examGroupDoc.category,
+      );
     }
 
     // Check for duplicate name if name or category is being updated
@@ -336,6 +381,25 @@ export class ExamsService {
     }
 
     return this.toResponseDto(exam);
+  }
+
+  /**
+   * EXAM_GROUP entitlements require exam.category === examGroup.category (R-04).
+   */
+  private assertCategoryMatchesExamGroup(
+    examCategoryId: string | Types.ObjectId,
+    examGroupCategoryId: string | Types.ObjectId | undefined | null,
+  ): void {
+    if (!examGroupCategoryId) {
+      throw new BadRequestException(
+        'Exam group is missing a category; cannot validate exam category invariant',
+      );
+    }
+    if (examCategoryId.toString() !== examGroupCategoryId.toString()) {
+      throw new BadRequestException(
+        `Exam category "${examCategoryId.toString()}" must match exam group category "${examGroupCategoryId.toString()}"`,
+      );
+    }
   }
 
   private withComputedTotals<

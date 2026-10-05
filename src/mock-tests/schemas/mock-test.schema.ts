@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types, Query } from 'mongoose';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 import { PaperType } from '../../common/enums/paper-type.enum';
 
 export type MockTestDocument = MockTest & Document;
@@ -73,6 +74,17 @@ export class MockTest {
     index: true,
   })
   paperType: PaperType;
+
+  /**
+   * FREE until phase 15 / deliberate ENTITLED flip. Existing papers backfilled FREE.
+   */
+  @Prop({
+    type: String,
+    enum: Object.values(AccessMode),
+    default: AccessMode.FREE,
+    index: true,
+  })
+  accessMode: AccessMode;
 
   @Prop({ required: true, min: 1 })
   totalQuestions: number;

@@ -26,6 +26,7 @@ import {
 } from './dto/paginated-mock-tests-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 import {
   PaperType,
   TOPIC_WISE_PAPER_MATCH,
@@ -201,6 +202,7 @@ export class MockTestsService {
 
     const mockTest = await this.mockTestModel.create({
       paperType: PaperType.TOPIC_WISE,
+      accessMode: dto.accessMode ?? AccessMode.FREE,
       totalQuestions: dto.totalQuestions,
       durationInMinutes: dto.durationInMinutes,
       exam: new Types.ObjectId(dto.exam),
@@ -253,6 +255,8 @@ export class MockTestsService {
         {
           $set: {
             paperType: PaperType.TOPIC_WISE,
+            accessMode:
+              dto.accessMode ?? existing.accessMode ?? AccessMode.FREE,
             totalQuestions: dto.totalQuestions,
             durationInMinutes: dto.durationInMinutes,
             exam: new Types.ObjectId(dto.exam),
@@ -873,6 +877,7 @@ export class MockTestsService {
     const obj = mockTest.toObject();
     return new MockTestResponseDto({
       id: obj.id,
+      accessMode: obj.accessMode ?? AccessMode.FREE,
       totalQuestions: obj.totalQuestions,
       durationInMinutes: obj.durationInMinutes,
       exam: obj.exam?.toString(),
@@ -926,6 +931,7 @@ export class MockTestsService {
 
     return new MockTestListItemDto({
       id: mockTestId,
+      accessMode: obj.accessMode ?? AccessMode.FREE,
       title: obj.title,
       description: obj.description,
       totalQuestions: obj.totalQuestions,

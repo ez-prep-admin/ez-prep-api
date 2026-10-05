@@ -17,6 +17,7 @@ import {
 } from '../mock-tests/schemas/mock-test.schema';
 import { MockTestsService } from '../mock-tests/mock-tests.service';
 import { PaperType } from '../common/enums/paper-type.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
@@ -516,6 +517,7 @@ export class FullMockTestsService {
 
     const mockTest = await this.mockTestModel.create({
       paperType: PaperType.FULL_EXAM,
+      accessMode: dto.accessMode ?? AccessMode.FREE,
       totalQuestions: snapshot.totalQuestions,
       durationInMinutes,
       exam: draft.exam,
