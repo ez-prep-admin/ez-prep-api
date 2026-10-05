@@ -14,8 +14,8 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 01 **done** — next **02** |
-| Enforcement mode | Not implemented (default `LEGACY` until phase 15) |
+| Current phase | 02 **in_progress** — awaiting developer confirmation |
+| Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); **not wired into startAttempt** until phase 03 |
 | Payments live | No |
 | Environments | local + production only |
 | GST invoices live | No |
@@ -63,7 +63,7 @@ Date: YYYY-MM-DD
 | --- | --- | --- | --- | --- |
 | 00 | Foundation docs | **done** | 2026-10-04 | Docs-only; no runtime ops |
 | 01 | Access mode + invariants | **done** | 2026-10-05 | Sharun — local backfill + mismatch report |
-| 02 | Entitlements + access service | pending | | Pending: `ACCESS_ENFORCEMENT_MODE=LEGACY` in `.env` |
+| 02 | Entitlements + access service | **in_progress** | | Pending: confirm `ACCESS_ENFORCEMENT_MODE=LEGACY` in local `.env` |
 | 03 | Enforce access gates | pending | | Pending: local ENFORCED smoke note |
 | 04 | Products + Offers API | pending | | Pending: record paise convention |
 | 05 | Admin commerce UI | pending | | Pending: optional smoke create product |
@@ -176,3 +176,37 @@ Date: 2026-10-05
 **Deviations:** schema default FREE until phase 15; mismatch report hardened for missing examGroup  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 02
+
+### 2026-10-05 — Phase 02 — Entitlements + AccessControlService
+
+**Code:** `ez-prep-api` on branch `payment-gateway`  
+**Tests:** Jest — access matrix, entitlements grant/revoke/provisioningKey, duration/active helpers — **pass** (25 tests)
+
+**Shipped:**
+- Entitlement collection + indexes + unique `provisioningKey`
+- `EntitlementsService` grant / revoke / listByUser / findActiveForUser
+- Admin APIs: `POST /admin/entitlements/grant`, `POST /admin/entitlements/:id/revoke`, `GET /admin/users/:userId/entitlements`
+- User API: `GET /me/entitlements` (active by default; `includeInactive=true` optional)
+- `AccessControlService.canAccessMockTest` (FREE / MOCK_TEST / EXAM / EXAM_GROUP + LEGACY vs ENFORCED)
+- `ACCESS_ENFORCEMENT_MODE` in `.env.example` (default LEGACY)
+- Minimal `commerce_audit_logs` skeleton on grant/revoke
+- **Explicit:** `startAttempt` **untouched** / still ungated (phase 03)
+
+**Developer ops (manual) — confirm each:**
+- [ ] Confirm local `.env` has `ACCESS_ENFORCEMENT_MODE=LEGACY` (added during this session if missing)
+- [x] N/A — no DB backfill scripts for this phase
+- [x] N/A — no admin/app UI; no Razorpay/GST
+- [x] N/A — startAttempt intentionally not wired
+- [ ] **Deferred manual API smoke (no UI yet):** grant / revoke / `GET /me/entitlements` / `GET /admin/users/:userId/entitlements` against a running local API — **remaining**; not blocking code close. Revisit when Phase 06 (admin entitlements UI) or earlier if desired. Jest unit matrix already covered.
+
+**Admin auth / admin app impact:** none. Phase 02 did not touch `auth` (admin username/password login), admin guards, or mock-app-admin. Admins continue to log in and use existing admin features as before.
+
+**Developer confirmation:**  
+_Pending — do not mark phase done until confirmed._  
+I, \<name\>, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: YYYY-MM-DD
+
+**DoD:** code + tests met; confirmation pending  
+**Deviations:** none  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 03 (after confirmation)

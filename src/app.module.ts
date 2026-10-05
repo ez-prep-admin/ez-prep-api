@@ -28,6 +28,9 @@ import { InstanceConfigModule } from './instance-config/instance-config.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { RedisModule } from './redis/redis.module';
+import { CommerceAuditModule } from './commerce-audit/commerce-audit.module';
+import { EntitlementsModule } from './entitlements/entitlements.module';
+import { AccessModule } from './access/access-control.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -110,6 +113,9 @@ const observeRootModule = createObserveRootModule();
     ImportModule,
     CurrentAffairsModule,
     InstanceConfigModule,
+    CommerceAuditModule,
+    EntitlementsModule,
+    AccessModule,
   ],
   controllers: [AppController],
   providers: [
