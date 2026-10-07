@@ -31,6 +31,9 @@ import { RedisModule } from './redis/redis.module';
 import { CommerceAuditModule } from './commerce-audit/commerce-audit.module';
 import { EntitlementsModule } from './entitlements/entitlements.module';
 import { AccessModule } from './access/access-control.module';
+import { ProductsModule } from './products/products.module';
+import { OffersModule } from './offers/offers.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -116,6 +119,9 @@ const observeRootModule = createObserveRootModule();
     CommerceAuditModule,
     EntitlementsModule,
     AccessModule,
+    ProductsModule,
+    OffersModule,
+    CatalogModule,
   ],
   controllers: [AppController],
   providers: [

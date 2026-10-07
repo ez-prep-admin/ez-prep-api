@@ -92,12 +92,12 @@ New modules only; revert PR.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Admin product/offer APIs live
-- [ ] User catalog APIs live
-- [ ] Money unit recorded in STATUS.md
-- [ ] Indexes verified in schema
-- [ ] Existing suites green without rewriting prior test cases (§6a)
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] Admin product/offer APIs live
+- [x] User catalog APIs live
+- [x] Money unit recorded in STATUS.md
+- [x] Indexes verified in schema
+- [x] Existing suites green without rewriting prior test cases (§6a)
 
 
 ## STATUS.md update (mandatory)

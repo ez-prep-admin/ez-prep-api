@@ -14,8 +14,9 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 03 **done** — next **04** |
+| Current phase | 04 **done** — next **05** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
+| Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
 | Environments | local + production only |
 | GST invoices live | No |
@@ -65,7 +66,7 @@ Date: YYYY-MM-DD
 | 01 | Access mode + invariants | **done** | 2026-10-05 | Sharun — local backfill + mismatch report |
 | 02 | Entitlements + access service | **done** | 2026-10-05 | Sharun — review + `ACCESS_ENFORCEMENT_MODE=LEGACY`; API smoke deferred to Phase 06 |
 | 03 | Enforce access gates | **done** | 2026-10-06 | Sharun — local ENFORCED smoke verified; LEGACY restored |
-| 04 | Products + Offers API | pending | | Pending: record paise convention |
+| 04 | Products + Offers API | **done** | 2026-10-07 | Sharun — indexes verified; paise convention recorded |
 | 05 | Admin commerce UI | pending | | Pending: optional smoke create product |
 | 06 | Admin entitlements UI | pending | | Pending: grant/revoke on test user |
 | 07 | Orders + TaxService + FakeGateway | pending | | Pending: seed **local** seller/taxConfig; billing includes address |
@@ -247,3 +248,32 @@ Date: 2026-10-06
 **Zero-regression rule:** recorded in [`engineering-rules.md`](engineering-rules.md) §6a for Phase 04+.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 04
+
+### 2026-10-07 — Phase 04 — Products + Offers API (Option B)
+
+**Code:** `ez-prep-api` on branch `payment-gateway`  
+**Tests:** Jest — resolve-effective-amount, product-version-snapshot, products.service, offers.service, catalog.service — **pass** (25); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- `src/products/` — Product + immutable `product_versions` (Option B); admin CRUD, publish (version bump + freeze), archive, duplicate, soft-delete, `GET .../versions`
+- `src/offers/` — Offer with integer paise; partial unique ACTIVE per `(productId, durationPreset)`; admin create/patch/get
+- `src/catalog/` — user JWT list/detail/for-exam/for-mock with ACTIVE offers + `effectiveAmount`
+- Pure helpers: `resolveEffectiveAmount`, `buildProductVersionSnapshot` / `grantsEqual`, `assertPaise`
+- Money convention: **API + storage = integer paise**; UI converts to ₹ (record below)
+
+**Money unit (public JSON):** integer paise only (e.g. `listAmount: 99900` = ₹999). No rupee floats in API. Frontends (admin Phase 05, app Phase 14) format with ₹ symbol for display.
+
+**Developer ops (manual) — confirm each:**
+- [x] Confirm schema indexes exist after local API boot / first use: unique `products.code`; `{ grants.scopeType, grants.scopeId }`; unique `{ productId, version }` on `product_versions`; partial unique `{ productId, durationPreset }` where `status: ACTIVE` on `offers`
+- [x] Money unit recorded in this STATUS.md session log + program snapshot
+- [x] N/A — no `.env` changes; no admin/app UI; no Razorpay/GST; no DB backfill scripts
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-07
+
+**DoD:** met  
+**Deviations:** none (Option B product_versions chosen; routes `/admin/products` not `admin/commerce`)  
+**Regression audit (existing specs):** new modules only; `app.module.ts` registration only among existing files. No edits to prior `*.spec.ts` cases.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 05
