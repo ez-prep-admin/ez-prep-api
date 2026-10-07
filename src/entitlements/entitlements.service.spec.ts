@@ -172,6 +172,45 @@ describe('EntitlementsService', () => {
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
+
+    it('sets expiresAt approximately now + 3 calendar months for 3M', async () => {
+      const before = Date.now();
+      const doc = entitlementDoc();
+      entitlementModel.mockImplementation(
+        (payload: Record<string, unknown>) => {
+          Object.assign(doc, payload);
+          return doc;
+        },
+      );
+      userModel.findById.mockReturnValue({
+        select: () => ({ lean: () => Promise.resolve({ _id: USER_ID }) }),
+      });
+      examModel.findById.mockReturnValue({
+        select: () => ({ lean: () => Promise.resolve({ _id: SCOPE_ID }) }),
+      });
+
+      await service.grant(
+        {
+          userId: USER_ID,
+          scopeType: EntitlementScopeType.EXAM,
+          scopeId: SCOPE_ID,
+          durationPreset: DurationPreset.THREE_MONTHS,
+        },
+        { actorUserId: ADMIN_ID, provisioningKey: 'admin:3m-key' },
+      );
+      const after = Date.now();
+
+      const expiresAt = doc.expiresAt as Date;
+      expect(expiresAt).toBeInstanceOf(Date);
+
+      const minExpected = new Date(before);
+      minExpected.setUTCMonth(minExpected.getUTCMonth() + 3);
+      const maxExpected = new Date(after);
+      maxExpected.setUTCMonth(maxExpected.getUTCMonth() + 3);
+
+      expect(expiresAt.getTime()).toBeGreaterThanOrEqual(minExpected.getTime());
+      expect(expiresAt.getTime()).toBeLessThanOrEqual(maxExpected.getTime());
+    });
   });
 
   describe('revoke', () => {
@@ -186,6 +225,19 @@ describe('EntitlementsService', () => {
       expect(auditService.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ENTITLEMENT_REVOKED' }),
       );
+    });
+
+    it('flips status to REVOKED and persists revokeReason', async () => {
+      const doc = entitlementDoc();
+      entitlementModel.findById.mockResolvedValue(doc);
+
+      const result = await service.revoke(ENT_ID, ADMIN_ID, 'support revoke');
+
+      expect(result.status).toBe(EntitlementStatus.REVOKED);
+      expect(doc.status).toBe(EntitlementStatus.REVOKED);
+      expect(doc.revokeReason).toBe('support revoke');
+      expect(doc.revokedAt).toBeInstanceOf(Date);
+      expect(doc.save).toHaveBeenCalled();
     });
 
     it('throws NotFoundException when missing', async () => {

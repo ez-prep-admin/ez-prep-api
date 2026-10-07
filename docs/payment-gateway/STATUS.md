@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 05 **done** — next **06** |
+| Current phase | 06 **done** — next **07** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -68,7 +68,7 @@ Date: YYYY-MM-DD
 | 03 | Enforce access gates | **done** | 2026-10-06 | Sharun — local ENFORCED smoke verified; LEGACY restored |
 | 04 | Products + Offers API | **done** | 2026-10-07 | Sharun — indexes verified; paise convention recorded |
 | 05 | Admin commerce UI | **done** | 2026-10-07 | Sharun — local smoke create/offer/publish |
-| 06 | Admin entitlements UI | pending | | Pending: grant/revoke on test user |
+| 06 | Admin entitlements UI | **done** | 2026-10-08 | Sharun — grant/revoke UI + local ENFORCED smoke |
 | 07 | Orders + TaxService + FakeGateway | pending | | Pending: seed **local** seller/taxConfig; billing includes address |
 | 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
 | 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
@@ -305,3 +305,44 @@ Date: 2026-10-07
 **Regression audit (existing specs):** additive only — `index.test.ts` export asserts; `layout.tsx` nav/selectedKeys. No existing test cases rewritten.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 06
+
+### 2026-10-08 — Phase 06 — Admin Entitlements UI
+
+**Code:** `ez-prep-api` + `mock-app-admin` on branch `payment-gateway` (ezprep-app untouched)  
+**Tests:** API Jest entitlements suites — pass (14); admin Vitest entitlements client/section/user-detail/index — pass (16); `tsc --noEmit` for touched admin files — pass; `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- API additive Jest: grant `3M` → `expiresAt` ≈ now+3 months; revoke flips `REVOKED`; admin controller roles/guards + non-admin `RolesGuard` denial
+- Admin `entitlementsApi` (`listForUser` / `grant` / `revoke`) + Vitest
+- User detail **Entitlements** section: table, grant modal (multi-select scope + duration + reason, no productId), revoke confirm
+- Grant modal fans out one `ADMIN_GRANT` per selected scope target
+- MOCK_TEST picker merges topic-wise + sprint + full published papers (`Topic ·` / `Sprint ·` / `Full ·` labels)
+- R-13: legacy subscription/plan labeled “Legacy … (not used for access)” — read-only, separate from entitlements
+- Reused Phase 05 `loadGrantScopeOptions` for scope picker + name resolution
+- Proxy allowlist unchanged (`admin` already present)
+
+**Local ENFORCED smoke (how to verify grant/revoke removes access):**
+1. In API `.env`, set `ACCESS_ENFORCEMENT_MODE=ENFORCED` and restart.
+2. Ensure a paper is `accessMode: ENTITLED` under an exam the test user will be granted.
+3. Admin UI → Learners → user detail → **Grant access** (scope + duration) → row(s) appear as ACTIVE.
+4. As that user, start that paper → expect success.
+5. Admin UI → **Revoke** that entitlement → status `REVOKED`.
+6. Same start → expect **403** with `details.code = ENTITLEMENT_REQUIRED`.
+7. Restore `ACCESS_ENFORCEMENT_MODE=LEGACY` and restart.
+
+**Developer ops (manual) — confirm each:**
+- [x] Grant access (e.g. EXAM / MOCK_TEST, 3M) on a test user via admin UI; confirm listed in entitlements table
+- [x] Revoke that entitlement; confirm status `REVOKED`
+- [x] Local ENFORCED smoke above (grant allows start; revoke denies start); restore `LEGACY` when done testing
+- [x] N/A — no permanent `.env` commerce changes required for phase close; no Razorpay/GST; no DB scripts; ezprep-app untouched; proxy allowlist unchanged
+- [x] Closes Phase 02 deferred API smoke (grant/revoke/`GET .../entitlements`) via UI + ENFORCED steps above
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-08
+
+**DoD:** met  
+**Deviations:** none (no productId on grant modal per plan; pure ADMIN_GRANT). Scope multi-select + sprint/full papers in MOCK_TEST picker added during smoke polish. Remote search-as-you-type for large paper catalogs deferred (separate non-commerce follow-up).  
+**Regression audit (existing specs):** additive only — `entitlements.service.spec.ts` new cases; new `admin-entitlements.controller.spec.ts`; admin `index.test.ts` export assert; `users/[id]/page.test.tsx` mock wiring + one additive case; new `grant-options.test.ts`. No existing test cases rewritten.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 07

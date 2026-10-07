@@ -72,10 +72,10 @@ UI section removable; entitlements data remains.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] User detail entitlements live
-- [ ] Grant/revoke tested both sides
-- [ ] STATUS.md notes how to smoke with ENFORCED locally
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] User detail entitlements live
+- [x] Grant/revoke tested both sides
+- [x] STATUS.md notes how to smoke with ENFORCED locally
 
 
 ## STATUS.md update (mandatory)
