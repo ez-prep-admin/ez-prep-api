@@ -47,6 +47,9 @@ import {
   duplicateQuestionSummary,
   isTaggedToExam,
 } from '../common/papers/question-replacement';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDto, toAccessDto } from '../access/to-access-dto';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { SPRINT_SIZE_OPTIONS } from './dto/create-sprint-draft.dto';
 
 function escapeRegex(value: string): string {
@@ -69,6 +72,7 @@ export class SprintTestsService {
     private readonly draftModel: Model<SprintTestDraftDocument>,
     private readonly mockTestsService: MockTestsService,
     private readonly imageUrlResolver: ImageUrlResolver,
+    private readonly accessControlService: AccessControlService,
   ) {}
 
   async createDraft(
@@ -436,6 +440,7 @@ export class SprintTestsService {
       );
     }
 
+    const accessMap = await this.buildAccessMap(userId, tests);
     const totalPages = Math.ceil(total / validLimit) || 0;
     return {
       data: tests.map(test => {
@@ -444,6 +449,7 @@ export class SprintTestsService {
           test,
           entry?.action || UserAttemptAction.START,
           entry?.resumeAttemptId,
+          accessMap.get(test._id.toString()),
         );
       }),
       pagination: {
@@ -487,7 +493,13 @@ export class SprintTestsService {
       resumeAttemptId = entry?.resumeAttemptId;
     }
 
-    const item = this.toListItem(test, action, resumeAttemptId);
+    const accessMap = await this.buildAccessMap(userId, [test]);
+    const item = this.toListItem(
+      test,
+      action,
+      resumeAttemptId,
+      accessMap.get(test._id.toString()),
+    );
     if (includeQuestions) {
       item.questions = await this.toPublishedQuestions(test);
     }
@@ -978,10 +990,13 @@ export class SprintTestsService {
     test: MockTestDocument,
     userAttemptAction: UserAttemptAction,
     resumeAttemptId?: string,
+    access?: AccessDto,
   ): SprintTestListItemDto {
     const examDoc = test.exam as unknown as PopulatedDocument;
     return {
       id: test.id || test._id.toString(),
+      accessMode: test.accessMode ?? AccessMode.FREE,
+      access: access ?? this.defaultAccessDto(test.accessMode),
       title: test.title,
       description: test.description,
       totalQuestions: test.totalQuestions,
@@ -1004,6 +1019,58 @@ export class SprintTestsService {
       updatedAt: test.updatedAt as Date,
       userAttemptAction,
       resumeAttemptId,
+    };
+  }
+
+  private async buildAccessMap(
+    userId: string | undefined,
+    tests: MockTestDocument[],
+  ): Promise<Map<string, AccessDto>> {
+    const decisions = await this.accessControlService.resolveAccessForMockTests(
+      userId,
+      tests.map(test => ({
+        id: test._id.toString(),
+        accessMode: test.accessMode ?? AccessMode.FREE,
+        examId: this.examIdOf(test),
+        isActive: test.isActive !== false,
+      })),
+    );
+    const map = new Map<string, AccessDto>();
+    for (const [id, decision] of decisions) {
+      map.set(id, toAccessDto(decision));
+    }
+    return map;
+  }
+
+  private examIdOf(test: MockTestDocument): string | null {
+    const exam = test.exam as unknown as
+      | { _id?: { toString(): string }; toString(): string }
+      | Types.ObjectId
+      | string
+      | null
+      | undefined;
+    if (!exam) {
+      return null;
+    }
+    if (typeof exam === 'string') {
+      return exam;
+    }
+    if (typeof exam === 'object' && '_id' in exam && exam._id) {
+      return exam._id.toString();
+    }
+    return exam.toString();
+  }
+
+  private defaultAccessDto(accessMode?: AccessMode | string): AccessDto {
+    if (accessMode === AccessMode.ENTITLED) {
+      return {
+        allowed: false,
+        reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+      };
+    }
+    return {
+      allowed: true,
+      reason: AccessDecisionReason.ALLOWED,
     };
   }
 

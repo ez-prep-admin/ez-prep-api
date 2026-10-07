@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
@@ -31,6 +33,9 @@ import {
   PaperType,
   TOPIC_WISE_PAPER_MATCH,
 } from '../common/enums/paper-type.enum';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDto, toAccessDto } from '../access/to-access-dto';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
   ...TOPIC_WISE_PAPER_MATCH,
@@ -49,6 +54,8 @@ export class MockTestsService {
     private attemptModel: Model<MockTestAttemptDocument>,
     @InjectModel(Topic.name) private topicModel: Model<TopicDocument>,
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
+    @Inject(forwardRef(() => AccessControlService))
+    private readonly accessControlService: AccessControlService,
   ) {}
 
   /**
@@ -119,6 +126,8 @@ export class MockTestsService {
       userActions = await this.calculateUserAttemptActions(testIds, userId);
     }
 
+    const accessMap = await this.buildAccessMap(userId, mockTests);
+
     // Calculate pagination metadata
     const totalPages = Math.ceil(total / validLimit);
     const hasNextPage = validPage < totalPages;
@@ -130,13 +139,20 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
+        const access = accessMap.get(testId);
         return isAdmin
           ? (this.toListItemDto(
               test,
               entry.action,
               entry.resumeAttemptId,
+              access,
             ) as unknown as MockTestResponseDto)
-          : this.toResponseDto(test, entry.action, entry.resumeAttemptId);
+          : this.toResponseDto(
+              test,
+              entry.action,
+              entry.resumeAttemptId,
+              access,
+            );
       }),
       pagination: {
         total,
@@ -187,10 +203,20 @@ export class MockTestsService {
     }
 
     if (isAdmin) {
-      return this.toAdminDetailDto(mockTest);
+      const accessMap = await this.buildAccessMap(user?.id, [mockTest]);
+      return this.toAdminDetailDto(
+        mockTest,
+        accessMap.get(mockTest._id.toString()),
+      );
     }
 
-    return this.toResponseDto(mockTest);
+    const accessMap = await this.buildAccessMap(user?.id, [mockTest]);
+    return this.toResponseDto(
+      mockTest,
+      undefined,
+      undefined,
+      accessMap.get(mockTest._id.toString()),
+    );
   }
 
   async createTopicWise(
@@ -373,7 +399,10 @@ export class MockTestsService {
     return sampledGroups.flat();
   }
 
-  private toAdminDetailDto(mockTest: MockTestDocument): MockTestResponseDto {
+  private toAdminDetailDto(
+    mockTest: MockTestDocument,
+    access?: AccessDto,
+  ): MockTestResponseDto {
     const examDoc = mockTest.exam as unknown as PopulatedDocument;
     const subjectDoc = mockTest.subject as unknown as PopulatedDocument;
     const topicDoc = mockTest.topic as unknown as PopulatedDocument;
@@ -396,7 +425,7 @@ export class MockTestsService {
     });
 
     return {
-      ...this.toListItemDto(mockTest),
+      ...this.toListItemDto(mockTest, undefined, undefined, access),
       exam: examDoc
         ? { id: examDoc._id?.toString() || examDoc.id, name: examDoc.name }
         : mockTest.exam?.toString(),
@@ -553,6 +582,7 @@ export class MockTestsService {
       userActions = await this.calculateUserAttemptActions(testIds, userId);
     }
 
+    const accessMap = await this.buildAccessMap(userId, mockTests);
     const totalPages = Math.ceil(total / validLimit);
 
     return {
@@ -561,7 +591,12 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
-        return this.toListItemDto(test, entry.action, entry.resumeAttemptId);
+        return this.toListItemDto(
+          test,
+          entry.action,
+          entry.resumeAttemptId,
+          accessMap.get(testId),
+        );
       }),
       pagination: {
         total,
@@ -619,6 +654,7 @@ export class MockTestsService {
       userActions = await this.calculateUserAttemptActions(testIds, userId);
     }
 
+    const accessMap = await this.buildAccessMap(userId, mockTests);
     const totalPages = Math.ceil(total / validLimit);
 
     return {
@@ -627,7 +663,12 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
-        return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
+        return this.toResponseDto(
+          test,
+          entry.action,
+          entry.resumeAttemptId,
+          accessMap.get(testId),
+        );
       }),
       pagination: {
         total,
@@ -688,6 +729,7 @@ export class MockTestsService {
       userActions = await this.calculateUserAttemptActions(testIds, userId);
     }
 
+    const accessMap = await this.buildAccessMap(userId, mockTests);
     const totalPages = Math.ceil(total / validLimit);
 
     return {
@@ -696,7 +738,12 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
-        return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
+        return this.toResponseDto(
+          test,
+          entry.action,
+          entry.resumeAttemptId,
+          accessMap.get(testId),
+        );
       }),
       pagination: {
         total,
@@ -750,6 +797,7 @@ export class MockTestsService {
       userActions = await this.calculateUserAttemptActions(testIds, userId);
     }
 
+    const accessMap = await this.buildAccessMap(userId, mockTests);
     const totalPages = Math.ceil(total / validLimit);
 
     return {
@@ -758,7 +806,12 @@ export class MockTestsService {
         const entry = userActions.get(testId) || {
           action: UserAttemptAction.START,
         };
-        return this.toResponseDto(test, entry.action, entry.resumeAttemptId);
+        return this.toResponseDto(
+          test,
+          entry.action,
+          entry.resumeAttemptId,
+          accessMap.get(testId),
+        );
       }),
       pagination: {
         total,
@@ -873,11 +926,13 @@ export class MockTestsService {
     mockTest: MockTestDocument,
     userAttemptAction?: UserAttemptAction,
     resumeAttemptId?: string,
+    access?: AccessDto,
   ): MockTestResponseDto {
     const obj = mockTest.toObject();
     return new MockTestResponseDto({
       id: obj.id,
       accessMode: obj.accessMode ?? AccessMode.FREE,
+      access: access ?? this.defaultAccessDto(obj.accessMode),
       totalQuestions: obj.totalQuestions,
       durationInMinutes: obj.durationInMinutes,
       exam: obj.exam?.toString(),
@@ -914,6 +969,7 @@ export class MockTestsService {
     mockTest: MockTestDocument,
     userAttemptAction?: UserAttemptAction,
     resumeAttemptId?: string,
+    access?: AccessDto,
   ): MockTestListItemDto {
     // Access _id and other fields before calling toObject() since toObject transforms delete _id
     const mockTestId = mockTest._id?.toString();
@@ -932,6 +988,7 @@ export class MockTestsService {
     return new MockTestListItemDto({
       id: mockTestId,
       accessMode: obj.accessMode ?? AccessMode.FREE,
+      access: access ?? this.defaultAccessDto(obj.accessMode),
       title: obj.title,
       description: obj.description,
       totalQuestions: obj.totalQuestions,
@@ -969,5 +1026,57 @@ export class MockTestsService {
       userAttemptAction: userAttemptAction || UserAttemptAction.START,
       resumeAttemptId,
     });
+  }
+
+  private async buildAccessMap(
+    userId: string | undefined,
+    tests: MockTestDocument[],
+  ): Promise<Map<string, AccessDto>> {
+    const decisions = await this.accessControlService.resolveAccessForMockTests(
+      userId,
+      tests.map(test => ({
+        id: test._id.toString(),
+        accessMode: test.accessMode ?? AccessMode.FREE,
+        examId: this.examIdOf(test),
+        isActive: test.isActive !== false,
+      })),
+    );
+    const map = new Map<string, AccessDto>();
+    for (const [id, decision] of decisions) {
+      map.set(id, toAccessDto(decision));
+    }
+    return map;
+  }
+
+  private examIdOf(mockTest: MockTestDocument): string | null {
+    const exam = mockTest.exam as unknown as
+      | { _id?: { toString(): string }; toString(): string }
+      | Types.ObjectId
+      | string
+      | null
+      | undefined;
+    if (!exam) {
+      return null;
+    }
+    if (typeof exam === 'string') {
+      return exam;
+    }
+    if (typeof exam === 'object' && '_id' in exam && exam._id) {
+      return exam._id.toString();
+    }
+    return exam.toString();
+  }
+
+  private defaultAccessDto(accessMode?: AccessMode | string): AccessDto {
+    if (accessMode === AccessMode.ENTITLED) {
+      return {
+        allowed: false,
+        reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+      };
+    }
+    return {
+      allowed: true,
+      reason: AccessDecisionReason.ALLOWED,
+    };
   }
 }

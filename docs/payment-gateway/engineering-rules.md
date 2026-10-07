@@ -67,6 +67,17 @@ Every commerce/payments implementation session follows these rules. When a phase
 - `STATUS.md` updated.
 - No hidden “no entitlement → allow” left behind after phase 15.
 
+### 6a. Zero-regression rule (non-negotiable)
+
+Existing modules and their tests are the regression safety net. Every commerce phase must follow:
+
+1. **Do not modify existing test cases** (assertions, setup, or expected behavior) unless there is a **structural necessity** caused by the phase — e.g. injecting a new constructor dependency into a TestingModule provider list, or updating a mock when a collaborator’s public method signature changes. Cosmetic edits, drive-by refactors, and “while we’re here” assertion tweaks are forbidden.
+2. **Prefer additive tests only:** new `describe` / `it` blocks for new behavior; leave prior cases byte-stable when possible.
+3. **Run the full relevant existing suite** for every module you touch (not only new specs). Existing tests must stay green without rewriting them to match new behavior.
+4. **Code review gate before phase close:** for each modified existing `*.spec.ts` / `*.test.ts`, the session log must note whether changes were (a) additive only, or (b) structural wiring with a one-line justification. Unjustified edits to existing cases are a phase defect.
+5. **Prefer new modules** when the phase allows (Phase 04 pattern: `src/products/`, `src/offers/`, `src/catalog/`). Touch existing modules only for registration (`app.module.ts`) or unavoidable contract wiring; never change their product behavior outside the phase DoD.
+6. If a phase change would force rewriting many existing tests, stop and redesign (extension point / adapter / additive field) so prior behavior remains covered by the original cases.
+
 ## 7. Change management
 
 - One phase = one branch = one PR (or a small series). Branch name includes phase number, e.g. `commerce/phase-04-products-offers`.

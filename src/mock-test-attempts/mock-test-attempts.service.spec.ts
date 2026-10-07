@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -12,6 +13,9 @@ import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { Question } from './schemas/question.schema';
 import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 
 const TEST_ID = '507f1f77bcf86cd799439011';
 const USER_ID = '507f1f77bcf86cd799439012';
@@ -162,6 +166,13 @@ describe('MockTestAttemptsService', () => {
   const analyticsService = {
     invalidateDashboardCache: jest.fn().mockResolvedValue(undefined),
   };
+  const accessControlService = {
+    canAccessMockTest: jest.fn().mockResolvedValue({
+      allowed: true,
+      reason: AccessDecisionReason.ALLOWED,
+      accessMode: AccessMode.FREE,
+    }),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -175,6 +186,7 @@ describe('MockTestAttemptsService', () => {
         { provide: getModelToken(Question.name), useValue: questionModel },
         { provide: ImageUrlResolver, useValue: imageUrlResolver },
         { provide: AnalyticsService, useValue: analyticsService },
+        { provide: AccessControlService, useValue: accessControlService },
       ],
     }).compile();
 
@@ -189,6 +201,11 @@ describe('MockTestAttemptsService', () => {
     questionModel.find.mockReset();
     imageUrlResolver.resolveMany.mockResolvedValue([null, null, null]);
     analyticsService.invalidateDashboardCache.mockResolvedValue(undefined);
+    accessControlService.canAccessMockTest.mockResolvedValue({
+      allowed: true,
+      reason: AccessDecisionReason.ALLOWED,
+      accessMode: AccessMode.FREE,
+    });
     attemptModel.updateOne.mockReturnValue({
       exec: jest.fn().mockResolvedValue({}),
     });
@@ -219,6 +236,101 @@ describe('MockTestAttemptsService', () => {
       await expect(
         service.startAttempt({ mockTestId: TEST_ID }, USER_ID),
       ).rejects.toThrow(BadRequestException);
+      expect(accessControlService.canAccessMockTest).not.toHaveBeenCalled();
+    });
+
+    it('ENFORCED deny → ForbiddenException with ENTITLEMENT_REQUIRED', async () => {
+      mockTestModel.findById.mockReturnValue(chainable(makeTest()));
+      accessControlService.canAccessMockTest.mockResolvedValue({
+        allowed: false,
+        reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+        accessMode: AccessMode.ENTITLED,
+      });
+
+      await expect(
+        service.startAttempt({ mockTestId: TEST_ID }, USER_ID),
+      ).rejects.toMatchObject({
+        response: {
+          details: { code: AccessDecisionReason.ENTITLEMENT_REQUIRED },
+        },
+      });
+      await expect(
+        service.startAttempt({ mockTestId: TEST_ID }, USER_ID),
+      ).rejects.toThrow(ForbiddenException);
+      expect(attemptModel.create).not.toHaveBeenCalled();
+    });
+
+    it('ENFORCED allow with entitlement → proceeds past access gate', async () => {
+      mockTestModel.findById.mockReturnValue(chainable(makeTest()));
+      accessControlService.canAccessMockTest.mockResolvedValue({
+        allowed: true,
+        reason: AccessDecisionReason.ALLOWED,
+        accessMode: AccessMode.ENTITLED,
+      });
+      attemptModel.findOne.mockReturnValue(chainable(null));
+      const created = makeAttempt({
+        toObject: () => ({}),
+        id: ATTEMPT_ID,
+      });
+      attemptModel.create.mockResolvedValue(created);
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2)]),
+      );
+
+      // If create is reached, access gate passed
+      try {
+        await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      } catch {
+        // may fail later on response mapping; access must still have been called allow
+      }
+      expect(accessControlService.canAccessMockTest).toHaveBeenCalledWith(
+        USER_ID,
+        TEST_ID,
+      );
+      expect(attemptModel.create).toHaveBeenCalled();
+    });
+
+    it('FREE allow → access check passes', async () => {
+      mockTestModel.findById.mockReturnValue(chainable(makeTest()));
+      accessControlService.canAccessMockTest.mockResolvedValue({
+        allowed: true,
+        reason: AccessDecisionReason.ALLOWED,
+        accessMode: AccessMode.FREE,
+      });
+      attemptModel.findOne.mockReturnValue(chainable(null));
+      attemptModel.create.mockResolvedValue(makeAttempt());
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2)]),
+      );
+
+      try {
+        await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      } catch {
+        // ignore downstream mapping issues
+      }
+      expect(accessControlService.canAccessMockTest).toHaveBeenCalled();
+      expect(attemptModel.create).toHaveBeenCalled();
+    });
+
+    it('LEGACY allow without entitlement → proceeds', async () => {
+      mockTestModel.findById.mockReturnValue(chainable(makeTest()));
+      accessControlService.canAccessMockTest.mockResolvedValue({
+        allowed: true,
+        reason: AccessDecisionReason.LEGACY_ALLOW,
+        accessMode: AccessMode.ENTITLED,
+      });
+      attemptModel.findOne.mockReturnValue(chainable(null));
+      attemptModel.create.mockResolvedValue(makeAttempt());
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1), questionDoc(Q2)]),
+      );
+
+      try {
+        await service.startAttempt({ mockTestId: TEST_ID }, USER_ID);
+      } catch {
+        // ignore downstream mapping issues
+      }
+      expect(attemptModel.create).toHaveBeenCalled();
     });
 
     it('should reject retakes when not allowed', async () => {
@@ -630,6 +742,17 @@ describe('MockTestAttemptsService', () => {
       expect(result.sessions?.[0].questionCount).toBe(2);
     });
 
+    it('allows resume after entitlement lapse without re-checking access (D-08)', async () => {
+      const attempt = makeAttempt({ status: 'IN_PROGRESS' });
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      questionModel.find.mockReturnValue(chainable([questionDoc(Q1)]));
+      accessControlService.canAccessMockTest.mockClear();
+
+      await service.resumeAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(accessControlService.canAccessMockTest).not.toHaveBeenCalled();
+    });
+
     it('should return questions in locked order with sessionOrder', async () => {
       const attempt = makeAttempt({
         isSessionWise: true,
@@ -1005,6 +1128,23 @@ describe('MockTestAttemptsService', () => {
       expect(result.correctAnswers).toBe(1);
       expect(result.unansweredQuestions).toBe(1);
       expect(result.questionResults).toBeDefined();
+      expect(attempt.status).toBe('SUBMITTED');
+    });
+
+    it('allows submit after entitlement lapse without re-checking access (D-08)', async () => {
+      const attempt = makeAttempt();
+      attemptModel.findOne.mockReturnValue(chainable(attempt));
+      attemptModel.findById.mockReturnValue(
+        chainable({ questions: attempt.questions }),
+      );
+      questionModel.find.mockReturnValue(
+        chainable([questionDoc(Q1, 'a'), questionDoc(Q2, 'b')]),
+      );
+      accessControlService.canAccessMockTest.mockClear();
+
+      await service.submitAttempt(ATTEMPT_ID, USER_ID);
+
+      expect(accessControlService.canAccessMockTest).not.toHaveBeenCalled();
       expect(attempt.status).toBe('SUBMITTED');
     });
 

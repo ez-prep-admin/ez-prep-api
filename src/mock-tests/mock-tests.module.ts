@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MockTestsService } from './mock-tests.service';
 import { MockTestsController } from './mock-tests.controller';
@@ -14,6 +14,7 @@ import {
   Question,
   QuestionSchema,
 } from '../mock-test-attempts/schemas/question.schema';
+import { AccessModule } from '../access/access-control.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import {
     SubjectsModule,
     TopicsModule,
     ExamsModule,
+    forwardRef(() => AccessModule),
   ],
   controllers: [MockTestsController],
   providers: [MockTestsService],

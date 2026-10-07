@@ -14,8 +14,8 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 02 **done** — next **03** |
-| Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); **not wired into startAttempt** until phase 03 |
+| Current phase | 03 **done** — next **04** |
+| Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Payments live | No |
 | Environments | local + production only |
 | GST invoices live | No |
@@ -64,7 +64,7 @@ Date: YYYY-MM-DD
 | 00 | Foundation docs | **done** | 2026-10-04 | Docs-only; no runtime ops |
 | 01 | Access mode + invariants | **done** | 2026-10-05 | Sharun — local backfill + mismatch report |
 | 02 | Entitlements + access service | **done** | 2026-10-05 | Sharun — review + `ACCESS_ENFORCEMENT_MODE=LEGACY`; API smoke deferred to Phase 06 |
-| 03 | Enforce access gates | pending | | Pending: local ENFORCED smoke note |
+| 03 | Enforce access gates | **done** | 2026-10-06 | Sharun — local ENFORCED smoke verified; LEGACY restored |
 | 04 | Products + Offers API | pending | | Pending: record paise convention |
 | 05 | Admin commerce UI | pending | | Pending: optional smoke create product |
 | 06 | Admin entitlements UI | pending | | Pending: grant/revoke on test user |
@@ -209,3 +209,41 @@ Date: 2026-10-05
 **Deviations:** none  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 03
+
+### 2026-10-06 — Phase 03 — Enforce access gates
+
+**Code:** `ez-prep-api` on branch `payment-gateway`  
+**Tests:** Jest — access helpers/batch, attempts start gate + resume/submit no re-check, mock-tests list `access` DTO, full/sprint suites — **pass** (165 tests in focused suites); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- `AccessControlService.resolveAccessForMockTests` (single entitlements query + batch exam load)
+- Pure `entitlementCoversPaper` + `toAccessDto` / `AccessResponseDto`
+- `startAttempt` gated → HTTP 403 with `details.code = ENTITLEMENT_REQUIRED` when denied
+- Resume / submit **do not** re-check entitlement (D-08)
+- Student list/get: `accessMode` + `access: { allowed, reason }` on topic-wise, full-mock, and sprint published DTOs (papers not hidden)
+- Default `ACCESS_ENFORCEMENT_MODE=LEGACY` confirmed in `.env.example`
+
+**How to temporarily set ENFORCED locally (no staging — D-18):**
+1. In local `.env`, set `ACCESS_ENFORCEMENT_MODE=ENFORCED` and restart the API.
+2. Ensure a paper is `accessMode: ENTITLED` (admin) and the test user has **no** covering entitlement.
+3. `POST /api/v1/mock-test-attempts/start` with that `mockTestId` → expect **403** and `details.code = ENTITLEMENT_REQUIRED`.
+4. Start a `FREE` paper → expect success.
+5. Restore `ACCESS_ENFORCEMENT_MODE=LEGACY` and restart.
+
+**Developer ops (manual) — confirm each:**
+- [x] Confirm `.env.example` still has `ACCESS_ENFORCEMENT_MODE=LEGACY` (default)
+- [x] Local ENFORCED smoke: temporarily set `ACCESS_ENFORCEMENT_MODE=ENFORCED`, verify deny on ENTITLED start without grant + allow on FREE, then restore `LEGACY`. Record outcome below.
+- [x] N/A — no DB backfill scripts; no admin/app UI; no Razorpay/GST
+
+**Local ENFORCED smoke note:** Verified by developer — ENTITLED start without grant returns 403 `ENTITLEMENT_REQUIRED`; FREE start succeeds; mode restored to `LEGACY`.  
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-06
+
+**DoD:** met  
+**Deviations:** none  
+**Regression audit (existing specs):** additive tests only in attempts/mock-tests; structural DI provider wiring only in full/sprint/attempts/mock-tests specs (`AccessControlService` mock). `access-control.service.spec.ts`: structural `examModel.find` mock update (batch API) + additive batch cases. Reverted unrelated cosmetic edit to `duration-preset.spec.ts`.  
+**Zero-regression rule:** recorded in [`engineering-rules.md`](engineering-rules.md) §6a for Phase 04+.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 04

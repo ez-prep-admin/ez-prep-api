@@ -46,6 +46,7 @@ Pure `resolveEffectiveAmount(offer, now)` with tests.
 - No order/payment/Razorpay.
 - No admin React UI (phase 05).
 - No coupons.
+- **Zero regressions:** new modules only (`products` / `offers` / `catalog`). Do not modify existing module tests except structural DI wiring if unavoidable. Follow [`../engineering-rules.md`](../engineering-rules.md) §6a. Allowed existing-file edits: `app.module.ts` registration; grant validation may **read** ExamGroup/Exam/MockTest models without changing their behavior.
 
 ## Implementation tasks
 
@@ -96,6 +97,7 @@ New modules only; revert PR.
 - [ ] User catalog APIs live
 - [ ] Money unit recorded in STATUS.md
 - [ ] Indexes verified in schema
+- [ ] Existing suites green without rewriting prior test cases (§6a)
 
 
 ## STATUS.md update (mandatory)

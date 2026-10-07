@@ -13,6 +13,7 @@ import {
   QuestionSchema,
 } from '../mock-test-attempts/schemas/question.schema';
 import { MockTestsModule } from '../mock-tests/mock-tests.module';
+import { AccessModule } from '../access/access-control.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { MockTestsModule } from '../mock-tests/mock-tests.module';
       { name: Question.name, schema: QuestionSchema },
     ]),
     MockTestsModule,
+    AccessModule,
   ],
   controllers: [SprintTestsController],
   providers: [SprintTestsService],

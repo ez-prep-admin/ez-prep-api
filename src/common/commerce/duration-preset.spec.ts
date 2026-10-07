@@ -12,7 +12,10 @@ describe('expiresAtFromDurationPreset', () => {
 
   it('adds 1 calendar month for 1M', () => {
     expect(
-      expiresAtFromDurationPreset(DurationPreset.ONE_MONTH, startsAt)?.toISOString(),
+      expiresAtFromDurationPreset(
+        DurationPreset.ONE_MONTH,
+        startsAt,
+      )?.toISOString(),
     ).toBe('2026-02-15T10:00:00.000Z');
   });
 

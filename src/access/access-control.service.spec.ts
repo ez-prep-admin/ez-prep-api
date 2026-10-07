@@ -22,7 +22,7 @@ describe('AccessControlService', () => {
   let service: AccessControlService;
 
   const mockTestModel: any = { findById: jest.fn() };
-  const examModel: any = { findById: jest.fn() };
+  const examModel: any = { find: jest.fn(), findById: jest.fn() };
   const entitlementsService = {
     findActiveForUser: jest.fn(),
   };
@@ -65,14 +65,71 @@ describe('AccessControlService', () => {
   }
 
   function mockExam() {
-    examModel.findById.mockReturnValue({
-      exec: () =>
-        Promise.resolve({
-          _id: new Types.ObjectId(EXAM_ID),
-          examGroup: new Types.ObjectId(GROUP_ID),
-        }),
+    const examDoc = {
+      _id: new Types.ObjectId(EXAM_ID),
+      examGroup: new Types.ObjectId(GROUP_ID),
+    };
+    examModel.find.mockReturnValue({
+      exec: () => Promise.resolve([examDoc]),
     });
   }
+
+  it('resolveAccessForMockTests batches entitlements once for multiple papers', async () => {
+    const freeId = '507f1f77bcf86cd799439031';
+    const entitledId = MOCK_ID;
+    entitlementsService.findActiveForUser.mockResolvedValue([]);
+    mockExam();
+
+    const map = await service.resolveAccessForMockTests(USER_ID, [
+      {
+        id: freeId,
+        accessMode: AccessMode.FREE,
+        examId: EXAM_ID,
+        isActive: true,
+      },
+      {
+        id: entitledId,
+        accessMode: AccessMode.ENTITLED,
+        examId: EXAM_ID,
+        isActive: true,
+      },
+    ]);
+
+    expect(map.get(freeId)?.reason).toBe(AccessDecisionReason.ALLOWED);
+    expect(map.get(entitledId)?.reason).toBe(
+      AccessDecisionReason.ENTITLEMENT_REQUIRED,
+    );
+    expect(entitlementsService.findActiveForUser).toHaveBeenCalledTimes(1);
+    expect(examModel.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolveAccessForMockTests without userId denies ENTITLED papers', async () => {
+    examModel.find.mockReturnValue({
+      exec: () =>
+        Promise.resolve([
+          {
+            _id: new Types.ObjectId(EXAM_ID),
+            examGroup: new Types.ObjectId(GROUP_ID),
+          },
+        ]),
+    });
+
+    const map = await service.resolveAccessForMockTests(null, [
+      {
+        id: MOCK_ID,
+        accessMode: AccessMode.ENTITLED,
+        examId: EXAM_ID,
+        isActive: true,
+      },
+    ]);
+
+    expect(map.get(MOCK_ID)).toEqual({
+      allowed: false,
+      reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+      accessMode: AccessMode.ENTITLED,
+    });
+    expect(entitlementsService.findActiveForUser).not.toHaveBeenCalled();
+  });
 
   it('FREE → allow regardless of entitlements / mode', async () => {
     mockPaper(AccessMode.FREE);

@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
+import { AccessResponseDto } from '../../access/dto/access-response.dto';
 import { SprintQuestionItemDto } from './sprint-draft-response.dto';
 
 export class SprintExamRefDto {
@@ -16,6 +18,21 @@ export class SprintExamRefDto {
 export class SprintTestListItemDto {
   @ApiProperty()
   id: string;
+
+  @ApiProperty({
+    description:
+      'Paper access mode. FREE = no entitlement required; ENTITLED = requires covering entitlement.',
+    enum: AccessMode,
+    example: AccessMode.FREE,
+  })
+  accessMode: AccessMode;
+
+  @ApiProperty({
+    description:
+      'Backend-computed access for the current user. Do not authorize from the client alone.',
+    type: AccessResponseDto,
+  })
+  access: AccessResponseDto;
 
   @ApiPropertyOptional()
   title?: string;

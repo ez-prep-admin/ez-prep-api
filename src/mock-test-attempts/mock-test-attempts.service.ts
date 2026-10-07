@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -33,6 +34,8 @@ import { knownPaperType } from '../common/enums/paper-type.enum';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { mapPerformanceBands } from '../exams/performance-bands';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 
 @Injectable()
 export class MockTestAttemptsService {
@@ -47,6 +50,7 @@ export class MockTestAttemptsService {
     private questionModel: Model<QuestionDocument>,
     private readonly imageUrlResolver: ImageUrlResolver,
     private readonly analyticsService: AnalyticsService,
+    private readonly accessControlService: AccessControlService,
   ) {}
 
   /**
@@ -421,6 +425,21 @@ export class MockTestAttemptsService {
       throw new BadRequestException(
         'This mock test is currently not available',
       );
+    }
+
+    // Step 2b: Entitlement gate (D-08 / D-13). Resume/submit do not re-check.
+    const access = await this.accessControlService.canAccessMockTest(
+      userId,
+      mockTestId,
+    );
+    if (!access.allowed) {
+      this.logger.warn(
+        `startAttempt denied mockTestId=${mockTestId} reason=${access.reason}`,
+      );
+      throw new ForbiddenException({
+        message: 'An active entitlement is required to start this mock test',
+        details: { code: AccessDecisionReason.ENTITLEMENT_REQUIRED },
+      });
     }
 
     // Step 3: Check if retakes are allowed

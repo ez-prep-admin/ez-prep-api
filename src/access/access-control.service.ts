@@ -3,10 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessDecision } from './access-decision';
+import { entitlementCoversPaper } from './match-entitlement';
+import { PaperAccessInput } from './paper-access-input';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { AccessEnforcementMode } from '../common/enums/access-enforcement-mode.enum';
 import { AccessMode } from '../common/enums/access-mode.enum';
-import { EntitlementScopeType } from '../common/enums/entitlement-scope-type.enum';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { Exam, ExamDocument } from '../exams/schemas/exam.schema';
 import {
@@ -19,7 +20,6 @@ import {
  * Controllers and frontends must not reimplement grant hierarchy.
  *
  * Do not consult User.subscription / membershipTier (D-06, R-13).
- * startAttempt wiring is phase 03 — this service is intentional unused by attempts until then.
  */
 @Injectable()
 export class AccessControlService {
@@ -57,77 +57,155 @@ export class AccessControlService {
       };
     }
 
-    if (mockTest.accessMode === AccessMode.FREE) {
-      return {
-        allowed: true,
-        reason: AccessDecisionReason.ALLOWED,
-        accessMode: AccessMode.FREE,
-      };
-    }
+    const map = await this.resolveAccessForMockTests(userId, [
+      {
+        id: String(mockTest._id),
+        accessMode: mockTest.accessMode,
+        examId: mockTest.exam ? String(mockTest.exam) : null,
+        isActive: true,
+      },
+    ]);
 
-    const exam = await this.examModel.findById(mockTest.exam).exec();
-    if (!exam) {
-      return {
+    return (
+      map.get(String(mockTest._id)) ?? {
         allowed: false,
         reason: AccessDecisionReason.INACTIVE,
-        accessMode: AccessMode.ENTITLED,
-      };
+        accessMode: mockTest.accessMode,
+      }
+    );
+  }
+
+  /**
+   * Batch access resolution for list/get endpoints.
+   * Loads entitlements once and exams in one query — no per-item DB explosion.
+   *
+   * When `userId` is null/undefined/invalid: FREE → ALLOWED; ENTITLED → ENTITLEMENT_REQUIRED
+   * (no LEGACY_ALLOW without a user).
+   */
+  async resolveAccessForMockTests(
+    userId: string | null | undefined,
+    papers: PaperAccessInput[],
+  ): Promise<Map<string, AccessDecision>> {
+    const result = new Map<string, AccessDecision>();
+    if (papers.length === 0) {
+      return result;
     }
 
-    const entitlements =
-      await this.entitlementsService.findActiveForUser(userId);
-    const mockTestIdStr = String(mockTest._id);
-    const examIdStr = String(exam._id);
-    const examGroupIdStr = String(exam.examGroup);
+    const entitledExamIds = new Set<string>();
+    for (const paper of papers) {
+      if (paper.isActive === false) {
+        result.set(paper.id, {
+          allowed: false,
+          reason: AccessDecisionReason.INACTIVE,
+          accessMode: paper.accessMode,
+        });
+        continue;
+      }
 
-    const hasMatch = entitlements.some(entitlement => {
-      const scopeId = String(entitlement.scopeId);
-      if (
-        entitlement.scopeType === EntitlementScopeType.MOCK_TEST &&
-        scopeId === mockTestIdStr
-      ) {
-        return true;
+      if (paper.accessMode === AccessMode.FREE) {
+        result.set(paper.id, {
+          allowed: true,
+          reason: AccessDecisionReason.ALLOWED,
+          accessMode: AccessMode.FREE,
+        });
+        continue;
       }
-      if (
-        entitlement.scopeType === EntitlementScopeType.EXAM &&
-        scopeId === examIdStr
-      ) {
-        return true;
-      }
-      if (
-        entitlement.scopeType === EntitlementScopeType.EXAM_GROUP &&
-        scopeId === examGroupIdStr
-      ) {
-        return true;
-      }
-      return false;
-    });
 
-    if (hasMatch) {
-      return {
-        allowed: true,
-        reason: AccessDecisionReason.ALLOWED,
-        accessMode: AccessMode.ENTITLED,
-      };
+      // ENTITLED (or unknown treated as entitled path)
+      if (paper.examId && Types.ObjectId.isValid(paper.examId)) {
+        entitledExamIds.add(paper.examId);
+      } else {
+        result.set(paper.id, {
+          allowed: false,
+          reason: AccessDecisionReason.INACTIVE,
+          accessMode: AccessMode.ENTITLED,
+        });
+      }
     }
+
+    const pending = papers.filter(p => !result.has(p.id));
+    if (pending.length === 0) {
+      return result;
+    }
+
+    const hasValidUser = !!userId && Types.ObjectId.isValid(userId);
+    const entitlements = hasValidUser
+      ? await this.entitlementsService.findActiveForUser(userId)
+      : [];
+
+    const examIds = [...entitledExamIds].map(id => new Types.ObjectId(id));
+    const exams =
+      examIds.length > 0
+        ? await this.examModel.find({ _id: { $in: examIds } }).exec()
+        : [];
+    const examById = new Map(
+      exams.map(exam => [
+        String(exam._id),
+        { examId: String(exam._id), examGroupId: String(exam.examGroup) },
+      ]),
+    );
 
     const mode = this.getEnforcementMode();
-    if (mode === AccessEnforcementMode.LEGACY) {
-      this.logger.warn(
-        `LEGACY_ALLOW userId=${userId} mockTestId=${mockTestId}`,
+
+    for (const paper of pending) {
+      const examMeta = paper.examId ? examById.get(paper.examId) : undefined;
+      if (!examMeta) {
+        result.set(paper.id, {
+          allowed: false,
+          reason: AccessDecisionReason.INACTIVE,
+          accessMode: AccessMode.ENTITLED,
+        });
+        continue;
+      }
+
+      if (!hasValidUser) {
+        result.set(paper.id, {
+          allowed: false,
+          reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+          accessMode: AccessMode.ENTITLED,
+        });
+        continue;
+      }
+
+      const hasMatch = entitlementCoversPaper(
+        entitlements,
+        paper.id,
+        examMeta.examId,
+        examMeta.examGroupId,
       );
-      return {
-        allowed: true,
-        reason: AccessDecisionReason.LEGACY_ALLOW,
+
+      if (hasMatch) {
+        result.set(paper.id, {
+          allowed: true,
+          reason: AccessDecisionReason.ALLOWED,
+          accessMode: AccessMode.ENTITLED,
+        });
+        continue;
+      }
+
+      if (mode === AccessEnforcementMode.LEGACY) {
+        this.logger.warn(
+          `LEGACY_ALLOW userId=${userId} mockTestId=${paper.id}`,
+        );
+        result.set(paper.id, {
+          allowed: true,
+          reason: AccessDecisionReason.LEGACY_ALLOW,
+          accessMode: AccessMode.ENTITLED,
+        });
+        continue;
+      }
+
+      this.logger.warn(
+        `ENTITLEMENT_REQUIRED mockTestId=${paper.id} reason=${AccessDecisionReason.ENTITLEMENT_REQUIRED}`,
+      );
+      result.set(paper.id, {
+        allowed: false,
+        reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
         accessMode: AccessMode.ENTITLED,
-      };
+      });
     }
 
-    return {
-      allowed: false,
-      reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
-      accessMode: AccessMode.ENTITLED,
-    };
+    return result;
   }
 
   private getEnforcementMode(): AccessEnforcementMode {

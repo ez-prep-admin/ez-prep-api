@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { CommerceAuditModule } from '../commerce-audit/commerce-audit.module';
 import { ExamGroupsModule } from '../exam-groups/exam-groups.module';
@@ -19,7 +19,7 @@ import { Entitlement, EntitlementSchema } from './schemas/entitlement.schema';
     ]),
     ExamsModule,
     ExamGroupsModule,
-    MockTestsModule,
+    forwardRef(() => MockTestsModule),
     CommerceAuditModule,
   ],
   controllers: [

@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { MockTestsService } from './mock-tests.service';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 import { MockTest } from './schemas/mock-test.schema';
 import { Topic } from '../topics/schemas/topic.schema';
 import { Question } from '../mock-test-attempts/schemas/question.schema';
@@ -123,6 +126,27 @@ describe('MockTestsService', () => {
   const attemptModel: any = { find: jest.fn() };
   const topicModel: any = { find: jest.fn() };
   const questionModel: any = { aggregate: jest.fn() };
+  const accessControlService = {
+    resolveAccessForMockTests: jest.fn(
+      async (
+        _userId: string | undefined,
+        papers: Array<{ id: string; accessMode?: string }>,
+      ) => {
+        const map = new Map();
+        for (const paper of papers) {
+          const entitled = paper.accessMode === AccessMode.ENTITLED;
+          map.set(paper.id, {
+            allowed: !entitled,
+            reason: entitled
+              ? AccessDecisionReason.ENTITLEMENT_REQUIRED
+              : AccessDecisionReason.ALLOWED,
+            accessMode: paper.accessMode ?? AccessMode.FREE,
+          });
+        }
+        return map;
+      },
+    ),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -135,6 +159,7 @@ describe('MockTestsService', () => {
         },
         { provide: getModelToken(Topic.name), useValue: topicModel },
         { provide: getModelToken(Question.name), useValue: questionModel },
+        { provide: AccessControlService, useValue: accessControlService },
       ],
     }).compile();
 
@@ -228,6 +253,29 @@ describe('MockTestsService', () => {
       const result = await service.findAll();
       expect(result.pagination.page).toBe(1);
       expect(result.pagination.limit).toBe(10);
+    });
+
+    it('includes access.allowed false for ENTITLED paper without grant (ENFORCED mock)', async () => {
+      const test = makeTest({
+        accessMode: AccessMode.ENTITLED,
+        toObject() {
+          return {
+            ...makeTest().toObject(),
+            accessMode: AccessMode.ENTITLED,
+          };
+        },
+      });
+      mockTestModel.find.mockReturnValue(chainable([test]));
+      attemptModel.find.mockReturnValue(chainable([]));
+
+      const result = await service.findAll(1, 10, undefined, USER_ID);
+
+      expect(result.data[0].accessMode).toBe(AccessMode.ENTITLED);
+      expect(result.data[0].access).toEqual({
+        allowed: false,
+        reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+      });
+      expect(accessControlService.resolveAccessForMockTests).toHaveBeenCalled();
     });
   });
 

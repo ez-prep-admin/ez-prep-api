@@ -2,6 +2,7 @@ import { Exclude, Expose, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AccessMode } from '../../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
+import { AccessResponseDto } from '../../access/dto/access-response.dto';
 
 export class DifficultyDistributionDto {
   @ApiProperty({
@@ -42,6 +43,14 @@ export class MockTestResponseDto {
   })
   @Expose()
   accessMode: AccessMode;
+
+  @ApiProperty({
+    description:
+      'Backend-computed access for the current user. Do not authorize from the client alone.',
+    type: AccessResponseDto,
+  })
+  @Expose()
+  access: AccessResponseDto;
 
   @ApiProperty({
     description: 'Total number of questions in the mock test',
