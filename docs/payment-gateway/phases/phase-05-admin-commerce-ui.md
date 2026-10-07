@@ -90,11 +90,11 @@ Remove routes/nav; API remains.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Nav + pages
-- [ ] Client modules exported
-- [ ] Tests added
-- [ ] Manual click-through noted in STATUS.md
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] Nav + pages
+- [x] Client modules exported
+- [x] Tests added
+- [x] Manual click-through noted in STATUS.md
 
 
 ## STATUS.md update (mandatory)

@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 04 **done** — next **05** |
+| Current phase | 05 **done** — next **06** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -67,7 +67,7 @@ Date: YYYY-MM-DD
 | 02 | Entitlements + access service | **done** | 2026-10-05 | Sharun — review + `ACCESS_ENFORCEMENT_MODE=LEGACY`; API smoke deferred to Phase 06 |
 | 03 | Enforce access gates | **done** | 2026-10-06 | Sharun — local ENFORCED smoke verified; LEGACY restored |
 | 04 | Products + Offers API | **done** | 2026-10-07 | Sharun — indexes verified; paise convention recorded |
-| 05 | Admin commerce UI | pending | | Pending: optional smoke create product |
+| 05 | Admin commerce UI | **done** | 2026-10-07 | Sharun — local smoke create/offer/publish |
 | 06 | Admin entitlements UI | pending | | Pending: grant/revoke on test user |
 | 07 | Orders + TaxService + FakeGateway | pending | | Pending: seed **local** seller/taxConfig; billing includes address |
 | 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
@@ -277,3 +277,31 @@ Date: 2026-10-07
 **Regression audit (existing specs):** new modules only; `app.module.ts` registration only among existing files. No edits to prior `*.spec.ts` cases.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 05
+
+### 2026-10-07 — Phase 05 — Admin Commerce UI
+
+**Code:** `mock-app-admin` on branch `payment-gateway` (API contracts from Phase 04 unchanged)  
+**Tests:** Vitest — commerce-money, productsApi, offersApi, products list/detail pages, index export, layout — **pass** (34 in focused suites); `tsc --noEmit` — pass for new files  
+
+**Shipped:**
+- `app/services/ezprep-api/products.ts` + `offers.ts` + `commerce-money.ts` (₹ ↔ paise)
+- Admin pages: `/admin/products` list/create; `/admin/products/[id]` edit, publish/archive/duplicate/delete, nested offers editor
+- Grant UX: one row per scope type with multi-select targets; expand/collapse + dedupe to API `{ scopeType, scopeId }[]`; table shows resolved names
+- Nav: Products in `app/admin/layout.tsx` (`admin` proxy root already allowed — no allowlist change)
+- Amounts: UI in ₹; API payloads integer paise
+- Primary actions (Publish / Add Offer) use solid blue styling consistent with other admin pages
+
+**Developer ops (manual) — confirm each:**
+- [x] Optional smoke: create a DRAFT product with ≥1 grant, add a duration offer (₹ → paise), publish — against local API the admin app points to
+- [x] N/A — no `.env` changes; no Razorpay/GST; no DB scripts; ez-prep-api / ezprep-app untouched
+- [x] N/A — proxy `ALLOWED_V1_ROOTS` unchanged (`admin` already present)
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-07
+
+**DoD:** met  
+**Deviations:** none (versions history UI omitted per plan; soft-delete + duplicate included; grant multi-select is UI-only convenience)  
+**Regression audit (existing specs):** additive only — `index.test.ts` export asserts; `layout.tsx` nav/selectedKeys. No existing test cases rewritten.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 06
