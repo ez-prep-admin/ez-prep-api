@@ -98,17 +98,32 @@ export class CheckoutService {
   }
 
   /**
-   * Test and phase-08 entry point. Not exposed over HTTP in phase 07.
-   * Does not provision entitlements.
+   * Verify a provider payload and mark the order paid.
+   * Does not provision entitlements (phase 09).
    */
   async verifyPayment(
     userId: string,
     orderId: string,
     providerPayload: Record<string, unknown>,
+    provider?: string,
   ): Promise<CheckoutOrderDataDto> {
     const order = await this.requireOwned(userId, orderId);
+    if (provider && provider !== order.paymentProvider) {
+      throw new BadRequestException(
+        'Payment provider does not match this order',
+      );
+    }
     if (order.status === OrderStatus.PAID) {
       return this.toView(order);
+    }
+    if (order.paymentProvider === 'razorpay') {
+      const claimedOrderId = providerPayload.razorpay_order_id;
+      if (
+        typeof claimedOrderId !== 'string' ||
+        claimedOrderId !== order.providerOrderId
+      ) {
+        throw new BadRequestException('Payment does not match this order');
+      }
     }
 
     const gateway = this.registry.get(order.paymentProvider);
@@ -297,13 +312,10 @@ export class CheckoutService {
   }
 
   private providerData(order: OrderDocument): Record<string, unknown> {
-    if (!order.providerOrderId) {
-      return {};
-    }
-    return {
-      fakeOrderId: order.providerOrderId,
+    return this.registry.get(order.paymentProvider).clientProviderData({
+      providerOrderId: order.providerOrderId,
       amount: order.amount,
       currency: order.currency,
-    };
+    });
   }
 }

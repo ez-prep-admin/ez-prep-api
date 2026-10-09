@@ -1,0 +1,219 @@
+import {
+  BadGatewayException,
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { MIN_ORDER_AMOUNT_PAISE } from '../../../common/commerce/checkout.constants';
+import {
+  ClientProviderDataInput,
+  CreatePaymentOrderInput,
+  NormalizedPaymentEvent,
+  PaymentGateway,
+  PaymentVerificationResult,
+  ProviderOrder,
+  ProviderWebhookInput,
+  RefundInput,
+  ProviderRefund,
+  VerifyPaymentInput,
+} from '../../domain/payment-gateway';
+import { normalizeRazorpayEvent } from './normalize-razorpay-event';
+import {
+  RAZORPAY_ORDERS_CLIENT,
+  RazorpayOrdersClient,
+} from './razorpay-orders.client';
+import {
+  headerValue,
+  hmacSha256Hex,
+  signaturesMatch,
+} from './razorpay-signature';
+
+const RECEIPT_MAX = 40;
+
+@Injectable()
+export class RazorpayGateway implements PaymentGateway {
+  readonly provider = 'razorpay';
+  private readonly logger = new Logger(RazorpayGateway.name);
+
+  constructor(
+    private readonly configService: ConfigService,
+    @Inject(RAZORPAY_ORDERS_CLIENT)
+    private readonly orders: RazorpayOrdersClient,
+  ) {}
+
+  async createOrder(input: CreatePaymentOrderInput): Promise<ProviderOrder> {
+    if (
+      !Number.isInteger(input.amount) ||
+      input.amount < MIN_ORDER_AMOUNT_PAISE
+    ) {
+      throw new BadRequestException(
+        `Order amount must be at least ${MIN_ORDER_AMOUNT_PAISE} paise`,
+      );
+    }
+    if (input.currency !== 'INR') {
+      throw new BadRequestException('Only INR orders can be paid');
+    }
+    const receipt = input.receipt?.trim() ?? '';
+    if (!receipt || receipt.length > RECEIPT_MAX) {
+      throw new BadRequestException(
+        `Payment receipt must be 1-${RECEIPT_MAX} characters`,
+      );
+    }
+
+    let created: { id: string; amount: number; currency: string };
+    try {
+      created = await this.orders.createOrder({
+        amount: input.amount,
+        currency: 'INR',
+        receipt,
+      });
+    } catch (error) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay order create failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    if (
+      !created.id ||
+      created.amount !== input.amount ||
+      created.currency !== 'INR'
+    ) {
+      this.logger.warn('Razorpay order create returned an unexpected amount');
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    return {
+      providerOrderId: created.id,
+      amount: input.amount,
+      currency: 'INR',
+      providerData: this.clientProviderData({
+        providerOrderId: created.id,
+        amount: input.amount,
+        currency: 'INR',
+      }),
+    };
+  }
+
+  async verifyPayment(
+    input: VerifyPaymentInput,
+  ): Promise<PaymentVerificationResult> {
+    const orderId = payloadString(input.providerPayload, 'razorpay_order_id');
+    const paymentId = payloadString(
+      input.providerPayload,
+      'razorpay_payment_id',
+    );
+    const signature = payloadString(
+      input.providerPayload,
+      'razorpay_signature',
+    );
+    if (!orderId || !paymentId || !signature) {
+      return {
+        verified: false,
+        status: 'FAILED',
+        failureReason: 'Missing razorpay verify fields',
+      };
+    }
+    if (input.providerOrderId && orderId !== input.providerOrderId) {
+      return {
+        verified: false,
+        status: 'FAILED',
+        failureReason: 'Payment does not match this order',
+      };
+    }
+
+    const secret = this.secret('RAZORPAY_KEY_SECRET');
+    const expected = secret
+      ? hmacSha256Hex(secret, `${orderId}|${paymentId}`)
+      : '';
+    if (!secret || !signaturesMatch(expected, signature)) {
+      return {
+        verified: false,
+        status: 'FAILED',
+        failureReason: 'Invalid payment signature',
+      };
+    }
+
+    return {
+      verified: true,
+      status: 'CAPTURED',
+      providerPaymentId: paymentId,
+    };
+  }
+
+  async parseWebhook(
+    input: ProviderWebhookInput,
+  ): Promise<NormalizedPaymentEvent> {
+    const signature = headerValue(input.headers, 'x-razorpay-signature');
+    const eventId = headerValue(input.headers, 'x-razorpay-event-id')?.trim();
+    const secret = this.secret('RAZORPAY_WEBHOOK_SECRET');
+    const raw = Buffer.isBuffer(input.rawBody)
+      ? input.rawBody
+      : Buffer.from(input.rawBody);
+    const expected = secret ? hmacSha256Hex(secret, raw) : '';
+    if (!signature || !secret || !signaturesMatch(expected, signature)) {
+      throw new BadRequestException('Invalid webhook signature');
+    }
+    if (!eventId) {
+      throw new BadRequestException('Missing webhook event id');
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(raw.toString('utf8')) as unknown;
+    } catch {
+      throw new BadRequestException('Invalid webhook body');
+    }
+    return normalizeRazorpayEvent(body, eventId);
+  }
+
+  async refund(_input: RefundInput): Promise<ProviderRefund> {
+    throw new Error('RazorpayGateway refunds are not implemented (phase 11)');
+  }
+
+  clientProviderData(input: ClientProviderDataInput): Record<string, unknown> {
+    if (!input.providerOrderId) {
+      return {};
+    }
+    return {
+      razorpayOrderId: input.providerOrderId,
+      amount: input.amount,
+      currency: input.currency,
+      keyId: this.secret('RAZORPAY_KEY_ID'),
+    };
+  }
+
+  private secret(name: string): string {
+    return this.configService.get<string>(name)?.trim() ?? '';
+  }
+}
+
+function payloadString(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = payload[key];
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function statusCodeOf(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'statusCode' in error) {
+    const code = (error as { statusCode?: unknown }).statusCode;
+    if (typeof code === 'number') {
+      return String(code);
+    }
+  }
+  return 'unknown';
+}

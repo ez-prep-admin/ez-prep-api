@@ -47,6 +47,7 @@ async function bootstrap() {
   try {
     // NestJs Observability for monitoring and logging
     const app = await NestFactory.create(AppModule, {
+      rawBody: true,
       ...(observeEnabled() ? { instrument: ObserveInstrument } : {}),
     });
     const configService = app.get(ConfigService);

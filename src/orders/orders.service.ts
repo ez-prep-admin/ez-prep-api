@@ -59,6 +59,15 @@ export class OrdersService {
     return this.orderModel.findById(id).exec();
   }
 
+  async findByProviderOrderId(
+    provider: string,
+    providerOrderId: string,
+  ): Promise<OrderDocument | null> {
+    return this.orderModel
+      .findOne({ paymentProvider: provider, providerOrderId })
+      .exec();
+  }
+
   idOf(order: OrderDocument): string {
     const withVirtual = order as OrderDocument & { id?: string };
     return withVirtual.id ? String(withVirtual.id) : String(order._id);

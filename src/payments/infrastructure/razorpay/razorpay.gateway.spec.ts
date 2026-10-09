@@ -1,0 +1,253 @@
+import { BadGatewayException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHmac } from 'crypto';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { RazorpayOrdersClient } from './razorpay-orders.client';
+import { RazorpayGateway } from './razorpay.gateway';
+
+const KEY_SECRET = 'test_key_secret';
+const WEBHOOK_SECRET = 'test_webhook_secret';
+
+function config(): ConfigService {
+  const values: Record<string, string> = {
+    RAZORPAY_KEY_ID: 'rzp_test_key',
+    RAZORPAY_KEY_SECRET: KEY_SECRET,
+    RAZORPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  };
+  return {
+    get: (key: string) => values[key],
+  } as ConfigService;
+}
+
+function paymentSignature(orderId: string, paymentId: string): string {
+  return createHmac('sha256', KEY_SECRET)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+}
+
+function webhookSignature(body: Buffer): string {
+  return createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex');
+}
+
+function fixture(name: string): Buffer {
+  return readFileSync(join(__dirname, 'fixtures', name));
+}
+
+describe('RazorpayGateway', () => {
+  const orders: jest.Mocked<RazorpayOrdersClient> = {
+    createOrder: jest.fn(),
+  };
+  const gateway = new RazorpayGateway(config(), orders);
+
+  beforeEach(() => {
+    orders.createOrder.mockReset();
+  });
+
+  it('creates an order with the server amount in paise', async () => {
+    orders.createOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+    });
+
+    const created = await gateway.createOrder({
+      orderId: 'abc',
+      amount: 99900,
+      currency: 'INR',
+      receipt: 'ORD-1',
+    });
+
+    expect(orders.createOrder).toHaveBeenCalledWith({
+      amount: 99900,
+      currency: 'INR',
+      receipt: 'ORD-1',
+    });
+    expect(created).toMatchObject({
+      providerOrderId: 'order_1',
+      amount: 99900,
+      providerData: {
+        razorpayOrderId: 'order_1',
+        amount: 99900,
+        currency: 'INR',
+        keyId: 'rzp_test_key',
+      },
+    });
+  });
+
+  it('rejects totals under 100 paise before calling Razorpay', async () => {
+    await expect(
+      gateway.createOrder({
+        orderId: 'abc',
+        amount: 50,
+        currency: 'INR',
+        receipt: 'ORD-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(orders.createOrder).not.toHaveBeenCalled();
+  });
+
+  it('maps provider failures to a 502 without the secret', async () => {
+    orders.createOrder.mockRejectedValue({
+      statusCode: 401,
+      key_secret: KEY_SECRET,
+    });
+
+    await expect(
+      gateway.createOrder({
+        orderId: 'abc',
+        amount: 99900,
+        currency: 'INR',
+        receipt: 'ORD-1',
+      }),
+    ).rejects.toBeInstanceOf(BadGatewayException);
+
+    try {
+      await gateway.createOrder({
+        orderId: 'abc',
+        amount: 99900,
+        currency: 'INR',
+        receipt: 'ORD-1',
+      });
+    } catch (error) {
+      expect(JSON.stringify(error)).not.toContain(KEY_SECRET);
+    }
+  });
+
+  it('verifies a Standard Checkout signature', async () => {
+    const signature = paymentSignature('order_1', 'pay_1');
+    await expect(
+      gateway.verifyPayment({
+        orderId: 'abc',
+        providerOrderId: 'order_1',
+        amount: 99900,
+        currency: 'INR',
+        providerPayload: {
+          razorpay_order_id: 'order_1',
+          razorpay_payment_id: 'pay_1',
+          razorpay_signature: signature,
+        },
+      }),
+    ).resolves.toEqual({
+      verified: true,
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_1',
+    });
+  });
+
+  it('rejects a tampered payment signature', async () => {
+    const valid = paymentSignature('order_1', 'pay_1');
+    const signature = `${valid[0] === 'a' ? 'b' : 'a'}${valid.slice(1)}`;
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: signature,
+      },
+    });
+    expect(result.verified).toBe(false);
+    expect(result.failureReason).toBe('Invalid payment signature');
+  });
+
+  it('rejects missing verify fields', async () => {
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: { razorpay_order_id: 'order_1' },
+    });
+    expect(result.verified).toBe(false);
+    expect(result.failureReason).toBe('Missing razorpay verify fields');
+  });
+
+  it('rejects a signature for a different Razorpay order', async () => {
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_other',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_other', 'pay_1'),
+      },
+    });
+    expect(result.verified).toBe(false);
+    expect(result.failureReason).toBe('Payment does not match this order');
+  });
+
+  it('parses a signed payment.captured webhook', async () => {
+    const rawBody = fixture('payment-captured.json');
+    const event = await gateway.parseWebhook({
+      rawBody,
+      headers: {
+        'x-razorpay-signature': webhookSignature(rawBody),
+        'x-razorpay-event-id': 'evt_captured',
+      },
+    });
+    expect(event).toMatchObject({
+      providerEventId: 'evt_captured',
+      eventType: 'payment.captured',
+      providerOrderId: 'order_test_1',
+      providerPaymentId: 'pay_test_captured',
+      status: 'CAPTURED',
+      amount: 79900,
+      currency: 'INR',
+    });
+  });
+
+  it('parses order.paid as a capture and ignores payment.failed', async () => {
+    const paid = fixture('order-paid.json');
+    await expect(
+      gateway.parseWebhook({
+        rawBody: paid,
+        headers: {
+          'x-razorpay-signature': webhookSignature(paid),
+          'x-razorpay-event-id': 'evt_paid',
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'CAPTURED', eventType: 'order.paid' });
+
+    const failed = fixture('payment-failed.json');
+    await expect(
+      gateway.parseWebhook({
+        rawBody: failed,
+        headers: {
+          'x-razorpay-signature': webhookSignature(failed),
+          'x-razorpay-event-id': 'evt_failed',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'IGNORED',
+      eventType: 'payment.failed',
+    });
+  });
+
+  it('rejects an invalid webhook signature', async () => {
+    const rawBody = fixture('payment-captured.json');
+    await expect(
+      gateway.parseWebhook({
+        rawBody,
+        headers: {
+          'x-razorpay-signature': 'deadbeef',
+          'x-razorpay-event-id': 'evt_captured',
+        },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('leaves refunds for phase 11', async () => {
+    await expect(
+      gateway.refund({
+        providerPaymentId: 'pay_1',
+        amount: 99900,
+        currency: 'INR',
+      }),
+    ).rejects.toThrow(/phase 11/);
+  });
+});

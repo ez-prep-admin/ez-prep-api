@@ -23,6 +23,7 @@ import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CheckoutService } from './checkout.service';
 import { CreateCheckoutOrderDto } from './dto/create-checkout-order.dto';
 import { CheckoutOrderApiResponseDto } from './dto/checkout-order-response.dto';
+import { VerifyCheckoutPaymentDto } from './dto/verify-checkout-payment.dto';
 
 @ApiTags('checkout')
 @Controller('checkout/orders')
@@ -48,6 +49,30 @@ export class CheckoutController {
   ): Promise<CheckoutOrderApiResponseDto> {
     const data = await this.checkoutService.createOrder(user.id, dto);
     return { message: 'Order created', data };
+  }
+
+  @Post(':id/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Verify a checkout payment',
+    description:
+      'Validates the provider payload. A bad or missing signature does not mark the order paid.',
+  })
+  @ApiParam({ name: 'id' })
+  @ApiOkResponse({ type: CheckoutOrderApiResponseDto })
+  async verify(
+    @Param('id') id: string,
+    @Body() dto: VerifyCheckoutPaymentDto,
+    @GetUser() user: UserResponseDto,
+  ): Promise<CheckoutOrderApiResponseDto> {
+    const data = await this.checkoutService.verifyPayment(
+      user.id,
+      id,
+      dto.providerPayload,
+      dto.provider,
+    );
+    return { message: 'Payment verified', data };
   }
 
   @Get(':id')

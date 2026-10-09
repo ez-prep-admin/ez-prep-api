@@ -1,0 +1,16 @@
+{
+  "entity": "event",
+  "event": "payment.failed",
+  "contains": ["payment"],
+  "payload": {
+    "payment": {
+      "entity": {
+        "id": "pay_test_failed",
+        "order_id": "order_test_1",
+        "amount": 79900,
+        "currency": "INR",
+        "status": "failed"
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 07 **done** — next **08** |
+| Current phase | 08 **done** — next **09** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -70,7 +70,7 @@ Date: YYYY-MM-DD
 | 05 | Admin commerce UI | **done** | 2026-10-07 | Sharun — local smoke create/offer/publish |
 | 06 | Admin entitlements UI | **done** | 2026-10-08 | Sharun — grant/revoke UI + local ENFORCED smoke |
 | 07 | Orders + TaxService + FakeGateway | **done** | 2026-10-09 | Sharun — local seller/tax seed + `PAYMENT_PROVIDER=fake` |
-| 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
+| 08 | Razorpay adapter | **done** | 2026-10-09 | Sharun — test keys in `.env`; webhook URL deferred to phase 14 |
 | 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
 | 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
 | 11 | Admin refunds | pending | | Pending: document Zoho credit-note step (U-GST-04) |
@@ -393,3 +393,39 @@ Date: 2026-10-09
 **GOLIVE_TODOS touched:** `U-GST-05` owner-confirmed. `U-OPS-01` values known, production database seed still phase 15. `U-OPS-02` still open until live keys and the prod webhook URL are in place.
 
 **GSTIN edits (owner, 2026-10-09):** `seller.gstin` may be replaced if the legal entity changes. Phase 10 must not reject a new GSTIN for a checksum or state-prefix mismatch. Invoices already issued keep the seller snapshot from issue time. See D-17.
+
+### 2026-10-09 — Phase 08 — Razorpay adapter
+
+**Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
+**Tests:** Jest — Razorpay HMAC/create/webhook, registry, checkout verify, existing checkout/fake suites — **pass** (45 in focused suites); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- `RazorpayGateway` under `src/payments/infrastructure/razorpay/`. SDK import is isolated to `razorpay-sdk.client.ts`. `PAYMENT_PROVIDER=razorpay` selects it; unknown providers still 503. Boot fails only when that provider is selected and `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, or `RAZORPAY_WEBHOOK_SECRET` is blank. Default `fake` still boots with blank keys.
+- `POST /api/v1/checkout/orders/:id/verify` (JWT). Razorpay payload requires `razorpay_order_id`, `razorpay_payment_id`, `razorpay_signature`. HMAC-SHA256 of `order_id|payment_id` with `RAZORPAY_KEY_SECRET`. Mismatch, missing fields, or a different Razorpay order id → 400 and the order stays unpaid. Success uses existing `markOrderPaid`. No entitlement provisioning.
+- `POST /api/v1/webhooks/payments/razorpay` (no JWT, throttling skipped). Raw body HMAC with `RAZORPAY_WEBHOOK_SECRET` (`X-Razorpay-Signature`). Idempotent on `X-Razorpay-Event-Id` in `webhook_events`. `payment.captured` and `order.paid` mark PAID when amount and INR match. Other events, including `payment.failed`, are IGNORED. Duplicate event id returns 200 and does not pay twice. Invalid signature → 400, no state change. Amount mismatch → FAILED and 200, order unchanged. Missing order → 500 so Razorpay can retry.
+- Checkout GET / replay rebuilds `providerData` from the adapter. Razorpay responses include public `keyId` only. Refund stays a stub for phase 11.
+- `.env.example` already named the three secrets; comments now include the webhook path.
+
+**Local webhook tunnel (optional — automated tests use signed fixtures and do not need this):**
+1. Run the API locally (`PORT`, default 3000).
+2. Point a tunnel at that port: `ngrok http 3000` or `cloudflared tunnel --url http://localhost:3000`.
+3. In the Razorpay **test** dashboard → Webhooks, add `https://<tunnel-host>/api/v1/webhooks/payments/razorpay`.
+4. Subscribe to `payment.captured` and `order.paid`. Paste that endpoint’s secret into local `RAZORPAY_WEBHOOK_SECRET`.
+5. Put test key id/secret in local `.env`, set `PAYMENT_PROVIDER=razorpay`, and restart. Leave `PAYMENT_PROVIDER=fake` for ordinary local work.
+6. Production webhook is permanent HTTPS on the prod API in phase 15 (`U-OPS-02`). Do not register a tunnel URL on the live account.
+
+**Developer ops (manual) — confirm each:**
+- [x] Local `.env` has Razorpay **test** `RAZORPAY_KEY_ID` (`rzp_test_...`) and `RAZORPAY_KEY_SECRET`. Values are not committed.
+- [x] `PAYMENT_PROVIDER=fake` for normal local work. Live test-mode smoke waits until checkout UI (phase 14).
+- [x] N/A — webhook secret and tunnel. Razorpay issues `RAZORPAY_WEBHOOK_SECRET` only after a webhook URL is created, and that URL is useful once the UI can complete a payment. Signed Jest fixtures cover verify and webhook processing. Create the test-mode webhook during phase 14.
+- [x] N/A — admin UI, ezprep-app, entitlement provisioning (phase 09), refund API (phase 11). Production live keys and the prod webhook URL stay `U-OPS-02`.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-09
+
+**DoD:** met  
+**Deviations:** Registry spec “razorpay throws” became “unknown provider (`stripe`) throws” plus new razorpay selection cases — structural, because the adapter is now registered. `payment.failed` does not move the order to FAILED (phase 12). Refund is a stub. Live Razorpay payment and webhook URL are phase 14, not a blocker here.  
+**Regression audit (existing specs):** checkout, fake gateway, and order suites were not rewritten. Registry spec: one existing case retargeted from `razorpay` to `stripe` (structural; razorpay is now a real provider) plus additive razorpay cases. New specs only otherwise.  
+**GOLIVE_TODOS touched:** `U-OPS-02` still open  
+**Next:** phase 09

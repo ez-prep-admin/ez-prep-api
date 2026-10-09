@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { MIN_ORDER_AMOUNT_PAISE } from '../../../common/commerce/checkout.constants';
 import {
+  ClientProviderDataInput,
   CreatePaymentOrderInput,
   NormalizedPaymentEvent,
   PaymentGateway,
@@ -31,11 +32,22 @@ export class FakeGateway implements PaymentGateway {
       providerOrderId,
       amount: input.amount,
       currency: input.currency,
-      providerData: {
-        fakeOrderId: providerOrderId,
+      providerData: this.clientProviderData({
+        providerOrderId,
         amount: input.amount,
         currency: input.currency,
-      },
+      }),
+    };
+  }
+
+  clientProviderData(input: ClientProviderDataInput): Record<string, unknown> {
+    if (!input.providerOrderId) {
+      return {};
+    }
+    return {
+      fakeOrderId: input.providerOrderId,
+      amount: input.amount,
+      currency: input.currency,
     };
   }
 

@@ -32,6 +32,12 @@ export interface ProviderWebhookInput {
   headers: Record<string, string | string[] | undefined>;
 }
 
+export interface ClientProviderDataInput {
+  providerOrderId?: string;
+  amount: number;
+  currency: string;
+}
+
 export interface NormalizedPaymentEvent {
   providerEventId: string;
   eventType: string;
@@ -39,6 +45,7 @@ export interface NormalizedPaymentEvent {
   providerPaymentId?: string;
   status: 'CAPTURED' | 'FAILED' | 'IGNORED';
   amount?: number;
+  currency?: string;
 }
 
 export interface RefundInput {
@@ -59,5 +66,7 @@ export interface PaymentGateway {
   verifyPayment(input: VerifyPaymentInput): Promise<PaymentVerificationResult>;
   parseWebhook(input: ProviderWebhookInput): Promise<NormalizedPaymentEvent>;
   refund(input: RefundInput): Promise<ProviderRefund>;
+  /** Public checkout fields for GET and idempotent replay. Never includes secrets. */
+  clientProviderData(input: ClientProviderDataInput): Record<string, unknown>;
   fetchOrderStatus?(providerOrderId: string): Promise<NormalizedPaymentEvent>;
 }

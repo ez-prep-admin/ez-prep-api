@@ -2,12 +2,14 @@ import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PaymentGateway } from './payment-gateway';
 import { FakeGateway } from '../infrastructure/fake/fake.gateway';
+import { RazorpayGateway } from '../infrastructure/razorpay/razorpay.gateway';
 
 @Injectable()
 export class PaymentGatewayRegistry {
   constructor(
     private readonly configService: ConfigService,
     private readonly fakeGateway: FakeGateway,
+    private readonly razorpayGateway: RazorpayGateway,
   ) {}
 
   get(provider?: string): PaymentGateway {
@@ -20,6 +22,9 @@ export class PaymentGatewayRegistry {
 
     if (name === 'fake') {
       return this.fakeGateway;
+    }
+    if (name === 'razorpay') {
+      return this.razorpayGateway;
     }
 
     throw new ServiceUnavailableException(

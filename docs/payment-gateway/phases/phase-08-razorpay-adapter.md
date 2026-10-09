@@ -99,11 +99,11 @@ Set `PAYMENT_PROVIDER=fake`; feature-flag webhook route if needed.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Adapter isolated
-- [ ] Verify + webhook paths
-- [ ] Env example updated
-- [ ] Signature tests green
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] Adapter isolated
+- [x] Verify + webhook paths
+- [x] Env example updated
+- [x] Signature tests green
 
 
 ## STATUS.md update (mandatory)
