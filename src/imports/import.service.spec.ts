@@ -7,7 +7,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { ImportService } from './import.service';
+import {
+  ImportService,
+  MATCHED_QUESTION_CACHE_REVISION,
+} from './import.service';
 import { DocumentParserFactory } from './parser/factories/document-parser.factory';
 import { AdaptiveParserStrategy } from './parser/strategies/adaptive-parser.strategy';
 import { DeepseekService } from './llm/deepseek.service';
@@ -74,7 +77,7 @@ function importQuestion(partial: Partial<ImportQuestion> = {}): ImportQuestion {
 }
 
 function makeUpload(overrides: Record<string, unknown> = {}) {
-  return {
+  const upload: Record<string, any> = {
     _id: new Types.ObjectId(UPLOAD_ID),
     subject: new Types.ObjectId(SUBJECT_ID),
     topic: new Types.ObjectId(TOPIC_ID),
@@ -89,6 +92,10 @@ function makeUpload(overrides: Record<string, unknown> = {}) {
     toObject: jest.fn().mockReturnValue({ id: UPLOAD_ID }),
     ...overrides,
   };
+  if (upload.matchedQuestionsCache && upload.parseCacheRevision === undefined) {
+    upload.parseCacheRevision = MATCHED_QUESTION_CACHE_REVISION;
+  }
+  return upload;
 }
 
 function subjectQuery(name = 'Physics') {

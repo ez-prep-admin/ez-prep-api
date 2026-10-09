@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { FailedQuestionService } from './failed-question.service';
+import {
+  dropLegacyFailedQuestionNumberIndex,
+  FailedQuestionService,
+  LEGACY_FAILED_QUESTION_NUMBER_INDEX,
+} from './failed-question.service';
 import { FailedQuestion } from '../schemas/failed-question.schema';
 import { RejectedQuestion } from '../types/import-question';
 
@@ -44,6 +48,37 @@ describe('FailedQuestionService', () => {
     await service.replaceForUpload(uploadId, []);
     expect(model.deleteMany).toHaveBeenCalled();
     expect(model.insertMany).not.toHaveBeenCalled();
+  });
+
+  it('drops the legacy question-number unique index when it is still present', async () => {
+    const collection = {
+      indexes: jest.fn().mockResolvedValue([
+        { name: LEGACY_FAILED_QUESTION_NUMBER_INDEX, unique: true },
+        { name: 'uploadId_1_parseIndex_1', unique: true },
+      ]),
+      dropIndex: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(dropLegacyFailedQuestionNumberIndex(collection)).resolves.toBe(
+      true,
+    );
+    expect(collection.dropIndex).toHaveBeenCalledWith(
+      LEGACY_FAILED_QUESTION_NUMBER_INDEX,
+    );
+  });
+
+  it('leaves indexes alone when the legacy index is already gone', async () => {
+    const collection = {
+      indexes: jest
+        .fn()
+        .mockResolvedValue([{ name: 'uploadId_1_parseIndex_1', unique: true }]),
+      dropIndex: jest.fn(),
+    };
+
+    await expect(dropLegacyFailedQuestionNumberIndex(collection)).resolves.toBe(
+      false,
+    );
+    expect(collection.dropIndex).not.toHaveBeenCalled();
   });
 
   it('replaceForUpload inserts rejected questions', async () => {

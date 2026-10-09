@@ -176,6 +176,13 @@ export class QuestionUpload {
   markdownParsedAt?: Date;
 
   /**
+   * Parser revision that produced matchedQuestionsCache.
+   * Older revisions are ignored so a boundary-rule change reparses on enrich.
+   */
+  @Prop({ type: Number })
+  parseCacheRevision?: number;
+
+  /**
    * Cached matched question blocks from parse-markdown (avoids re-parsing on enrich)
    */
   @Prop({ type: Object })

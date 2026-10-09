@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -12,14 +13,54 @@ import {
 } from '../schemas/failed-question.schema';
 import { RejectedQuestion } from '../types/import-question';
 
+/** Left behind when uniqueness moved from question number to parse index. */
+export const LEGACY_FAILED_QUESTION_NUMBER_INDEX =
+  'uploadId_1_questionNumber_1';
+
+type IndexSpec = { name?: string; unique?: boolean };
+
+export async function dropLegacyFailedQuestionNumberIndex(collection: {
+  indexes(): Promise<IndexSpec[]>;
+  dropIndex(name: string): Promise<unknown>;
+}): Promise<boolean> {
+  const indexes = await collection.indexes();
+  const legacy = indexes.find(
+    index => index.name === LEGACY_FAILED_QUESTION_NUMBER_INDEX,
+  );
+  if (!legacy) {
+    return false;
+  }
+  await collection.dropIndex(LEGACY_FAILED_QUESTION_NUMBER_INDEX);
+  return true;
+}
+
 @Injectable()
-export class FailedQuestionService {
+export class FailedQuestionService implements OnModuleInit {
   private readonly logger = new Logger(FailedQuestionService.name);
 
   constructor(
     @InjectModel(FailedQuestion.name)
     private readonly failedQuestionModel: Model<FailedQuestionDocument>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      const dropped = await dropLegacyFailedQuestionNumberIndex(
+        this.failedQuestionModel.collection,
+      );
+      if (dropped) {
+        this.logger.log(
+          `[failed-questions] Dropped legacy unique index ${LEGACY_FAILED_QUESTION_NUMBER_INDEX}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `[failed-questions] Could not drop legacy unique index ${LEGACY_FAILED_QUESTION_NUMBER_INDEX}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+  }
 
   async replaceForUpload(
     uploadId: string,
@@ -33,16 +74,29 @@ export class FailedQuestionService {
       return;
     }
 
+    const usedParseIndexes = new Set<number>();
     await this.failedQuestionModel.insertMany(
-      rejected.map(item => ({
-        uploadId: new Types.ObjectId(uploadId),
-        questionNumber: item.number,
-        parseIndex: item.index ?? item.matchedQuestion.index ?? item.number,
-        matchedQuestion: item.matchedQuestion,
-        failureStage: item.stage,
-        failureMessage: item.message,
-        questionDraft: item.questionDraft,
-      })),
+      rejected.map((item, position) => {
+        const preferred = item.index ?? item.matchedQuestion.index;
+        let parseIndex =
+          typeof preferred === 'number' && preferred >= 0
+            ? preferred
+            : position;
+        while (usedParseIndexes.has(parseIndex)) {
+          parseIndex += 1;
+        }
+        usedParseIndexes.add(parseIndex);
+
+        return {
+          uploadId: new Types.ObjectId(uploadId),
+          questionNumber: item.number,
+          parseIndex,
+          matchedQuestion: item.matchedQuestion,
+          failureStage: item.stage,
+          failureMessage: item.message,
+          questionDraft: item.questionDraft,
+        };
+      }),
     );
 
     this.logger.log(
