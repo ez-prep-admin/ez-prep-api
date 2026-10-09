@@ -13,6 +13,7 @@ import { S3Service } from '../aws/s3/s3.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { TaxInvoiceStatus } from '../common/enums/tax-invoice-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { INSTANCE_CONFIG_ID } from '../instance-config/instance-config.constants';
 import {
   InstanceConfig,
@@ -84,6 +85,7 @@ export class InvoiceService {
     private readonly awsConfig: AwsConfigService,
     @Inject(TAX_INVOICE_PDF_RENDERER)
     private readonly renderPdf: TaxInvoicePdfRenderer,
+    private readonly commerceAuditService: CommerceAuditService,
   ) {}
 
   async issueForPaidOrder(orderId: string): Promise<IssueInvoiceResult> {
@@ -112,6 +114,15 @@ export class InvoiceService {
     const issuedAt = new Date();
     const invoice = await this.insertInvoice(order, identity, issuedAt);
     await this.ensurePdf(invoice);
+    await this.commerceAuditService.log({
+      action: 'INVOICE_ISSUED',
+      resourceType: 'invoice',
+      resourceId: this.idOf(invoice),
+      after: {
+        invoiceNumber: invoice.invoiceNumber,
+        orderId: this.idOf(order),
+      },
+    });
     this.logger.log(
       `Issued invoice ${invoice.invoiceNumber} for order ${this.idOf(order)}`,
     );

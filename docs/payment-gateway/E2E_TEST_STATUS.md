@@ -105,11 +105,15 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 
 ### J6 — Failed, dismissed, and expired payment
 
-- [ ] Start checkout and dismiss the Razorpay modal. No entitlement. No invoice. Order stays pending. Subscriptions does not show it as paid.
-- [ ] Start checkout and use a Razorpay test failure instrument. Error is visible. No entitlement. No invoice.
+Do this after checkout UI exists (phase 14). Reconciliation steps are spelled out under Phase 12 below. Do not check them early.
+
+- [ ] With `RECONCILIATION_ENABLED` not the string `true`, start checkout and dismiss the Razorpay modal. No entitlement. No invoice. Order stays `PENDING_PAYMENT` even after several minutes. Subscriptions does not show it as paid.
+- [ ] Start checkout and use a Razorpay test failure instrument. Error is visible. No entitlement. No invoice. The order stays pending until the reconciliation tick below; `payment.failed` webhooks do not move it by themselves.
 - [ ] Tampered or missing verify payload does not mark the order paid and does not unlock the paper.
-- [ ] Leave a pending order past the expiry window (or run the reconciliation job against a stuck pending order). It becomes expired or paid-and-provisioned according to the provider status, never both, and a still-pending order the provider has not captured does not get an invoice.
-- [ ] An already paid order is not rewritten by a later webhook or reconciliation pass.
+- [ ] Run the Phase 12 reconciliation pass (flag `true`, age `0`, interval `10000`, restart). The dismissed unpaid order becomes `EXPIRED`. Its payment stays `INITIATED`. Still no entitlement and no invoice. Subscriptions does not show it as paid.
+- [ ] Same pass: a Razorpay test failure that the provider reports as failed becomes order `FAILED` and payment `FAILED`. No entitlement. No invoice.
+- [ ] Same pass: a payment Razorpay has captured, while the browser never called verify and the webhook did not land, becomes `PAID`, provisions once, and invoices once. The fake provider cannot stage that capture from the UI; use Razorpay test mode for this row. If that setup is skipped, mark the row N/A with the reason and leave the Jest case as the record.
+- [ ] The paid order from J1 stays `PAID` after another tick. Entitlement and invoice are not duplicated.
 
 ### J7 — Catalog and access regressions
 
@@ -175,10 +179,12 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 - [ ] Partial refund is not offered.
 - [ ] Refund of an unpaid or already refunded order is rejected.
 - [ ] Student UI has no refund control.
-- [ ] Reconciliation of a captured-but-still-pending order marks it paid, provisions once, and invoices once.
-- [ ] Reconciliation of a failed provider order expires or fails it and does not invoice.
-- [ ] Reconciliation does not modify an order that is already paid.
-- [ ] Commerce audit trail contains the grant, revoke, refund, and invoice events exercised above (admin list if the phase 12 API exists; otherwise the `commerce_audit_logs` documents).
+- [ ] Reconciliation of a captured-but-still-pending Razorpay order marks it paid, provisions once, and invoices once. See the J6 capture row for how to produce that order.
+- [ ] Reconciliation of an unpaid dismissed checkout expires it (`EXPIRED`, payment still `INITIATED`) and does not invoice.
+- [ ] Reconciliation of a provider-failed order sets the order and payment to `FAILED` and does not invoice.
+- [ ] Reconciliation does not modify an order that is already paid, and does not add a second entitlement or a second invoice.
+- [ ] After the pass, `RECONCILIATION_ENABLED=false` and `RECONCILIATION_MIN_AGE_MINUTES=60` are restored and the API is restarted. Age `0` left on will expire checkouts that are still in progress.
+- [ ] `GET /api/v1/admin/commerce-audit` with an admin JWT lists the grant, revoke, refund, publish or archive, offer change, `INVOICE_ISSUED`, and `ORDER_PROVISIONED` rows from this pass. Admin actions show that admin on `actorUserId`. `INVOICE_ISSUED` has no actor. `ORDER_PROVISIONED` stores the paying student. There is no admin page for this list. Filters: `action`, `resourceType`, `page`, `limit`.
 
 ### UI
 
@@ -221,7 +227,18 @@ Phase 16 runs J5 end to end with the paid order from J1: confirm modal, revoked 
 
 ### Phase 12 — Reconciliation and audit
 
-Planned proof is the expired-order and audit bullets above. When phase 12 finishes, add how to trigger the job locally (command, env flag, or wait interval) and where the audit list lives.
+Owner skipped Postman on 2026-10-10. Jest covers the status mapping. The UI-integrated proof is J6 plus the recon and audit rows in the negative list. Do not check those boxes until phase 16, after checkout exists.
+
+Run this only during that pass. Checkout `expiresAt` is 30 minutes and is not this clock. The job does not use Redis. Any value other than the string `true` on `RECONCILIATION_ENABLED` leaves orders untouched.
+
+1. Confirm the flag is not `true`. Dismiss a checkout. The order stays `PENDING_PAYMENT`. No entitlement. No invoice. Subscriptions does not show it as paid.
+2. In API `.env`, set `RECONCILIATION_ENABLED=true`, `RECONCILIATION_MIN_AGE_MINUTES=0`, and `RECONCILIATION_INTERVAL_MS=10000`. Restart the API. Default age is 60 and default interval is 300000; those waits are too long for this pass.
+3. On the next tick the dismissed unpaid order becomes `EXPIRED`. Payment stays `INITIATED`. Still no entitlement and no invoice.
+4. A Razorpay test-mode failure becomes order `FAILED` and payment `FAILED` on a tick. No entitlement. No invoice. The failure webhook alone does not do this.
+5. A Razorpay test-mode capture where verify never ran and the webhook did not land becomes `PAID` on a tick, provisions once, and invoices once. Fake checkout cannot stage “provider says captured.”
+6. The paid order from J1 stays `PAID` after another tick. Access and the invoice are unchanged.
+7. `GET /api/v1/admin/commerce-audit` (admin JWT, no admin screen) shows the actions from this pass. Use `action` and `resourceType` to narrow it. Admin clicks carry `actorUserId`. `INVOICE_ISSUED` does not. `ORDER_PROVISIONED` is the student who paid.
+8. Set `RECONCILIATION_ENABLED=false`, set `RECONCILIATION_MIN_AGE_MINUTES=60`, and restart before leaving the pass.
 
 ### Phase 13 — User access UI
 

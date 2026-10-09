@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CommerceAuditModule } from '../commerce-audit/commerce-audit.module';
 import { PAID_ORDER_NOTIFIER } from '../entitlements/paid-order-notifier';
 import {
   InstanceConfig,
@@ -22,6 +23,7 @@ import { TaxInvoice, TaxInvoiceSchema } from './schemas/tax-invoice.schema';
       { name: Payment.name, schema: PaymentSchema },
       { name: InstanceConfig.name, schema: InstanceConfigSchema },
     ]),
+    CommerceAuditModule,
   ],
   controllers: [MeInvoicesController, AdminInvoicesController],
   providers: [

@@ -252,7 +252,7 @@ interface PaymentGateway {
   verifyPayment(input: VerifyPaymentInput): Promise<PaymentVerificationResult>;
   parseWebhook(input: ProviderWebhookInput): Promise<NormalizedPaymentEvent>;
   refund(input: RefundInput): Promise<ProviderRefund>;
-  fetchOrderStatus?(providerOrderId: string): Promise<NormalizedPaymentEvent>; // reconciliation
+  fetchOrderStatus(providerOrderId: string): Promise<NormalizedPaymentEvent>; // reconciliation
 }
 ```
 

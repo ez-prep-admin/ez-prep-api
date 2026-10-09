@@ -7,6 +7,7 @@ import { S3Service } from '../aws/s3/s3.service';
 import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { INSTANCE_CONFIG_ID } from '../instance-config/instance-config.constants';
 import { InstanceConfig } from '../instance-config/schemas/instance-config.schema';
 import { Order } from '../orders/schemas/order.schema';
@@ -39,6 +40,7 @@ describe('InvoiceService', () => {
     ),
   };
   const awsConfig = { s3InvoicesBucket: 'invoices-bucket' };
+  const audit = { log: jest.fn().mockResolvedValue(undefined) };
 
   const invoiceModel = {
     findOne: jest.fn(),
@@ -62,6 +64,7 @@ describe('InvoiceService', () => {
     s3.uploadFile.mockReset();
     s3.uploadFile.mockResolvedValue({ key: 'stored' });
     s3.downloadFile.mockReset();
+    audit.log.mockClear();
 
     invoiceModel.findOne.mockImplementation((filter: Row) => ({
       sort() {
@@ -133,6 +136,7 @@ describe('InvoiceService', () => {
         { provide: S3Service, useValue: s3 },
         { provide: AwsConfigService, useValue: awsConfig },
         { provide: TAX_INVOICE_PDF_RENDERER, useValue: render },
+        { provide: CommerceAuditService, useValue: audit },
       ],
     }).compile();
 
@@ -239,6 +243,21 @@ describe('InvoiceService', () => {
     expect(second.alreadyIssued).toBe(true);
     expect(invoices).toHaveLength(1);
     expect(s3.uploadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('records INVOICE_ISSUED once for a new invoice', async () => {
+    const order = seedOrder();
+    await service.issueForPaidOrder(String(order._id));
+    await service.issueForPaidOrder(String(order._id));
+
+    expect(audit.log).toHaveBeenCalledTimes(1);
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'INVOICE_ISSUED',
+        resourceType: 'invoice',
+        after: expect.objectContaining({ orderId: String(order._id) }),
+      }),
+    );
   });
 
   it('copies the order tax snapshot when live config uses another rate', async () => {

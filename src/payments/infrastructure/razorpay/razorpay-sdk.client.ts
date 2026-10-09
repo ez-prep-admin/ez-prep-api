@@ -2,6 +2,8 @@ import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import Razorpay from 'razorpay';
 import {
   RazorpayCreatedOrder,
+  RazorpayFetchedOrder,
+  RazorpayFetchedPayment,
   RazorpayOrderCreateInput,
   RazorpayOrdersClient,
   RazorpayRefundInput,
@@ -77,6 +79,46 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
     }
   }
 
+  async fetchOrder(orderId: string): Promise<RazorpayFetchedOrder> {
+    try {
+      const order = await this.sdk().orders.fetch(orderId);
+      return {
+        id: order.id,
+        amount: integerAmount(order.amount),
+        currency: order.currency,
+        status: order.status,
+      };
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay order fetch failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+  }
+
+  async fetchPayments(orderId: string): Promise<RazorpayFetchedPayment[]> {
+    try {
+      const result = await this.sdk().orders.fetchPayments(orderId);
+      return (result.items ?? []).map(payment => ({
+        id: payment.id,
+        amount: integerAmount(payment.amount),
+        currency: payment.currency,
+        status: payment.status,
+      }));
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay order payments fetch failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+  }
+
   private sdk(): Razorpay {
     if (!this.client) {
       this.client = new Razorpay({
@@ -86,6 +128,10 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
     }
     return this.client;
   }
+}
+
+function integerAmount(value: number | string): number {
+  return typeof value === 'number' ? value : Number(value);
 }
 
 function statusCodeOf(error: unknown): string {

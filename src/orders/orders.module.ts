@@ -10,6 +10,8 @@ import { CheckoutService } from './checkout.service';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { ProvisioningOrderPaidHandler } from './infrastructure/provisioning-order-paid.handler';
 import { OrdersService } from './orders.service';
+import { ReconciliationScheduler } from './reconciliation.scheduler';
+import { ReconciliationService } from './reconciliation.service';
 import { Order, OrderSchema } from './schemas/order.schema';
 
 @Module({
@@ -25,6 +27,8 @@ import { Order, OrderSchema } from './schemas/order.schema';
   providers: [
     CheckoutService,
     OrdersService,
+    ReconciliationService,
+    ReconciliationScheduler,
     { provide: ORDER_PAID_HANDLER, useClass: ProvisioningOrderPaidHandler },
   ],
   exports: [CheckoutService, OrdersService],

@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CommerceAuditModule } from '../commerce-audit/commerce-audit.module';
 import { ExamGroupsModule } from '../exam-groups/exam-groups.module';
 import { ExamsModule } from '../exams/exams.module';
 import { MockTestsModule } from '../mock-tests/mock-tests.module';
@@ -23,6 +24,7 @@ import {
     ExamGroupsModule,
     forwardRef(() => MockTestsModule),
     forwardRef(() => OffersModule),
+    CommerceAuditModule,
   ],
   controllers: [AdminProductsController],
   providers: [ProductsService, GrantValidationService],

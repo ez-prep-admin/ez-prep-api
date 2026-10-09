@@ -205,4 +205,83 @@ export class OrdersService {
     await order.save();
     return order;
   }
+
+  async findStalePending(
+    olderThan: Date,
+    limit: number,
+  ): Promise<OrderDocument[]> {
+    return this.orderModel
+      .find({
+        status: OrderStatus.PENDING_PAYMENT,
+        createdAt: { $lt: olderThan },
+      })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  /**
+   * Terminal provider failure. No-op unless the order is still pending.
+   * Does not revoke entitlements or touch invoices.
+   */
+  async markOrderFailed(orderId: string): Promise<OrderDocument> {
+    const order = await this.requireOrder(orderId);
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      return order;
+    }
+
+    const payment = await this.requirePayment(order);
+    if (payment.status === PaymentStatus.CAPTURED) {
+      return order;
+    }
+    if (payment.status !== PaymentStatus.FAILED) {
+      assertPaymentTransition(payment.status, PaymentStatus.FAILED);
+      payment.status = PaymentStatus.FAILED;
+      await payment.save();
+    }
+
+    assertOrderTransition(order.status, OrderStatus.FAILED);
+    order.status = OrderStatus.FAILED;
+    await order.save();
+    return order;
+  }
+
+  /**
+   * Checkout abandoned past the reconciliation window.
+   * Payment stays at its current status. No-op unless the order is still pending.
+   */
+  async markOrderExpired(orderId: string): Promise<OrderDocument> {
+    const order = await this.requireOrder(orderId);
+    if (order.status !== OrderStatus.PENDING_PAYMENT) {
+      return order;
+    }
+
+    const payment = await this.requirePayment(order);
+    if (payment.status === PaymentStatus.CAPTURED) {
+      return order;
+    }
+
+    assertOrderTransition(order.status, OrderStatus.EXPIRED);
+    order.status = OrderStatus.EXPIRED;
+    await order.save();
+    return order;
+  }
+
+  private async requireOrder(orderId: string): Promise<OrderDocument> {
+    const order = await this.findById(orderId);
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    return order;
+  }
+
+  private async requirePayment(order: OrderDocument): Promise<PaymentDocument> {
+    const payment = await this.paymentModel
+      .findOne({ orderId: order._id })
+      .exec();
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    return payment;
+  }
 }

@@ -9,6 +9,7 @@ import { Model, Types } from 'mongoose';
 import { assertPaise } from '../common/commerce/assert-paise';
 import { resolveEffectiveAmount } from '../common/commerce/resolve-effective-amount';
 import { OfferStatus } from '../common/enums/offer-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { ProductsService } from '../products/products.service';
 import { CreateOfferDto } from './dto/create-offer.dto';
 import { OfferResponseDto } from './dto/offer-response.dto';
@@ -21,11 +22,13 @@ export class OffersService {
     @InjectModel(Offer.name)
     private readonly offerModel: Model<OfferDocument>,
     private readonly productsService: ProductsService,
+    private readonly commerceAuditService: CommerceAuditService,
   ) {}
 
   async create(
     productId: string,
     dto: CreateOfferDto,
+    actorUserId?: string,
   ): Promise<OfferResponseDto> {
     await this.productsService.findDocumentById(productId);
 
@@ -62,7 +65,21 @@ export class OffersService {
           : undefined,
         status,
       });
-      return this.toResponse(offer);
+      const response = this.toResponse(offer);
+      await this.commerceAuditService.log({
+        actorUserId,
+        action: 'OFFER_CREATED',
+        resourceType: 'offer',
+        resourceId: response.id,
+        after: {
+          productId: response.productId,
+          durationPreset: response.durationPreset,
+          listAmount: response.listAmount,
+          saleAmount: response.saleAmount,
+          status: response.status,
+        },
+      });
+      return response;
     } catch (error) {
       if (this.isDuplicateKeyError(error)) {
         throw new ConflictException(
@@ -78,8 +95,18 @@ export class OffersService {
     return this.toResponse(offer);
   }
 
-  async update(id: string, dto: UpdateOfferDto): Promise<OfferResponseDto> {
+  async update(
+    id: string,
+    dto: UpdateOfferDto,
+    actorUserId?: string,
+  ): Promise<OfferResponseDto> {
     const offer = await this.findOfferOrThrow(id);
+    const before = {
+      durationPreset: offer.durationPreset,
+      listAmount: offer.listAmount,
+      saleAmount: offer.saleAmount,
+      status: offer.status,
+    };
 
     if (dto.listAmount !== undefined) {
       try {
@@ -138,7 +165,21 @@ export class OffersService {
       throw error;
     }
 
-    return this.toResponse(offer);
+    const response = this.toResponse(offer);
+    await this.commerceAuditService.log({
+      actorUserId,
+      action: 'OFFER_UPDATED',
+      resourceType: 'offer',
+      resourceId: response.id,
+      before,
+      after: {
+        durationPreset: response.durationPreset,
+        listAmount: response.listAmount,
+        saleAmount: response.saleAmount,
+        status: response.status,
+      },
+    });
+    return response;
   }
 
   async listByProduct(

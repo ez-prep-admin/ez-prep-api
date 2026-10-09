@@ -16,10 +16,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CreateOfferDto } from './dto/create-offer.dto';
 import { OfferApiResponseDto } from './dto/offer-response.dto';
 import { OffersService } from './offers.service';
@@ -46,8 +48,9 @@ export class AdminProductOffersController {
   async create(
     @Param('productId') productId: string,
     @Body() dto: CreateOfferDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<OfferApiResponseDto> {
-    const data = await this.offersService.create(productId, dto);
+    const data = await this.offersService.create(productId, dto, admin.id);
     return { message: 'Offer created successfully', data };
   }
 }

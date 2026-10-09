@@ -83,10 +83,10 @@ Disable cron via env `RECONCILIATION_ENABLED=false`.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Job + env flag
-- [ ] Audit collection used by key mutations
-- [ ] Tests green
+- [x] `STATUS.md` updated with ops + **developer confirmation** (UI tick and audit list deferred to phase 16)
+- [x] Job + env flag
+- [x] Audit collection used by key mutations
+- [x] Tests green
 
 
 ## STATUS.md update (mandatory)

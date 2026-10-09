@@ -16,6 +16,35 @@ import {
 @Injectable()
 export class FakeGateway implements PaymentGateway {
   readonly provider = 'fake';
+  private readonly stagedStatus = new Map<string, NormalizedPaymentEvent>();
+
+  /**
+   * Test hook. Unstaged ids report IGNORED so reconciliation expires them.
+   */
+  stageOrderStatus(
+    providerOrderId: string,
+    event: Pick<NormalizedPaymentEvent, 'status'> &
+      Partial<
+        Pick<
+          NormalizedPaymentEvent,
+          | 'providerPaymentId'
+          | 'amount'
+          | 'currency'
+          | 'providerEventId'
+          | 'eventType'
+        >
+      >,
+  ): void {
+    this.stagedStatus.set(providerOrderId, {
+      providerEventId: event.providerEventId ?? `fake:${providerOrderId}`,
+      eventType: event.eventType ?? 'order.fetch',
+      providerOrderId,
+      providerPaymentId: event.providerPaymentId,
+      status: event.status,
+      amount: event.amount,
+      currency: event.currency,
+    });
+  }
 
   async createOrder(input: CreatePaymentOrderInput): Promise<ProviderOrder> {
     if (
@@ -74,6 +103,21 @@ export class FakeGateway implements PaymentGateway {
     _input: ProviderWebhookInput,
   ): Promise<NormalizedPaymentEvent> {
     throw new Error('FakeGateway webhooks are not implemented (phase 08)');
+  }
+
+  async fetchOrderStatus(
+    providerOrderId: string,
+  ): Promise<NormalizedPaymentEvent> {
+    const staged = this.stagedStatus.get(providerOrderId);
+    if (staged) {
+      return staged;
+    }
+    return {
+      providerEventId: `fake:${providerOrderId}`,
+      eventType: 'order.fetch',
+      providerOrderId,
+      status: 'IGNORED',
+    };
   }
 
   async refund(input: RefundInput): Promise<ProviderRefund> {

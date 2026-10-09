@@ -4,8 +4,7 @@ import { Document, Types } from 'mongoose';
 export type CommerceAuditLogDocument = CommerceAuditLog & Document;
 
 /**
- * Minimal commerce audit skeleton (phase 02).
- * Full audit APIs / reconciliation productization: phase 12.
+ * Durable commerce audit trail for admin catalog, access, refund, and invoice actions.
  */
 @Schema({
   timestamps: { createdAt: true, updatedAt: false },

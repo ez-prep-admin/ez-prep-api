@@ -68,5 +68,5 @@ export interface PaymentGateway {
   refund(input: RefundInput): Promise<ProviderRefund>;
   /** Public checkout fields for GET and idempotent replay. Never includes secrets. */
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown>;
-  fetchOrderStatus?(providerOrderId: string): Promise<NormalizedPaymentEvent>;
+  fetchOrderStatus(providerOrderId: string): Promise<NormalizedPaymentEvent>;
 }

@@ -9,10 +9,12 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { OfferApiResponseDto } from './dto/offer-response.dto';
 import { UpdateOfferDto } from './dto/update-offer.dto';
 import { OffersService } from './offers.service';
@@ -44,8 +46,9 @@ export class AdminOffersController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateOfferDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<OfferApiResponseDto> {
-    const data = await this.offersService.update(id, dto);
+    const data = await this.offersService.update(id, dto, admin.id);
     return { message: 'Offer updated successfully', data };
   }
 }

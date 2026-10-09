@@ -28,6 +28,34 @@ describe('FakeGateway', () => {
     });
   });
 
+  it('maps a staged fetch to captured, failed, or ignored', async () => {
+    gateway.stageOrderStatus('fake_paid', {
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_1',
+      amount: 99900,
+      currency: 'INR',
+    });
+    gateway.stageOrderStatus('fake_failed', { status: 'FAILED' });
+
+    await expect(gateway.fetchOrderStatus('fake_paid')).resolves.toMatchObject({
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_1',
+      amount: 99900,
+      currency: 'INR',
+      providerOrderId: 'fake_paid',
+    });
+    await expect(
+      gateway.fetchOrderStatus('fake_failed'),
+    ).resolves.toMatchObject({
+      status: 'FAILED',
+      providerOrderId: 'fake_failed',
+    });
+    await expect(gateway.fetchOrderStatus('fake_open')).resolves.toMatchObject({
+      status: 'IGNORED',
+      providerOrderId: 'fake_open',
+    });
+  });
+
   it('creates a fake provider order id', async () => {
     await expect(
       gateway.createOrder({

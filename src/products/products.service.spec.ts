@@ -8,6 +8,7 @@ import {
 import { Types } from 'mongoose';
 import { EntitlementScopeType } from '../common/enums/entitlement-scope-type.enum';
 import { ProductStatus } from '../common/enums/product-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { GrantValidationService } from './grant-validation.service';
 import { ProductsService } from './products.service';
 import { Product } from './schemas/product.schema';
@@ -114,6 +115,7 @@ describe('ProductsService', () => {
   const grantValidation = {
     assertGrantsValid: jest.fn().mockResolvedValue(undefined),
   };
+  const audit = { log: jest.fn().mockResolvedValue(undefined) };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -125,12 +127,14 @@ describe('ProductsService', () => {
           useValue: productVersionModel,
         },
         { provide: GrantValidationService, useValue: grantValidation },
+        { provide: CommerceAuditService, useValue: audit },
       ],
     }).compile();
 
     service = module.get(ProductsService);
     jest.clearAllMocks();
     grantValidation.assertGrantsValid.mockResolvedValue(undefined);
+    audit.log.mockClear();
   });
 
   describe('create + publish happy path', () => {
@@ -304,6 +308,34 @@ describe('ProductsService', () => {
       });
       await expect(service.findOne(PRODUCT_ID)).rejects.toBeInstanceOf(
         NotFoundException,
+      );
+    });
+  });
+
+  describe('commerce audit', () => {
+    it('records PRODUCT_PUBLISHED', async () => {
+      const draft = productDoc();
+      productModel.findById.mockReturnValue({
+        exec: () => Promise.resolve(draft),
+      });
+      productVersionModel.findOne.mockReturnValue({
+        sort: () => ({
+          lean: () => ({
+            exec: () => Promise.resolve(null),
+          }),
+        }),
+      });
+      productVersionModel.create.mockResolvedValue({});
+
+      await service.publish(PRODUCT_ID, ADMIN_ID);
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'PRODUCT_PUBLISHED',
+          resourceType: 'product',
+          resourceId: PRODUCT_ID,
+          actorUserId: ADMIN_ID,
+        }),
       );
     });
   });

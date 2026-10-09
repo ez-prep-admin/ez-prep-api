@@ -4,6 +4,7 @@ import { ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OfferStatus } from '../common/enums/offer-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { ProductsService } from '../products/products.service';
 import { OffersService } from './offers.service';
 import { Offer } from './schemas/offer.schema';
@@ -58,6 +59,7 @@ describe('OffersService', () => {
   const productsService = {
     findDocumentById: jest.fn().mockResolvedValue({ _id: PRODUCT_ID }),
   };
+  const audit = { log: jest.fn().mockResolvedValue(undefined) };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -65,12 +67,14 @@ describe('OffersService', () => {
         OffersService,
         { provide: getModelToken(Offer.name), useValue: offerModel },
         { provide: ProductsService, useValue: productsService },
+        { provide: CommerceAuditService, useValue: audit },
       ],
     }).compile();
 
     service = module.get(OffersService);
     jest.clearAllMocks();
     productsService.findDocumentById.mockResolvedValue({ _id: PRODUCT_ID });
+    audit.log.mockClear();
   });
 
   describe('unique ACTIVE conflict', () => {
@@ -159,6 +163,29 @@ describe('OffersService', () => {
         status: OfferStatus.INACTIVE,
       });
       expect(result.status).toBe(OfferStatus.INACTIVE);
+    });
+  });
+
+  describe('commerce audit', () => {
+    it('records OFFER_UPDATED', async () => {
+      const doc = offerDoc();
+      offerModel.findById.mockReturnValue({
+        exec: () => Promise.resolve(doc),
+      });
+
+      await service.update(
+        OFFER_ID,
+        { status: OfferStatus.INACTIVE },
+        '507f1f77bcf86cd799439099',
+      );
+
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'OFFER_UPDATED',
+          resourceType: 'offer',
+          actorUserId: '507f1f77bcf86cd799439099',
+        }),
+      );
     });
   });
 });

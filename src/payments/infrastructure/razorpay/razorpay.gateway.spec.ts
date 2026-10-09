@@ -38,12 +38,16 @@ describe('RazorpayGateway', () => {
   const orders: jest.Mocked<RazorpayOrdersClient> = {
     createOrder: jest.fn(),
     refundPayment: jest.fn(),
+    fetchOrder: jest.fn(),
+    fetchPayments: jest.fn(),
   };
   const gateway = new RazorpayGateway(config(), orders);
 
   beforeEach(() => {
     orders.createOrder.mockReset();
     orders.refundPayment.mockReset();
+    orders.fetchOrder.mockReset();
+    orders.fetchPayments.mockReset();
   });
 
   it('creates an order with the server amount in paise', async () => {
@@ -283,6 +287,96 @@ describe('RazorpayGateway', () => {
         currency: 'INR',
       }),
     ).resolves.toMatchObject({ status: 'pending', providerRefundId: 'rfnd_2' });
+  });
+
+  it('maps a captured Razorpay order to CAPTURED', async () => {
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'paid',
+    });
+    orders.fetchPayments.mockResolvedValue([
+      {
+        id: 'pay_1',
+        amount: 99900,
+        currency: 'INR',
+        status: 'captured',
+      },
+    ]);
+
+    await expect(gateway.fetchOrderStatus('order_1')).resolves.toMatchObject({
+      status: 'CAPTURED',
+      providerOrderId: 'order_1',
+      providerPaymentId: 'pay_1',
+      amount: 99900,
+      currency: 'INR',
+    });
+  });
+
+  it('maps a failed Razorpay payment with no capture to FAILED', async () => {
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'attempted',
+    });
+    orders.fetchPayments.mockResolvedValue([
+      {
+        id: 'pay_failed',
+        amount: 99900,
+        currency: 'INR',
+        status: 'failed',
+      },
+    ]);
+
+    await expect(gateway.fetchOrderStatus('order_1')).resolves.toMatchObject({
+      status: 'FAILED',
+      providerOrderId: 'order_1',
+    });
+  });
+
+  it('maps an unpaid Razorpay order to IGNORED', async () => {
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'created',
+    });
+    orders.fetchPayments.mockResolvedValue([]);
+
+    await expect(gateway.fetchOrderStatus('order_1')).resolves.toMatchObject({
+      status: 'IGNORED',
+      providerOrderId: 'order_1',
+    });
+  });
+
+  it('prefers a captured payment when another attempt failed', async () => {
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'paid',
+    });
+    orders.fetchPayments.mockResolvedValue([
+      {
+        id: 'pay_failed',
+        amount: 99900,
+        currency: 'INR',
+        status: 'failed',
+      },
+      {
+        id: 'pay_ok',
+        amount: 99900,
+        currency: 'INR',
+        status: 'captured',
+      },
+    ]);
+
+    await expect(gateway.fetchOrderStatus('order_1')).resolves.toMatchObject({
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_ok',
+    });
   });
 
   it('surfaces a Razorpay refund error as a gateway failure', async () => {

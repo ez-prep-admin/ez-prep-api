@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 12 **pending** — phase 11 closed 2026-10-09 |
+| Current phase | 13 **pending** — phase 12 closed 2026-10-10 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -74,11 +74,11 @@ Date: YYYY-MM-DD
 | 09 | Provisioning + stacking | **done** | 2026-10-09 | Sharun — fake pay provisions access; ENFORCED start verified; LEGACY restored |
 | 10 | GST invoices | **done** | 2026-10-09 | Sharun — code + Jest; PDF smoke deferred to phase 16 |
 | 11 | Admin refunds | **done** | 2026-10-09 | Sharun — broad admin refund smoke; full UI-integrated J5 pass is phase 16 |
-| 12 | Reconciliation + audit | pending | | Pending: recon env flag noted |
+| 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
 | 13 | User access UI | pending | | Pending: append UI steps to E2E_TEST_STATUS.md |
 | 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
 | 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
-| 16 | End-to-end verification | pending | | Last gate before go-live. Includes phase 10 PDF smoke and phase 11 integrated refund UI (J5). Checklist: E2E_TEST_STATUS.md |
+| 16 | End-to-end verification | pending | | Last gate before go-live. Includes phase 10 PDF smoke, phase 11 integrated refund UI (J5), and phase 12 recon + `GET /admin/commerce-audit` (J6). Checklist: E2E_TEST_STATUS.md |
 
 ---
 
@@ -105,6 +105,7 @@ Date: YYYY-MM-DD
 | When | What |
 | --- | --- |
 | Phase 02+ | `ACCESS_ENFORCEMENT_MODE` |
+| Phase 12 | `RECONCILIATION_ENABLED` must be the string `true` or the job does not run. Default `false`. `RECONCILIATION_MIN_AGE_MINUTES` (default 60), `RECONCILIATION_INTERVAL_MS` (default 300000). No Redis |
 | Phase 08/14 local | Test Razorpay keys in local `.env` (`rzp_test_...`); optional webhook tunnel. Names in `.env.example` |
 | Phase 15 prod | Live keys in the production env (`rzp_live_...`) + webhook URL — `U-OPS-02`. Do not commit keys |
 
@@ -538,3 +539,36 @@ Date: 2026-10-09
 **Regression audit (existing specs):** additive cases in order transitions, fake gateway, entitlements, and invoices. Razorpay gateway spec: the “leaves refunds for phase 11” assertion was replaced because `refund` is now implemented (structural). Admin `index.test.ts`: one added export assert. No existing assertions rewritten otherwise.  
 **GOLIVE_TODOS touched:** `U-GST-04` still open; `TODO(golive): U-GST-04` on `RefundsService.refund`  
 **Next:** phase 12
+
+### 2026-10-09 — Phase 12 — Reconciliation + commerce audit
+
+**Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
+**Tests:** Jest — orders, payments, products, offers, invoices, entitlements, refunds, commerce-audit, webhooks, catalog — **pass** (167); `tsc -p tsconfig.build.json --noEmit` — pass
+
+**Shipped:**
+- `fetchOrderStatus` is required on the payment port. FakeGateway stages a status for tests; an unstaged id is `IGNORED`. Razorpay fetches the order and its payments. Captured (or order `paid`) → `CAPTURED`. A failed payment with no capture → `FAILED`. Otherwise `IGNORED`.
+- In-process reconciliation when `RECONCILIATION_ENABLED` is the string `true`. It does not use Redis or BullMQ. Each pass loads up to 50 `PENDING_PAYMENT` orders with `createdAt` older than `RECONCILIATION_MIN_AGE_MINUTES` (default 60). Captured amount and `INR` match → existing `markOrderPaid` (provision once). Provider failure → order and payment `FAILED`. Still unpaid → order `EXPIRED`, payment stays `INITIATED`. Amount mismatch or a provider error leaves the order pending. Already `PAID` orders are not selected. `EXPIRED` and `FAILED` stay terminal. `payment.failed` webhooks are unchanged.
+- Audit writes now redact secret-like keys. New actions: `PRODUCT_PUBLISHED`, `PRODUCT_ARCHIVED`, `OFFER_CREATED`, `OFFER_UPDATED`, `INVOICE_ISSUED` (first issue only). Grant, revoke, and refund actions were already written. `GET /api/v1/admin/commerce-audit` (admin JWT). No admin UI page.
+
+**Local pass (how to run one tick):**
+1. In API `.env`, set `RECONCILIATION_ENABLED=true`.
+2. Set `RECONCILIATION_MIN_AGE_MINUTES=0` so a pending order is eligible immediately. Default is 60.
+3. Restart the API. The interval is `RECONCILIATION_INTERVAL_MS` (default 300000). A captured fake/Razorpay order becomes paid; an unpaid one becomes `EXPIRED`; a provider-failed one becomes `FAILED`.
+4. `GET /api/v1/admin/commerce-audit` lists the trail.
+5. Set `RECONCILIATION_ENABLED=false` and restore `RECONCILIATION_MIN_AGE_MINUTES=60` when finished.
+
+**Developer ops (manual) — confirm each:**
+- [x] `.env.example` keeps `RECONCILIATION_ENABLED=false` unless someone opts in. Age default 60. Interval default 300000.
+- [x] N/A for this close — the local tick (flag off leaves a checkout pending; flag on with age 0 expires an unpaid order, fails a provider failure, repairs a missed Razorpay capture, leaves a paid order alone; then restore the flag and the 60 minute age) is phase 16 ([`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) J6 and the Phase 12 note). Postman skipped. Owner 2026-10-10.
+- [x] N/A for this close — `GET /api/v1/admin/commerce-audit` is checked in that same phase 16 pass. No admin page.
+- [x] N/A — Razorpay dashboard, webhook subscription, Zoho credit note, ezprep-app, Redis
+
+**Developer confirmation:**  
+I, Sharun, confirm the manual recon and audit-list pass is deferred to phase 16 with reason, and this phase may be marked done.  
+Date: 2026-10-10
+
+**DoD:** met  
+**Deviations:** scheduler is an in-process interval, not BullMQ. `payment.failed` webhooks stay ignored; recon closes those orders after the age window. `PRODUCT_CREATED` is not logged. No admin UI page. Manual tick and audit-list proof are phase 16, not a Postman gate on this phase.  
+**Regression audit (existing specs):** products, offers, and invoice specs gained a `CommerceAuditService` mock provider (structural; those services now depend on it). Razorpay gateway spec mock gained `fetchOrder` / `fetchPayments` (structural; the client interface grew). Existing assertions were not rewritten. New specs: reconciliation, scheduler, commerce audit, admin audit controller. Additive cases: fake/razorpay fetch mapping, product publish audit, offer update audit, invoice issue-once audit.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 13

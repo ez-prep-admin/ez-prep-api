@@ -237,6 +237,71 @@ export class RazorpayGateway implements PaymentGateway {
     };
   }
 
+  async fetchOrderStatus(
+    providerOrderId: string,
+  ): Promise<NormalizedPaymentEvent> {
+    const id = providerOrderId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider order id');
+    }
+
+    let order: { amount: number; currency: string; status: string };
+    let payments: Array<{
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+    }>;
+    try {
+      order = await this.orders.fetchOrder(id);
+      payments = await this.orders.fetchPayments(id);
+    } catch (error) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay order status fetch failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    const captured = payments.find(payment => payment.status === 'captured');
+    if (order.status === 'paid' || captured) {
+      return {
+        providerEventId: `recon:${id}`,
+        eventType: 'order.fetch',
+        providerOrderId: id,
+        providerPaymentId: captured?.id,
+        status: 'CAPTURED',
+        amount: captured?.amount ?? order.amount,
+        currency: captured?.currency ?? order.currency,
+      };
+    }
+
+    if (payments.some(payment => payment.status === 'failed')) {
+      return {
+        providerEventId: `recon:${id}`,
+        eventType: 'order.fetch',
+        providerOrderId: id,
+        status: 'FAILED',
+        amount: order.amount,
+        currency: order.currency,
+      };
+    }
+
+    return {
+      providerEventId: `recon:${id}`,
+      eventType: 'order.fetch',
+      providerOrderId: id,
+      status: 'IGNORED',
+      amount: order.amount,
+      currency: order.currency,
+    };
+  }
+
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown> {
     if (!input.providerOrderId) {
       return {};

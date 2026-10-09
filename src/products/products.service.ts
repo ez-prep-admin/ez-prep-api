@@ -12,6 +12,7 @@ import {
   ProductGrantSnapshot,
 } from '../common/commerce/product-version-snapshot';
 import { ProductStatus } from '../common/enums/product-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { DuplicateProductDto } from './dto/duplicate-product.dto';
 import { ProductGrantDto } from './dto/product-grant.dto';
@@ -35,6 +36,7 @@ export class ProductsService {
     @InjectModel(ProductVersion.name)
     private readonly productVersionModel: Model<ProductVersionDocument>,
     private readonly grantValidation: GrantValidationService,
+    private readonly commerceAuditService: CommerceAuditService,
   ) {}
 
   async create(
@@ -165,6 +167,11 @@ export class ProductsService {
       throw new BadRequestException('Archived products cannot be published');
     }
 
+    const before = {
+      status: product.status,
+      version: product.version,
+      code: product.code,
+    };
     const grantsDto = product.grants.map(g => ({
       scopeType: g.scopeType,
       scopeId: String(g.scopeId),
@@ -236,7 +243,20 @@ export class ProductsService {
       await product.save();
     }
 
-    return this.toProductResponse(product);
+    const response = this.toProductResponse(product);
+    await this.commerceAuditService.log({
+      actorUserId,
+      action: 'PRODUCT_PUBLISHED',
+      resourceType: 'product',
+      resourceId: response.id,
+      before,
+      after: {
+        status: response.status,
+        version: response.version,
+        code: response.code,
+      },
+    });
+    return response;
   }
 
   async archive(id: string, actorUserId?: string): Promise<ProductResponseDto> {
@@ -251,12 +271,30 @@ export class ProductsService {
       return this.toProductResponse(product);
     }
 
+    const before = {
+      status: product.status,
+      version: product.version,
+      code: product.code,
+    };
     product.status = ProductStatus.ARCHIVED;
     if (actorUserId) {
       product.updatedBy = new Types.ObjectId(actorUserId);
     }
     await product.save();
-    return this.toProductResponse(product);
+    const response = this.toProductResponse(product);
+    await this.commerceAuditService.log({
+      actorUserId,
+      action: 'PRODUCT_ARCHIVED',
+      resourceType: 'product',
+      resourceId: response.id,
+      before,
+      after: {
+        status: response.status,
+        version: response.version,
+        code: response.code,
+      },
+    });
+    return response;
   }
 
   async softDelete(id: string, actorUserId?: string): Promise<void> {
