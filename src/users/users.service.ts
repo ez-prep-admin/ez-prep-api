@@ -7,7 +7,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
-import { User, UserDocument } from './schemas/user.schema';
+import { indianStateByCode } from '../common/commerce/indian-states';
+import { CheckoutBillingDto } from '../orders/dto/create-checkout-order.dto';
+import { User, UserBillingProfile, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateAdminDto } from '../auth/dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -22,6 +24,16 @@ import { MembershipTier } from '../common/enums/membership-tier.enum';
 export interface UserWithGoogleLink {
   user: UserResponseDto;
   googleSub?: string;
+}
+
+export interface BillingProfileView {
+  name: string;
+  state: string;
+  stateCode: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  pincode: string;
 }
 
 @Injectable()
@@ -383,6 +395,48 @@ export class UsersService {
     };
   }
 
+  // ── Billing profile (checkout prefill; not the profile location) ─────────
+
+  async getBillingProfile(userId: string): Promise<BillingProfileView | null> {
+    const user = await this.requireUser(userId);
+    return toBillingProfileView(user.billingProfile);
+  }
+
+  async updateBillingProfile(
+    userId: string,
+    dto: CheckoutBillingDto,
+  ): Promise<BillingProfileView> {
+    const state = indianStateByCode(dto.stateCode);
+    if (!state) {
+      throw new BadRequestException('Unknown billing stateCode');
+    }
+
+    const addressLine2 = dto.addressLine2?.trim();
+    const billingProfile: UserBillingProfile = {
+      name: dto.name.trim(),
+      state: state.name,
+      stateCode: state.code,
+      addressLine1: dto.addressLine1.trim(),
+      city: dto.city.trim(),
+      pincode: dto.pincode,
+      ...(addressLine2 ? { addressLine2 } : {}),
+    };
+
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { $set: { billingProfile } }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+
+    const view = toBillingProfileView(user.billingProfile);
+    if (!view) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    return view;
+  }
+
   // ── Extended profile ──────────────────────────────────────────────────────
 
   /**
@@ -653,11 +707,23 @@ export class UsersService {
       obj.targetExamRemainingDays = Math.max(0, Math.ceil(diff / 86_400_000));
     }
 
-    // Never leak password hashes or the Google subject in API payloads
+    // Never leak password hashes, the Google subject, or checkout billing
     delete obj.passwordHash;
     delete obj.googleSub;
+    delete obj.billingProfile;
 
     return new UserResponseDto(obj);
+  }
+
+  private async requireUser(userId: string): Promise<UserDocument> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    return user;
   }
 
   private toGoogleLink(user: UserDocument): UserWithGoogleLink {
@@ -668,4 +734,22 @@ export class UsersService {
       googleSub,
     };
   }
+}
+
+function toBillingProfileView(
+  profile: UserBillingProfile | null | undefined,
+): BillingProfileView | null {
+  if (!profile?.name || !profile.stateCode) {
+    return null;
+  }
+  const addressLine2 = profile.addressLine2?.trim();
+  return {
+    name: profile.name,
+    state: profile.state,
+    stateCode: profile.stateCode,
+    addressLine1: profile.addressLine1,
+    ...(addressLine2 ? { addressLine2 } : {}),
+    city: profile.city,
+    pincode: profile.pincode,
+  };
 }

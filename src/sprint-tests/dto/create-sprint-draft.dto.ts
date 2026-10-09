@@ -6,6 +6,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsMongoId,
   IsNumber,
@@ -14,6 +15,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 
 export const SPRINT_SIZE_OPTIONS = [10, 15, 20, 25, 30] as const;
 
@@ -106,6 +108,16 @@ export class CreateSprintDraftDto {
   @IsNumber()
   @Min(0)
   passingScore?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Paper access mode saved on the draft and copied onto the published test unless publish overrides it. Defaults to FREE.',
+    enum: AccessMode,
+    default: AccessMode.FREE,
+  })
+  @IsOptional()
+  @IsEnum(AccessMode)
+  accessMode?: AccessMode;
 
   @ApiPropertyOptional({
     description:

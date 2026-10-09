@@ -63,7 +63,13 @@ export const PaymentSchema = SchemaFactory.createForClass(Payment);
 PaymentSchema.index({ orderId: 1 });
 PaymentSchema.index(
   { provider: 1, providerPaymentId: 1 },
-  { unique: true, sparse: true },
+  {
+    unique: true,
+    name: 'provider_1_providerPaymentId',
+    partialFilterExpression: {
+      providerPaymentId: { $type: 'string', $gt: '' },
+    },
+  },
 );
 PaymentSchema.index({ providerOrderId: 1 });
 PaymentSchema.index({ status: 1 });

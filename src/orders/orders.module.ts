@@ -6,6 +6,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
 import { TaxModule } from '../tax/tax.module';
 import { CheckoutController } from './checkout.controller';
+import { MeOrdersController } from './me-orders.controller';
 import { CheckoutService } from './checkout.service';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { ProvisioningOrderPaidHandler } from './infrastructure/provisioning-order-paid.handler';
@@ -23,7 +24,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
     TaxModule,
     EntitlementsModule,
   ],
-  controllers: [CheckoutController],
+  controllers: [CheckoutController, MeOrdersController],
   providers: [
     CheckoutService,
     OrdersService,

@@ -179,7 +179,7 @@ Collection: `payments`
 ### Indexes
 
 - `{ orderId: 1 }`
-- unique sparse `{ provider, providerPaymentId }`
+- unique partial `{ provider, providerPaymentId }` where `providerPaymentId` is a non-empty string (initiated payments have no payment id yet)
 - `{ providerOrderId: 1 }`
 - `{ status: 1 }`
 

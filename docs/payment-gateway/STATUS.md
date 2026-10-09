@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14 **pending** — phase 13 closed 2026-10-10; detailed UI pass is phase 16 |
+| Current phase | 14 **in_progress** — checkout and subscriptions coded 2026-10-10; developer confirmation still open |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -76,7 +76,7 @@ Date: YYYY-MM-DD
 | 11 | Admin refunds | **done** | 2026-10-09 | Sharun — broad admin refund smoke; full UI-integrated J5 pass is phase 16 |
 | 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
 | 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
-| 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
+| 14 | Checkout + subscriptions | **in_progress** | | Code landed 2026-10-10. Manual Razorpay smoke and developer confirmation still open |
 | 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
@@ -601,3 +601,27 @@ Date: 2026-10-10
 **Regression audit (existing specs):** ezprep-app has no test suite. Full-mock and sprint `useEffect` dependency warnings were already present.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 14
+
+### 2026-10-10 — Phase 14 — Checkout and subscriptions (in progress)
+
+**Code:** `ez-prep-api` (`GET`/`PATCH /me/billing-profile`, `GET /me/orders`, `GET /me/orders/:id`) and `ezprep-app` (checkout, Razorpay adapter, subscriptions). Admin untouched.  
+**Tests:** API Jest users + orders — pass (116). `tsc -p tsconfig.build.json --noEmit` — pass. ezprep-app `tsc --noEmit` — pass. ESLint on the phase files — pass. No new app test runner (D-15).
+
+**Shipped:**
+- Optional `billingProfile` on the user, separate from `location`. It is omitted from `GET /users/me`.
+- Checkout page replaces the shell. Billing name, state, address, **Pay securely**, Razorpay Checkout.js, verify, and subscriptions ownership with invoice download.
+- No checkout feature flag, same as phase 13. Rollback is reverting the phase.
+
+**Developer ops (manual) — confirm each:**
+- [ ] App `.env`: `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) only. Confirm the key secret and webhook secret are absent from the app env and the client bundle.
+- [ ] API `.env`: `PAYMENT_PROVIDER=razorpay`, test key id and secret, `INVOICES_ENABLED=true`, invoice bucket set. Restart the API and the app.
+- [ ] Optional — Razorpay test webhook URL for `payment.captured` and `order.paid`. Verify still completes a payment if this is skipped.
+- [ ] Prefill, required state, success pay, bad verify, modal dismiss, `payment.failed`, double-click, expired copy, subscriptions entitlement, invoice PDF, no refund control, mobile width, locked card → View plans → Buy → unlock. Steps are unchecked in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) Phase 14. Phase 16 runs that board.
+- [ ] After the smoke, record whether `PAYMENT_PROVIDER` goes back to `fake`.
+
+**Developer confirmation:** pending. Do not mark this phase done until the list above is confirmed.
+
+**DoD:** not yet — purchase loop is coded; local Razorpay confirmation is open  
+**Deviations:** no `NEXT_PUBLIC` checkout flag (same as phase 13). `GET /me/orders` is a history view and does not replace `GET /checkout/orders/:id`.  
+**GOLIVE_TODOS touched:** none (`U-GST-06` address collection is in the checkout form; live PDF check stays phase 16)  
+**Next:** developer confirmation, then phase 15

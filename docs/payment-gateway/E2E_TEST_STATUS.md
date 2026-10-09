@@ -41,7 +41,7 @@ Canonical tax for a ₹999 offer at 18% inclusive: taxable `84661`, tax `15239`.
 
 ## Full pass — run this once, in order
 
-This is the start-to-finish script for phase 16. Check the journey and edge boxes as you go. Do not check them before that session. Phases 14 and 15 must already be in the build; until checkout exists, stop after the access section and leave the payment rows unchecked.
+This is the start-to-finish script for phase 16. Check the journey and edge boxes as you go. Do not check them before that session. Phase 14 checkout is in the build. Phase 15 still has to land before this session signs the close-out. Leave every box below unchecked until then.
 
 Apps: API on port 3000, ezprep-app on 3001, mock-app-admin on its local port. One admin user. Two students: **Student A** (no grant) and **Student B** (used only for the other-user invoice 404).
 
@@ -348,7 +348,7 @@ Run this only during that pass. Checkout `expiresAt` is 30 minutes and is not th
 
 ### Phase 13 — User access UI
 
-Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. `/dashboard/subscriptions` stays Coming Soon until phase 14. Header copy `Free Early Access` is unchanged until phase 15.
+Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. Header copy `Free Early Access` is unchanged until phase 15. Phase 14 replaced the checkout shell and the Coming Soon subscriptions page. Use the Phase 14 copy below for those screens.
 
 Routes and copy phase 16 must match:
 
@@ -356,11 +356,31 @@ Routes and copy phase 16 must match:
 - Topic-wise, full-mock, and sprint cards. When `access.allowed` is false and the action is not Resume: chip `Locked` and button `View plans` instead of Start or Retake. Resume stays when `userAttemptAction` is `RESUME` and `resumeAttemptId` is set. The dialog calls `GET /api/v1/catalog/products/for-mock-test/:mockTestId`.
 - Dialog title: `View plans`. Exam description: `Published plans that cover this exam.` Paper description: `Published plans that cover this test.` Each offer shows `1 month`, `3 months`, `6 months`, `12 months`, or `Lifetime`, and rupees from `effectiveAmount` (else sale, else list). Button `Buy` opens `/dashboard/checkout?offerId=<offer id>`. A published product with no ACTIVE offer is omitted. Empty copy: `No plans are available for this yet.`
 - Start error banner shows the API message. Button `View plans` appears only when `details.code` is `ENTITLEMENT_REQUIRED`.
-- Checkout shell `/dashboard/checkout`. Heading: `Checkout enabling soon`. Body: `Payment is not available yet. Free tests still start from the exam tabs.` With `offerId`: `Selected offer: <id>`. Without it: `Choose a plan from View plans to continue.` No Razorpay script and no order request.
+- Checkout shell from this phase was replaced in phase 14. Do not expect `Checkout enabling soon`.
 
 ### Phase 14 — Checkout and subscriptions
 
-Planned proof is J1–J3 and J6. When phase 14 finishes, add Razorpay test card/UPI steps, the checkout query (`offerId`), and the subscriptions download control.
+Do not check these boxes in this phase. Phase 16 runs them with J1–J3 and J6. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
+
+Local smoke before the pass: API `PAYMENT_PROVIDER=razorpay` with test key id and secret, `INVOICES_ENABLED=true`, and the invoice bucket set. App `.env` has `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) and not the secret. Restart both. A webhook tunnel for `payment.captured` and `order.paid` is optional. Verify still completes a payment if the tunnel is skipped.
+
+Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or UPI `success@razorpay`. Failure instrument: UPI `failure@razorpay`.
+
+- [ ] `/dashboard/checkout` with no `offerId`. Heading `Checkout`. Body `Choose a plan from View plans to continue.` No Pay button.
+- [ ] **Buy** opens `/dashboard/checkout?offerId=<offer id>`. The page shows the product name, duration (`3 months` and the other presets), and rupees from `effectiveAmount`.
+- [ ] An unknown or inactive offer shows `This plan is not available.` Razorpay does not open.
+- [ ] Billing name is prefilled from `GET /me/billing-profile` when one is saved, otherwise from the account name. State, address line 1, city, and a 6-digit pincode are required. Address line 2 is optional. The state list is `GET /meta/indian-states`.
+- [ ] **Pay securely** creates the order, then `PATCH /me/billing-profile`. A second visit prefills the saved address.
+- [ ] Success card or UPI. Copy: heading `Payment received`, body `Payment received. Your access is active.` **View subscriptions** opens `/dashboard/subscriptions`. Returning to the exam shows the paper unlocked without a full browser reload.
+- [ ] A bad or tampered verify shows the API error and does not unlock the paper.
+- [ ] Closing the Razorpay modal shows `Payment was not completed. You can try again.` No entitlement and no invoice. The order stays pending.
+- [ ] UPI `failure@razorpay` shows an error. No entitlement and no invoice.
+- [ ] A second click on **Pay securely** while the first request is in flight does not open a second modal.
+- [ ] An expired order shows `This checkout has expired. Start again.`
+- [ ] With `PAYMENT_PROVIDER=fake`, Pay shows `This environment is not set up for card checkout.` and does not open Razorpay.
+- [ ] Subscriptions heading `My Subscriptions`. A new student sees `You do not have active access yet.` Paid access shows the product name, scope, start, and end (`Lifetime` when there is no end). Admin grants show the scope name and no product. Orders include pending rows labeled `Pending`, not `Paid`.
+- [ ] **Download invoice** saves the GST PDF. There is no refund control.
+- [ ] Narrow mobile width: checkout form and subscriptions remain usable.
 
 ### Phase 15 — Rollout hardening
 

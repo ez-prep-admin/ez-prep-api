@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { assertPaymentTransition } from '../payments/domain/payment-transitions';
@@ -25,6 +26,24 @@ import {
   OrderItem,
   OrderTaxSnapshot,
 } from './schemas/order.schema';
+
+export interface OrderHistoryItemView {
+  productName: string;
+  durationPreset: DurationPreset;
+  amount: number;
+}
+
+export interface OrderHistoryView {
+  id: string;
+  orderNumber: string;
+  status: OrderStatus;
+  amount: number;
+  currency: string;
+  createdAt?: Date;
+  paidAt?: Date;
+  expiresAt?: Date;
+  items: OrderHistoryItemView[];
+}
 
 export interface InsertCreatedOrderInput {
   userId: Types.ObjectId;
@@ -52,6 +71,62 @@ export class OrdersService {
 
   async findByIdempotencyKey(key: string): Promise<OrderDocument | null> {
     return this.orderModel.findOne({ idempotencyKey: key }).exec();
+  }
+
+  async listForUser(
+    userId: string,
+    options: { page?: number; limit?: number },
+  ): Promise<{
+    data: OrderHistoryView[];
+    pagination: {
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+      hasNextPage: boolean;
+      hasPrevPage: boolean;
+    };
+  }> {
+    const page = positiveInt(options.page, 1);
+    const limit = Math.min(positiveInt(options.limit, 20), 100);
+    if (!Types.ObjectId.isValid(userId)) {
+      return {
+        data: [],
+        pagination: emptyPagination(page, limit),
+      };
+    }
+
+    const query = { userId: new Types.ObjectId(userId) };
+    const skip = (page - 1) * limit;
+    const [rows, total] = await Promise.all([
+      this.orderModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.orderModel.countDocuments(query).exec(),
+    ]);
+    const totalPages = Math.ceil(total / limit) || 1;
+    return {
+      data: rows.map(row => this.toHistory(row)),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
+  }
+
+  async getForUser(userId: string, orderId: string): Promise<OrderHistoryView> {
+    const order = await this.findById(orderId);
+    if (!order || String(order.userId) !== userId) {
+      throw new NotFoundException('Order not found');
+    }
+    return this.toHistory(order);
   }
 
   async findById(id: string): Promise<OrderDocument | null> {
@@ -267,6 +342,24 @@ export class OrdersService {
     return order;
   }
 
+  private toHistory(order: OrderDocument): OrderHistoryView {
+    return {
+      id: this.idOf(order),
+      orderNumber: order.orderNumber,
+      status: order.status,
+      amount: order.amount,
+      currency: order.currency,
+      createdAt: order.createdAt,
+      paidAt: order.paidAt,
+      expiresAt: order.expiresAt,
+      items: (order.items ?? []).map(item => ({
+        productName: item.productName,
+        durationPreset: item.durationPreset,
+        amount: item.amount,
+      })),
+    };
+  }
+
   private async requireOrder(orderId: string): Promise<OrderDocument> {
     const order = await this.findById(orderId);
     if (!order) {
@@ -284,4 +377,22 @@ export class OrdersService {
     }
     return payment;
   }
+}
+
+function positiveInt(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return fallback;
+  }
+  return value;
+}
+
+function emptyPagination(page: number, limit: number) {
+  return {
+    total: 0,
+    page,
+    limit,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: page > 1,
+  };
 }

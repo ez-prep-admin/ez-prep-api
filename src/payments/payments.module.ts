@@ -7,6 +7,7 @@ import { RazorpayProviderConfig } from './infrastructure/razorpay/razorpay-provi
 import { RAZORPAY_ORDERS_CLIENT } from './infrastructure/razorpay/razorpay-orders.client';
 import { RazorpaySdkOrdersClient } from './infrastructure/razorpay/razorpay-sdk.client';
 import { RazorpayGateway } from './infrastructure/razorpay/razorpay.gateway';
+import { PaymentIndexRepair } from './payment-index.repair';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
 
 @Module({
@@ -27,6 +28,7 @@ import { Payment, PaymentSchema } from './schemas/payment.schema';
       inject: [ConfigService],
     },
     PaymentGatewayRegistry,
+    PaymentIndexRepair,
   ],
   exports: [
     FakeGateway,

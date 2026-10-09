@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 
 export type SprintTestDraftDocument = SprintTestDraft & Document;
 
@@ -100,6 +101,12 @@ export class SprintTestDraft {
 
   @Prop({ default: true })
   showResultsImmediately: boolean;
+
+  @Prop({
+    enum: Object.values(AccessMode),
+    default: AccessMode.FREE,
+  })
+  accessMode: AccessMode;
 
   @Prop({ type: [SprintDraftQuestionSchema], default: [] })
   questions: SprintDraftQuestion[];

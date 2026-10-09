@@ -211,6 +211,7 @@ describe('SprintTestsService', () => {
     );
     expect(payload.questions[0].marksPerQuestion).toBe(2);
     expect(payload.durationInMinutes).toBe(15);
+    expect(payload.accessMode).toBe(AccessMode.FREE);
   });
 
   it('freezes hand-picked question ids in order and skips recency sampling', async () => {
@@ -452,6 +453,22 @@ describe('SprintTestsService', () => {
     expect(created.questionIds).toHaveLength(1);
     expect(questionModel.updateMany).not.toHaveBeenCalled();
     expect(draft.status).toBe('PUBLISHED');
+  });
+
+  it('publishes the access mode stored on the draft when publish omits it', async () => {
+    const draft = makeDraft({ accessMode: AccessMode.ENTITLED });
+    draftModel.findOneAndUpdate.mockResolvedValue(draft);
+    questionModel.find.mockReturnValue(chainable([questionRow(Q1)]));
+    mockTestModel.create.mockResolvedValue({
+      _id: new Types.ObjectId(TEST_ID),
+      id: TEST_ID,
+    });
+
+    await service.publishDraft(DRAFT_ID, {}, USER_ID);
+
+    expect(mockTestModel.create.mock.calls[0][0].accessMode).toBe(
+      AccessMode.ENTITLED,
+    );
   });
 
   it('rolls a failed publish back to REVIEW', async () => {

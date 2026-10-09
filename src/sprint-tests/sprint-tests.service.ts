@@ -134,6 +134,7 @@ export class SprintTestsService {
       allowRetake: dto.allowRetake ?? true,
       shuffleOptions: dto.shuffleOptions ?? false,
       showResultsImmediately: dto.showResultsImmediately ?? true,
+      accessMode: dto.accessMode ?? AccessMode.FREE,
       questions,
     });
 
@@ -688,7 +689,7 @@ export class SprintTestsService {
 
     const mockTest = await this.mockTestModel.create({
       paperType: PaperType.SPRINT,
-      accessMode: dto.accessMode ?? AccessMode.FREE,
+      accessMode: dto.accessMode ?? draft.accessMode ?? AccessMode.FREE,
       totalQuestions: draft.totalQuestions,
       durationInMinutes: draft.durationInMinutes,
       exam: draft.exam,
@@ -722,6 +723,7 @@ export class SprintTestsService {
     draft.shuffleOptions = dto.shuffleOptions ?? draft.shuffleOptions;
     draft.showResultsImmediately =
       dto.showResultsImmediately ?? draft.showResultsImmediately;
+    draft.accessMode = dto.accessMode ?? draft.accessMode ?? AccessMode.FREE;
     await draft.save();
 
     return {
@@ -857,6 +859,7 @@ export class SprintTestsService {
         allowRetake: draft.allowRetake,
         shuffleOptions: draft.shuffleOptions,
         showResultsImmediately: draft.showResultsImmediately,
+        accessMode: draft.accessMode ?? AccessMode.FREE,
       },
       subjects,
       publishedMockTestId: draft.publishedMockTestId?.toString(),
