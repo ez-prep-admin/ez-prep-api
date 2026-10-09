@@ -37,11 +37,13 @@ function fixture(name: string): Buffer {
 describe('RazorpayGateway', () => {
   const orders: jest.Mocked<RazorpayOrdersClient> = {
     createOrder: jest.fn(),
+    refundPayment: jest.fn(),
   };
   const gateway = new RazorpayGateway(config(), orders);
 
   beforeEach(() => {
     orders.createOrder.mockReset();
+    orders.refundPayment.mockReset();
   });
 
   it('creates an order with the server amount in paise', async () => {
@@ -241,13 +243,57 @@ describe('RazorpayGateway', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('leaves refunds for phase 11', async () => {
+  it('maps a processed Razorpay refund', async () => {
+    orders.refundPayment.mockResolvedValue({
+      id: 'rfnd_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'processed',
+    });
+
     await expect(
       gateway.refund({
         providerPaymentId: 'pay_1',
         amount: 99900,
         currency: 'INR',
       }),
-    ).rejects.toThrow(/phase 11/);
+    ).resolves.toEqual({
+      providerRefundId: 'rfnd_1',
+      status: 'processed',
+      amount: 99900,
+    });
+    expect(orders.refundPayment).toHaveBeenCalledWith({
+      paymentId: 'pay_1',
+      amount: 99900,
+    });
+  });
+
+  it('maps a pending Razorpay refund without treating it as processed', async () => {
+    orders.refundPayment.mockResolvedValue({
+      id: 'rfnd_2',
+      amount: 99900,
+      currency: 'INR',
+      status: 'pending',
+    });
+
+    await expect(
+      gateway.refund({
+        providerPaymentId: 'pay_1',
+        amount: 99900,
+        currency: 'INR',
+      }),
+    ).resolves.toMatchObject({ status: 'pending', providerRefundId: 'rfnd_2' });
+  });
+
+  it('surfaces a Razorpay refund error as a gateway failure', async () => {
+    orders.refundPayment.mockRejectedValue(new Error('sdk down'));
+
+    await expect(
+      gateway.refund({
+        providerPaymentId: 'pay_1',
+        amount: 99900,
+        currency: 'INR',
+      }),
+    ).rejects.toBeInstanceOf(BadGatewayException);
   });
 });

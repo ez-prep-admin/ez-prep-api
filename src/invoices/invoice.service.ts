@@ -138,6 +138,16 @@ export class InvoiceService {
     return rows.map(row => this.toSummary(row));
   }
 
+  async findByOrderId(orderId: string): Promise<InvoiceSummary | null> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      return null;
+    }
+    const invoice = await this.invoiceModel
+      .findOne({ orderId: new Types.ObjectId(orderId) })
+      .exec();
+    return invoice ? this.toSummary(invoice) : null;
+  }
+
   async downloadForUser(
     invoiceId: string,
     userId: string,

@@ -12,6 +12,19 @@ export interface RazorpayCreatedOrder {
   currency: string;
 }
 
+export interface RazorpayRefundInput {
+  paymentId: string;
+  amount: number;
+}
+
+export interface RazorpayRefundResult {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
 export interface RazorpayOrdersClient {
   createOrder(input: RazorpayOrderCreateInput): Promise<RazorpayCreatedOrder>;
+  refundPayment(input: RazorpayRefundInput): Promise<RazorpayRefundResult>;
 }

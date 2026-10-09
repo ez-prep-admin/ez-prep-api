@@ -285,4 +285,51 @@ describe('EntitlementsService', () => {
       expect(activeList).toHaveLength(1);
     });
   });
+
+  describe('revokePaymentEntitlementsForOrder', () => {
+    it('revokes only PAYMENT entitlements for that order', async () => {
+      const orderId = new Types.ObjectId().toHexString();
+      const paymentRow = entitlementDoc({
+        _id: new Types.ObjectId(),
+        sourceType: EntitlementSourceType.PAYMENT,
+        orderId: new Types.ObjectId(orderId),
+        provisioningKey: 'pay-1',
+      });
+      const adminRow = entitlementDoc({
+        _id: new Types.ObjectId(),
+        sourceType: EntitlementSourceType.ADMIN_GRANT,
+        provisioningKey: 'admin-kept',
+      });
+      const otherPayment = entitlementDoc({
+        _id: new Types.ObjectId(),
+        sourceType: EntitlementSourceType.PAYMENT,
+        orderId: new Types.ObjectId(),
+        provisioningKey: 'pay-other',
+      });
+
+      entitlementModel.find.mockReturnValue({
+        exec: async () => [paymentRow],
+      });
+      entitlementModel.findById.mockImplementation(async (id: string) => {
+        return [paymentRow, adminRow, otherPayment].find(
+          row => String(row._id) === String(id),
+        );
+      });
+
+      await service.revokePaymentEntitlementsForOrder(
+        orderId,
+        ADMIN_ID,
+        'customer request',
+      );
+
+      expect(entitlementModel.find).toHaveBeenCalledWith({
+        orderId: new Types.ObjectId(orderId),
+        sourceType: EntitlementSourceType.PAYMENT,
+      });
+      expect(paymentRow.status).toBe(EntitlementStatus.REVOKED);
+      expect(paymentRow.revokeReason).toBe('customer request');
+      expect(adminRow.status).toBe(EntitlementStatus.ACTIVE);
+      expect(otherPayment.status).toBe(EntitlementStatus.ACTIVE);
+    });
+  });
 });

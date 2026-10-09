@@ -205,7 +205,19 @@ Known gap to confirm in the PDF during this pass: the invoice cites the order nu
 
 ### Phase 11 — Admin refunds
 
-Planned UI proof is J5. When phase 11 finishes, replace this paragraph with the admin route, button label, and the exact success/error copy.
+Owner broad-tested the admin refund UI on 2026-10-09. That closed the phase. The extensive UI-integrated proof is still J5 in this file. Do not check those boxes until phase 16.
+
+Admin route: `/admin/orders`, then an order at `/admin/orders/[id]`.
+
+- Button label: **Refund** (shown only when the order status is Paid).
+- Reason field is required. Confirm title: `Refund this order?`
+- Confirm body: `This refunds the full amount and revokes access granted by this order. It does not change the tax invoice.`
+- Success copy: `Order refunded`
+- Provider still pending: `Refund is pending at the payment provider. Access was not revoked.`
+- A second refund, or a refund of an unpaid order, shows the API error (already refunded / only paid orders).
+- Invoice link label: `Download invoice`. The original invoice stays issued. There is no credit-note control.
+
+Phase 16 runs J5 end to end with the paid order from J1: confirm modal, revoked payment entitlements, ENFORCED lock, unrelated grants still active, invoice still issued, no student refund control, second refund error.
 
 ### Phase 12 — Reconciliation and audit
 

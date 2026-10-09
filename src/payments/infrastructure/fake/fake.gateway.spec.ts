@@ -14,6 +14,20 @@ describe('FakeGateway', () => {
     ).rejects.toThrow(/100 paise/);
   });
 
+  it('refunds the full amount as processed', async () => {
+    await expect(
+      gateway.refund({
+        providerPaymentId: 'pay_1',
+        amount: 99900,
+        currency: 'INR',
+      }),
+    ).resolves.toEqual({
+      providerRefundId: 'fake_rfnd_pay_1',
+      status: 'processed',
+      amount: 99900,
+    });
+  });
+
   it('creates a fake provider order id', async () => {
     await expect(
       gateway.createOrder({

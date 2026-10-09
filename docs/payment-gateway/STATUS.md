@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 11 **pending** — phase 10 closed 2026-10-09 |
+| Current phase | 12 **pending** — phase 11 closed 2026-10-09 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -73,12 +73,12 @@ Date: YYYY-MM-DD
 | 08 | Razorpay adapter | **done** | 2026-10-09 | Sharun — test keys in `.env`; webhook URL deferred to phase 14 |
 | 09 | Provisioning + stacking | **done** | 2026-10-09 | Sharun — fake pay provisions access; ENFORCED start verified; LEGACY restored |
 | 10 | GST invoices | **done** | 2026-10-09 | Sharun — code + Jest; PDF smoke deferred to phase 16 |
-| 11 | Admin refunds | pending | | Pending: document Zoho credit-note step (U-GST-04) |
+| 11 | Admin refunds | **done** | 2026-10-09 | Sharun — broad admin refund smoke; full UI-integrated J5 pass is phase 16 |
 | 12 | Reconciliation + audit | pending | | Pending: recon env flag noted |
 | 13 | User access UI | pending | | Pending: append UI steps to E2E_TEST_STATUS.md |
 | 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
 | 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
-| 16 | End-to-end verification | pending | | Last gate before go-live. Checklist: E2E_TEST_STATUS.md |
+| 16 | End-to-end verification | pending | | Last gate before go-live. Includes phase 10 PDF smoke and phase 11 integrated refund UI (J5). Checklist: E2E_TEST_STATUS.md |
 
 ---
 
@@ -505,3 +505,36 @@ Date: 2026-10-09
 **Regression audit (existing specs):** instance-config DTO and service specs gained additive cases only. Provisioning spec gained one case for notifier failure. No existing assertions rewritten. EntitlementsModule now imports InvoicesModule; no prior spec boots that module.  
 **GOLIVE_TODOS touched:** comments for `U-GST-07`, `U-GST-08`, `U-GST-10`. `U-OPS-01` still open for production seed. `U-GST-09` still open for CA/Zoho confirmation; FY series is what shipped.  
 **Next:** phase 11
+
+### 2026-10-09 — Phase 11 — Admin refunds
+
+**Code:** `ez-prep-api` and `mock-app-admin` on branch `payment-gateway` (ezprep-app untouched)  
+**Tests:** API Jest refunds / orders refund transition / fake + razorpay refund / entitlements revoke-by-order / invoices find-by-order — pass. Admin Vitest order detail refund + proxy PDF stream + orders API export — pass. `tsc -p tsconfig.build.json --noEmit` and admin `tsc --noEmit` — pass.
+
+**Shipped:**
+- `POST /api/v1/admin/orders/:id/refunds` with `{ reason }` only. Full amount in paise from the captured payment. Admin JWT. A second refund of a completed or in-progress refund is 409 and does not call the provider again.
+- Provider `processed` moves payment and order to `REFUNDED` and revokes `PAYMENT` entitlements for that `orderId` only. Provider failure marks the refund `FAILED` and leaves the order `PAID`. Provider `pending` leaves the refund `INITIATED`, the order `PAID`, and does not revoke access.
+- `GET /api/v1/admin/orders` and `GET /api/v1/admin/orders/:id` (order number search, status, page). Detail includes payment, refund, and the issued invoice id when one exists. The invoice stays `ISSUED`. No credit note.
+- FakeGateway refunds return `processed`. Razorpay `payments.refund` uses normal speed (not `optimum`) through the existing SDK client. `refund.processed` / `refund.failed` webhooks are not handled here. A pending refund stays `INITIATED` until a later phase finishes it.
+- Audit actions `REFUND_INITIATED` and `REFUND_COMPLETED`. `TODO(golive): U-GST-04` on the refund service.
+- Admin `/admin/orders` and `/admin/orders/[id]`. Button label **Refund**. Confirm title `Refund this order?`. Success copy `Order refunded`. Pending copy `Refund is pending at the payment provider. Access was not revoked.` Invoice link `Download invoice` streams the phase 10 admin PDF.
+
+**Razorpay sync vs webhook:** a normal refund API response of `processed` completes in this request. `pending` does not revoke access and does not subscribe to `refund.processed`. Do not treat an in-progress refund as finished.
+
+**Zoho / U-GST-04:** the app does not issue a credit note. Every later filing-relevant (production) refund still needs a credit note in Zoho or the CA workflow for the same invoice, recorded in this log. This local phase does not create a filing-relevant refund.
+
+**Developer ops (manual) — confirm each:**
+- [x] Broad local admin smoke (owner, 2026-10-09): `/admin/orders` refund of a paid order with a reason. Entitlements from that order revoked, invoice still issued, second refund errors.
+- [x] N/A for this close — the extensive UI-integrated pass (J5: confirm modal, ENFORCED lock again, unrelated grants still active, student UI has no refund, invoice unchanged) is phase 16 ([`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)). Owner 2026-10-09.
+- [x] N/A — production Zoho credit note. No filing-relevant refund in this session. Standing rule above (`U-GST-04`)
+- [x] N/A — Razorpay dashboard refund and `refund.processed` webhook. Pending-provider completion is not this phase
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-09
+
+**DoD:** met  
+**Deviations:** `GET /admin/orders` list and detail shipped with the refund POST so support can find an order. Second refund is 409, not a silent success. A provider `pending` refund does not revoke access. Confirm modal is unchanged; the reason is a field on the order page. Invoice PDF download goes through the admin proxy as raw PDF bytes. Extensive integrated UI proof is phase 16, not a gate on this phase.  
+**Regression audit (existing specs):** additive cases in order transitions, fake gateway, entitlements, and invoices. Razorpay gateway spec: the “leaves refunds for phase 11” assertion was replaced because `refund` is now implemented (structural). Admin `index.test.ts`: one added export assert. No existing assertions rewritten otherwise.  
+**GOLIVE_TODOS touched:** `U-GST-04` still open; `TODO(golive): U-GST-04` on `RefundsService.refund`  
+**Next:** phase 12

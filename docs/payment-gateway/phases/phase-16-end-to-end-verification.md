@@ -6,7 +6,7 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 ## Prerequisites
 
-- Phases 00–15 implemented. Phase 10 is done; its PDF smoke is still executed here (owner, 2026-10-09).
+- Phases 00–15 implemented. Phase 10 is done; its PDF smoke is still executed here (owner, 2026-10-09). Phase 11 is done; the extensive refund UI integration (J5) is still executed here (owner, 2026-10-09).
 - Each of phases 11–15 has appended its real UI steps to `E2E_TEST_STATUS.md`.
 - Local API, ezprep-app, and mock-app-admin running. Razorpay **test** mode. `INVOICES_ENABLED=true` and `AWS_S3_INVOICES_BUCKET` set.
 
@@ -38,6 +38,7 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 - `E2E_TEST_STATUS.md` close-out is signed.
 - Invoice section is signed as the deferred phase 10 UI proof.
+- J5 is signed as the deferred phase 11 UI-integrated refund proof.
 - Payments live remains No until the production ops in journey J8 are done.
 
 ## Completion checklist
@@ -48,4 +49,4 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 ## Definition of done
 
-The manual board is signed, phase 10’s deferred invoice proof is included, and go-live is a separate production action recorded in `STATUS.md` — not an automatic result of finishing the local UI pass.
+The manual board is signed, phase 10’s deferred invoice proof and phase 11’s deferred refund UI integration (J5) are included, and go-live is a separate production action recorded in `STATUS.md` — not an automatic result of finishing the local UI pass.

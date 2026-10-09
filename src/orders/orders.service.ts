@@ -177,4 +177,32 @@ export class OrdersService {
 
     return order;
   }
+
+  /**
+   * Full-refund completion. Caller has already confirmed the provider refund
+   * is processed. Does not touch entitlements or invoices.
+   */
+  async markOrderRefunded(orderId: string): Promise<OrderDocument> {
+    const order = await this.findById(orderId);
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const payment = await this.paymentModel
+      .findOne({ orderId: order._id })
+      .exec();
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    assertPaymentTransition(payment.status, PaymentStatus.REFUNDED);
+    assertOrderTransition(order.status, OrderStatus.REFUNDED);
+
+    payment.status = PaymentStatus.REFUNDED;
+    await payment.save();
+
+    order.status = OrderStatus.REFUNDED;
+    await order.save();
+    return order;
+  }
 }

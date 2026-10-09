@@ -76,7 +76,20 @@ export class FakeGateway implements PaymentGateway {
     throw new Error('FakeGateway webhooks are not implemented (phase 08)');
   }
 
-  async refund(_input: RefundInput): Promise<ProviderRefund> {
-    throw new Error('FakeGateway refunds are not implemented (phase 11)');
+  async refund(input: RefundInput): Promise<ProviderRefund> {
+    if (
+      !Number.isInteger(input.amount) ||
+      input.amount < MIN_ORDER_AMOUNT_PAISE
+    ) {
+      throw new Error(
+        `FakeGateway rejects amounts below ${MIN_ORDER_AMOUNT_PAISE} paise`,
+      );
+    }
+    const providerPaymentId = input.providerPaymentId.trim();
+    return {
+      providerRefundId: `fake_rfnd_${providerPaymentId}`,
+      status: 'processed',
+      amount: input.amount,
+    };
   }
 }

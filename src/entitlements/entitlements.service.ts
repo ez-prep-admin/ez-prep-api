@@ -156,6 +156,31 @@ export class EntitlementsService {
     return response;
   }
 
+  /**
+   * Revokes PAYMENT entitlements created for this order.
+   * ADMIN_GRANT and other orders are left unchanged.
+   */
+  async revokePaymentEntitlementsForOrder(
+    orderId: string,
+    actorUserId: string,
+    reason: string,
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      throw new BadRequestException('Invalid order id');
+    }
+
+    const docs = await this.entitlementModel
+      .find({
+        orderId: new Types.ObjectId(orderId),
+        sourceType: EntitlementSourceType.PAYMENT,
+      })
+      .exec();
+
+    for (const doc of docs) {
+      await this.revoke(this.idOf(doc), actorUserId, reason);
+    }
+  }
+
   async listByUser(
     userId: string,
     options: { includeInactive?: boolean } = {},
@@ -258,6 +283,11 @@ export class EntitlementsService {
         `${scopeType} with ID "${scopeId}" not found`,
       );
     }
+  }
+
+  private idOf(doc: EntitlementDocument): string {
+    const withVirtual = doc as EntitlementDocument & { id?: string };
+    return withVirtual.id ? String(withVirtual.id) : String(doc._id);
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

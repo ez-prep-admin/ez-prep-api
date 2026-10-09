@@ -4,6 +4,8 @@ import {
   RazorpayCreatedOrder,
   RazorpayOrderCreateInput,
   RazorpayOrdersClient,
+  RazorpayRefundInput,
+  RazorpayRefundResult,
 } from './razorpay-orders.client';
 
 /**
@@ -42,6 +44,34 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
       }
       this.logger.warn(
         `Razorpay order create failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+  }
+
+  async refundPayment(
+    input: RazorpayRefundInput,
+  ): Promise<RazorpayRefundResult> {
+    try {
+      const refund = await this.sdk().payments.refund(input.paymentId, {
+        amount: input.amount,
+      });
+      const amount =
+        typeof refund.amount === 'number'
+          ? refund.amount
+          : Number(refund.amount);
+      return {
+        id: refund.id,
+        amount,
+        currency: refund.currency,
+        status: refund.status,
+      };
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay refund failed (status ${statusCodeOf(error)})`,
       );
       throw new BadGatewayException('Payment provider request failed');
     }

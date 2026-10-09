@@ -324,6 +324,17 @@ describe('InvoiceService', () => {
     );
   });
 
+  it('finds the issued invoice for an order without changing it', async () => {
+    const order = seedOrder();
+    const issued = await service.issueForPaidOrder(String(order._id));
+
+    const found = await service.findByOrderId(String(order._id));
+
+    expect(found?.id).toBe(issued.invoiceId);
+    expect(found?.status).toBe('ISSUED');
+    expect(found?.invoiceNumber).toBe(issued.invoiceNumber);
+  });
+
   it('lets an admin download any invoice', async () => {
     const order = seedOrder();
     const issued = await service.issueForPaidOrder(String(order._id));

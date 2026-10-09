@@ -72,11 +72,11 @@ Disable admin route via role already; feature flag optional.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] API refund + revoke
-- [ ] Admin UI
-- [ ] Tests both sides
-- [ ] Note: app has no credit note — document Zoho/CA credit-note step in `STATUS.md` (`U-GST-04`) for every filing-relevant refund
+- [x] `STATUS.md` updated with ops + **developer confirmation** (extensive UI-integrated J5 pass deferred to phase 16)
+- [x] API refund + revoke
+- [x] Admin UI
+- [x] Tests both sides
+- [x] Note: app has no credit note — Zoho/CA credit-note step recorded in `STATUS.md` (`U-GST-04`)
 
 
 ## STATUS.md update (mandatory)

@@ -175,8 +175,66 @@ export class RazorpayGateway implements PaymentGateway {
     return normalizeRazorpayEvent(body, eventId);
   }
 
-  async refund(_input: RefundInput): Promise<ProviderRefund> {
-    throw new Error('RazorpayGateway refunds are not implemented (phase 11)');
+  async refund(input: RefundInput): Promise<ProviderRefund> {
+    if (
+      !Number.isInteger(input.amount) ||
+      input.amount < MIN_ORDER_AMOUNT_PAISE
+    ) {
+      throw new BadRequestException(
+        `Order amount must be at least ${MIN_ORDER_AMOUNT_PAISE} paise`,
+      );
+    }
+    if (input.currency !== 'INR') {
+      throw new BadRequestException('Only INR orders can be refunded');
+    }
+    const paymentId = input.providerPaymentId?.trim();
+    if (!paymentId) {
+      throw new BadRequestException('Missing provider payment id');
+    }
+
+    let created: {
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+    };
+    try {
+      created = await this.orders.refundPayment({
+        paymentId,
+        amount: input.amount,
+      });
+    } catch (error) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay refund failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    const status = created.status.trim().toLowerCase();
+    if (status !== 'processed' && status !== 'pending') {
+      this.logger.warn(`Razorpay refund returned status ${created.status}`);
+      throw new BadGatewayException('Payment provider request failed');
+    }
+    if (
+      !created.id ||
+      created.amount !== input.amount ||
+      created.currency !== 'INR'
+    ) {
+      this.logger.warn('Razorpay refund returned an unexpected amount');
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    return {
+      providerRefundId: created.id,
+      status,
+      amount: created.amount,
+    };
   }
 
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown> {

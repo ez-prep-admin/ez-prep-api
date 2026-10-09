@@ -23,6 +23,12 @@ describe('order transitions', () => {
     ).toThrow(IllegalOrderTransitionError);
   });
 
+  it('allows PAID to REFUNDED', () => {
+    expect(assertOrderTransition(OrderStatus.PAID, OrderStatus.REFUNDED)).toBe(
+      'apply',
+    );
+  });
+
   it('treats a second PAID signal as a no-op', () => {
     expect(assertOrderTransition(OrderStatus.PAID, OrderStatus.PAID)).toBe(
       'noop',
