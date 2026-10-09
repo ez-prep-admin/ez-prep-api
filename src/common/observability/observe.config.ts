@@ -5,11 +5,14 @@ import { config as loadDotenv } from 'dotenv';
 // Read before the module graph evaluates Observe credentials. ConfigModule
 // loads .env later, during Nest bootstrap.
 loadDotenv();
+import { installObserveCollectorCompatibility } from './observe-collector-compatibility';
 import {
   buildObserveRuntimeOptions,
   shouldIgnoreObserveHttp,
   shouldSkipObserveInstrumentation,
 } from './observe.policy';
+
+installObserveCollectorCompatibility();
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule({
   // Leave Nest's ConsoleLogger format alone so PM2 stdout stays as it is.

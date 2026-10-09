@@ -106,6 +106,12 @@ const ENRICH_MAX_QUESTIONS_PER_CHUNK = 20;
  */
 const ENRICH_MAX_QUESTIONS_PER_CHUNK_WITH_THINKING = 5;
 
+/**
+ * Bump when question-boundary rules change. Cached parses from an older
+ * revision are discarded on the next enrich and rebuilt from the markdown.
+ */
+export const MATCHED_QUESTION_CACHE_REVISION = 2;
+
 export interface StartEnrichUploadResult {
   uploadId: string;
   status: 'processing';
@@ -203,9 +209,23 @@ export class ImportService {
     forceReparse = false,
   ): Promise<ParseMarkdownResult & { fromCache: boolean }> {
     const upload = await this.findUploadOrThrow(uploadId);
+    const cacheIsCurrent =
+      upload.parseCacheRevision === MATCHED_QUESTION_CACHE_REVISION;
 
     if (
       !forceReparse &&
+      !cacheIsCurrent &&
+      upload.matchedQuestionsCache &&
+      upload.matchedQuestionsCache.length > 0
+    ) {
+      this.logger.log(
+        `[parse] Ignoring cached matched questions for upload_id=${uploadId} (revision=${upload.parseCacheRevision ?? 'none'}, expected=${MATCHED_QUESTION_CACHE_REVISION})`,
+      );
+    }
+
+    if (
+      !forceReparse &&
+      cacheIsCurrent &&
       upload.matchedQuestionsCache &&
       upload.matchedQuestionsCache.length > 0
     ) {
@@ -263,6 +283,7 @@ export class ImportService {
       | unknown
       | null as Record<string, unknown> | undefined;
     upload.markdownParsedAt = new Date();
+    upload.parseCacheRevision = MATCHED_QUESTION_CACHE_REVISION;
     upload.questionCount = parsed.matchedQuestions.length;
     await upload.save();
 
