@@ -2,7 +2,7 @@
 
 ## Objective
 
-Operationally enable paid access: keep/confirm papers are `FREE` via backfill unless admins intentionally mark `ENTITLED`, switch `ACCESS_ENFORCEMENT_MODE=ENFORCED` in **production** when ready, remove temporary LEGACY allow-path reliance after soak, harden rate limits/logging/checklists, seed production seller/tax config and live Razorpay credentials, and sign off go-live.
+Operationally enable paid access: keep/confirm papers are `FREE` via backfill unless admins intentionally mark `ENTITLED`, prepare `ACCESS_ENFORCEMENT_MODE=ENFORCED` for production, remove temporary LEGACY allow-path reliance after soak, harden rate limits/logging/checklists, and document the production seller/tax seed and live Razorpay credentials. The go-live sign-off is phase 16.
 
 ## Prerequisites
 
@@ -55,7 +55,7 @@ Operationally enable paid access: keep/confirm papers are `FREE` via backfill un
 3. Production config verification (U-OPS-01, U-OPS-02).
 4. Enable ENFORCED in production.
 5. Post-go-live watch notes; admins manage ENTITLED flips.
-6. Update STATUS.md → live.
+6. Update STATUS.md with the soak result. Leave “Payments live” as No until phase 16 is signed and production ops are actually done.
 
 ## Requirements
 
@@ -105,8 +105,8 @@ ACCESS_ENFORCEMENT_MODE=LEGACY
 - [ ] Runbook merged
 - [ ] Local ENFORCED soak signed off
 - [ ] Prod seller/tax + Razorpay live seeded
-- [ ] Production ENFORCED
-- [ ] STATUS.md → live
+- [ ] Production ENFORCED only after phase 16 is signed
+- [ ] STATUS.md records the soak; live switch stays with phase 16 close-out
 
 
 ## STATUS.md update (mandatory)
@@ -121,4 +121,4 @@ Before marking this phase **complete**:
 
 ## Definition of done
 
-Commerce is live, entitlement-enforced, operable by admins, recoverable via documented rollback — without a staging environment.
+Runbook and local ENFORCED soak are ready, production ops are documented, and rollback is written down. The program is not marked live here. Phase 16 ([`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md)) is the last gate before go-live.

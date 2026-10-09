@@ -34,9 +34,10 @@ export function buildProvisioningKey(input: {
 /**
  * Grants entitlements from a paid order's item snapshots.
  * Safe to call again: unique provisioning keys and `order.provisionedAt`
- * keep a replay from inserting a second set. Repair a PAID order whose
- * `provisionedAt` is still unset by calling this method again. There is no
- * admin HTTP route for that in this phase.
+ * keep a replay from inserting a second set. The paid notifier runs before
+ * `provisionedAt` is saved. If it throws, the next paid signal retries.
+ * Repair a PAID order whose `provisionedAt` is still unset by calling this
+ * method again. There is no admin HTTP route for that in this phase.
  */
 @Injectable()
 export class EntitlementProvisioningService {
@@ -118,6 +119,8 @@ export class EntitlementProvisioningService {
       }
     }
 
+    await this.paidOrderNotifier.onOrderProvisioned(canonicalOrderId);
+
     order.provisionedAt = new Date();
     await order.save();
 
@@ -128,7 +131,6 @@ export class EntitlementProvisioningService {
       resourceId: canonicalOrderId,
       after: { created },
     });
-    await this.paidOrderNotifier.onOrderProvisioned(canonicalOrderId);
     this.logger.log(`Provisioned order ${canonicalOrderId} created=${created}`);
 
     return {

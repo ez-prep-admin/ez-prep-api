@@ -125,7 +125,7 @@ Reuse last saved billing profile; allow edit. Address is required (product decis
 | Timing | Generate only after payment `CAPTURED` / order `PAID` |
 | Never invoice | Failed, abandoned, cancelled, or expired orders |
 | Numbering | `EZPREP/YYYY-YY/####` **Indian financial year** (IST), sequence resets each FY — Rule 46 alignment (`U-GST-09`) |
-| Artifacts | PDF download in user app + admin view |
+| Artifacts | **One** GST tax invoice PDF, downloaded in the user app and admin. No second payment-receipt PDF. Owner locked 2026-10-09. Razorpay’s own payment email is a dashboard option, not an app file |
 | PDF extras | Place of supply (buyer state); reverse charge = `No` |
 | Email | Not in v1 |
 | Credit notes | **Not in app v1** — every refund must still get a Zoho/CA credit note (`U-GST-04`) |

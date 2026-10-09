@@ -88,4 +88,19 @@ describe('instance config DTOs', () => {
     });
     expect(error).toBeInstanceOf(BadRequestException);
   });
+
+  it('accepts a replacement GSTIN without a checksum or state prefix', async () => {
+    const dto = await parse(UpdateInstanceConfigDto, {
+      seller: { gstin: '99NOTACHECKSUM', stateCode: '32' },
+    });
+    expect(dto.seller?.gstin).toBe('99NOTACHECKSUM');
+    expect(dto.seller?.stateCode).toBe('32');
+  });
+
+  it('rejects a blank GSTIN', async () => {
+    const error = await rejection(UpdateInstanceConfigDto, {
+      seller: { gstin: '   ' },
+    });
+    expect(error).toBeInstanceOf(BadRequestException);
+  });
 });

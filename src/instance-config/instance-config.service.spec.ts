@@ -180,5 +180,27 @@ describe('InstanceConfigService', () => {
         NotFoundException,
       );
     });
+
+    it('sets only the GSTIN that was sent', async () => {
+      model.findByIdAndUpdate.mockReturnValue(
+        chain(
+          stored({
+            seller: { legalName: 'Kept', gstin: '99NOTACHECKSUM' },
+          }),
+        ),
+      );
+
+      const result = await service.update({
+        seller: { gstin: '99NOTACHECKSUM' },
+      });
+
+      expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+        INSTANCE_CONFIG_ID,
+        { $set: { 'seller.gstin': '99NOTACHECKSUM' } },
+        { new: true },
+      );
+      expect(result.seller?.gstin).toBe('99NOTACHECKSUM');
+      expect(result.seller?.legalName).toBe('Kept');
+    });
   });
 });

@@ -98,12 +98,12 @@ Feature flag `INVOICES_ENABLED`; paid path skips issue if disabled.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Instance seller/taxConfig schema + local seed
-- [ ] Invoice + PDF + downloads
-- [ ] Meta indian-states
-- [ ] No hardcoded SAC in business logic
-- [ ] U-OPS-01 noted for production seed
+- [x] `STATUS.md` updated with ops + **developer confirmation** (PDF smoke deferred to phase 16)
+- [x] Instance seller/taxConfig schema + local seed
+- [x] Invoice + PDF + downloads
+- [x] Meta indian-states
+- [x] No hardcoded SAC in business logic
+- [x] U-OPS-01 noted for production seed
 
 
 ## STATUS.md update (mandatory)

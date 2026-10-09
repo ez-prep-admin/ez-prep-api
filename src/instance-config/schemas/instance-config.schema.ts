@@ -59,6 +59,13 @@ export class InstanceSeller {
 
   @Prop({ trim: true })
   stateCode?: string;
+
+  /** Printed on new invoices only. TODO(golive): U-GST-08 */
+  @Prop({ trim: true })
+  signatoryName?: string;
+
+  @Prop({ trim: true })
+  signatoryDesignation?: string;
 }
 
 export const InstanceSellerSchema =
@@ -85,11 +92,11 @@ export class InstanceConfig {
   @Prop({ trim: true, maxlength: 2048 })
   faviconUrl?: string;
 
-  /** Optional until a local/prod commerce seed writes it. Phase 10 owns admin edits. */
+  /** Optional until a local/prod commerce seed writes it. Admins edit it here. */
   @Prop({ type: InstanceTaxConfigSchema })
   taxConfig?: InstanceTaxConfig;
 
-  /** Optional until a local/prod commerce seed writes it. Phase 10 owns admin edits. */
+  /** Optional until a local/prod commerce seed writes it. Admins edit it here. */
   @Prop({ type: InstanceSellerSchema })
   seller?: InstanceSeller;
 

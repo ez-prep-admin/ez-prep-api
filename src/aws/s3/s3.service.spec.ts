@@ -62,6 +62,15 @@ describe('S3Service', () => {
       ).toBe('question-uploads/pdfs/id_with_spaces_/file_name.pdf');
     });
 
+    it('groups a user GST invoices under their user id', () => {
+      expect(
+        service.generateGstInvoiceKey(
+          '507f1f77bcf86cd799439011',
+          '507f1f77bcf86cd799439012',
+        ),
+      ).toBe('507f1f77bcf86cd799439011/507f1f77bcf86cd799439012.pdf');
+    });
+
     it('scopes markdown keys under the upload id', () => {
       expect(
         service.generateQuestionMarkdownKey(

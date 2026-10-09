@@ -14,6 +14,7 @@ Decisions: [`decisions.md`](decisions.md) D-11 / D-17.
 | --- | --- |
 | B2C tax invoice PDF after payment CAPTURED / order PAID | B2B buyer GSTIN |
 | Download in user app + admin | Email delivery |
+| One GST invoice PDF per paid order (also the post-payment download) | A separate payment-receipt PDF |
 | CGST+SGST vs IGST from seller/buyer state codes | In-app credit notes (ops via Zoho — U-GST-04) |
 | Financial-year invoice series | Calendar-year-only series |
 | GST-inclusive offer amounts | Exclusive + add-at-checkout UX |

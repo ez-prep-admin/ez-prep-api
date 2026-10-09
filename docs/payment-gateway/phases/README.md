@@ -13,6 +13,7 @@ Each phase is independently executable in a **fresh agent session** and ends in 
 7. Update [`../STATUS.md`](../STATUS.md) (phase board + session log + **developer ops**).
 8. Obtain **developer confirmation** in `STATUS.md` before marking the phase `done`.
 9. Defer CA/ops items via [`../GOLIVE_TODOS.md`](../GOLIVE_TODOS.md) + `TODO(golive):` — do not stall coding (see D-21).
+10. If the phase adds or changes a user-visible flow, append the exact manual UI steps to [`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md). Do not check those boxes. Phase 16 runs the whole board once.
 
 ## Phases
 
@@ -34,6 +35,7 @@ Each phase is independently executable in a **fresh agent session** and ends in 
 | 13 | [User access UI](phase-13-user-access-ui.md) | app | Locked cards, overview CTA, error mapping |
 | 14 | [User checkout + subscriptions](phase-14-user-checkout-subscriptions.md) | app | Checkout + billing + ownership page |
 | 15 | [Rollout hardening](phase-15-rollout-hardening.md) | all | ENFORCED, ENTITLED content, hardening checklists |
+| 16 | [End-to-end verification](phase-16-end-to-end-verification.md) | all | One UI pass of every phase; last gate before go-live |
 
 ## Dependency graph
 
@@ -62,11 +64,14 @@ flowchart TB
   P14 --> P15[15 rollout]
   P11 --> P15
   P12 --> P15
+  P15 --> P16[16 e2e verification]
 ```
 
 ## Recommended order
 
-`00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15`
+`00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16`
+
+Phase 16 is the manual UI pass ([`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md)). Do not mark the program live before it is signed.
 
 ## Parallelism (optional)
 

@@ -38,6 +38,8 @@ import { TaxModule } from './tax/tax.module';
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { MetaModule } from './meta/meta.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -130,6 +132,8 @@ const observeRootModule = createObserveRootModule();
     PaymentsModule,
     OrdersModule,
     WebhooksModule,
+    InvoicesModule,
+    MetaModule,
   ],
   controllers: [AppController],
   providers: [

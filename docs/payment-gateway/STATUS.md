@@ -4,7 +4,7 @@
 
 Update this file at the **end of every phase session**. A phase is not `done` until the developer confirmation block is filled.
 
-Related: [`engineering-rules.md`](engineering-rules.md) · [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) · [`unknowns.md`](unknowns.md) · [`phases/README.md`](phases/README.md)  
+Related: [`engineering-rules.md`](engineering-rules.md) · [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) · [`unknowns.md`](unknowns.md) · [`phases/README.md`](phases/README.md) · [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)  
 Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 
 ---
@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 09 **done** — next **10** |
+| Current phase | 11 **pending** — phase 10 closed 2026-10-09 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -72,12 +72,13 @@ Date: YYYY-MM-DD
 | 07 | Orders + TaxService + FakeGateway | **done** | 2026-10-09 | Sharun — local seller/tax seed + `PAYMENT_PROVIDER=fake` |
 | 08 | Razorpay adapter | **done** | 2026-10-09 | Sharun — test keys in `.env`; webhook URL deferred to phase 14 |
 | 09 | Provisioning + stacking | **done** | 2026-10-09 | Sharun — fake pay provisions access; ENFORCED start verified; LEGACY restored |
-| 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
+| 10 | GST invoices | **done** | 2026-10-09 | Sharun — code + Jest; PDF smoke deferred to phase 16 |
 | 11 | Admin refunds | pending | | Pending: document Zoho credit-note step (U-GST-04) |
 | 12 | Reconciliation + audit | pending | | Pending: recon env flag noted |
-| 13 | User access UI | pending | | Pending: manual UI checklist |
+| 13 | User access UI | pending | | Pending: append UI steps to E2E_TEST_STATUS.md |
 | 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
-| 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED |
+| 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
+| 16 | End-to-end verification | pending | | Last gate before go-live. Checklist: E2E_TEST_STATUS.md |
 
 ---
 
@@ -469,3 +470,38 @@ Date: 2026-10-09
 **Regression audit (existing specs):** checkout and webhook suites gained an `EntitlementProvisioningService` mock provider (structural; `OrdersService` now depends on it). Existing assertions were not rewritten. New specs: stacking window, provisioning service, markOrderPaid repair.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 10
+
+### 2026-10-09 — Phase 10 — GST invoices
+
+**Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
+**Tests:** Jest — invoice format, PDF fields, issue/idempotency/authZ, notifier flag, indian-states, instance-config GSTIN update, provisioning retry, existing entitlements/orders/webhooks/tax/instance-config — **pass** (119 in those suites); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- `src/invoices/` issues one tax invoice after entitlements are inserted and before `order.provisionedAt` is saved. A failed issue leaves `provisionedAt` unset so the next paid signal retries. `INVOICES_ENABLED` must be the string `true`; any other value skips issue and still provisions.
+- Numbering is the Indian FY series from `taxConfig.invoiceSeriesPrefix` (`SERIES/2026-27/0001` shape). Tax amounts are copied from `order.tax`. Seller, SAC, and the full billing address are snapshotted at issue time. A later GSTIN edit does not change the issued row.
+- PDF via `pdfkit`, stored with `S3Service` at `{userId}/{orderId}.pdf` in `AWS_S3_INVOICES_BUCKET` and no public ACL. `GET /api/v1/me/invoices` and `GET /api/v1/me/invoices/:id/pdf` (owner, otherwise 404). `GET /api/v1/admin/invoices` and `GET /api/v1/admin/invoices/:id/pdf` (admin).
+- `GET /api/v1/meta/indian-states` is public. Admin `PUT /instance-config` can set nested `seller` and `taxConfig`, including a replacement GSTIN with no checksum or state-prefix check. Optional signatory fields print when set. The PDF always says it is computer-generated.
+- `TODO(golive): U-GST-07`, `U-GST-08`, `U-GST-10` on the invoice path. Production seller seed stays `U-OPS-01` (phase 15).
+
+**Manual proof:** deferred to phase 16. Owner 2026-10-09 — Postman is a poor fit (student OTP, no profile UI yet). Steps live in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) (journey J1 and the invoice negative list). That pass re-checks the PDF; it does not reopen this phase.
+
+**Local PDF smoke (how to verify, when phase 16 runs):**
+1. In API `.env`, set `INVOICES_ENABLED=true` and restart. Seller/tax config is already seeded locally.
+2. With `PAYMENT_PROVIDER=fake`, create a checkout order and verify it so the order reaches PAID. The only commerce PDF is the GST invoice in `AWS_S3_INVOICES_BUCKET` at `{userId}/{orderId}.pdf` (private, no public ACL). Owner locked 2026-10-09: no separate payment-receipt PDF.
+3. As that user, `GET /api/v1/me/invoices` and `GET /api/v1/me/invoices/:id/pdf`. Confirm the FY number, seller block, SAC, billing address, and tax lines.
+4. `PUT /api/v1/instance-config` with a different `seller.gstin` (admin JWT). Download the same PDF again and confirm the GSTIN on it did not change.
+5. Another user's download of that invoice id should be 404. An admin `GET /api/v1/admin/invoices/:id/pdf` should succeed.
+
+**Developer ops (manual) — confirm each:**
+- [x] N/A for this close — `INVOICES_ENABLED`, `AWS_S3_INVOICES_BUCKET`, fake-pay PDF, and GSTIN snapshot immutability are verified in phase 16 ([`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)), not Postman. Owner 2026-10-09.
+- [x] N/A — production Mongo seed (`U-OPS-01`, phase 15), email, credit notes, admin UI, ezprep-app, Razorpay tunnel
+
+**Developer confirmation:**  
+I, Sharun, confirm the manual PDF smoke is deferred to phase 16 with reason, and this phase may be marked done.  
+Date: 2026-10-09
+
+**DoD:** met  
+**Deviations:** Phase file objective still says calendar `EZPREP/YYYY/####`; implementation follows D-11 Indian FY `PREFIX/YYYY-YY/####`. Invoice billing stores the full checkout address, plus `orderNumber`, `financialYear`, and `sequence`. The paid notifier runs before `provisionedAt` so a failed PDF can be retried by the existing repair path. Manual PDF smoke is phase 16, not a Postman gate on this phase.  
+**Regression audit (existing specs):** instance-config DTO and service specs gained additive cases only. Provisioning spec gained one case for notifier failure. No existing assertions rewritten. EntitlementsModule now imports InvoicesModule; no prior spec boots that module.  
+**GOLIVE_TODOS touched:** comments for `U-GST-07`, `U-GST-08`, `U-GST-10`. `U-OPS-01` still open for production seed. `U-GST-09` still open for CA/Zoho confirmation; FY series is what shipped.  
+**Next:** phase 11

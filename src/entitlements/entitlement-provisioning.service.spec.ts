@@ -433,6 +433,29 @@ describe('EntitlementProvisioningService', () => {
     expect(notifier.onOrderProvisioned).not.toHaveBeenCalled();
   });
 
+  it('leaves provisionedAt unset when invoice notification fails', async () => {
+    notifier.onOrderProvisioned.mockRejectedValueOnce(
+      new Error('invoice failed'),
+    );
+    const current = paidOrder([
+      item(new Types.ObjectId(), [
+        {
+          scopeType: EntitlementScopeType.EXAM,
+          scopeId: new Types.ObjectId().toHexString(),
+        },
+      ]),
+    ]);
+
+    await expect(
+      service.provisionForPaidOrder(String(current._id)),
+    ).rejects.toThrow('invoice failed');
+
+    expect(current.provisionedAt).toBeUndefined();
+    expect(current.save).not.toHaveBeenCalled();
+    expect(audit.log).not.toHaveBeenCalled();
+    expect(notifier.onOrderProvisioned).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses an order that is not paid', async () => {
     const current = paidOrder(
       [

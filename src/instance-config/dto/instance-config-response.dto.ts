@@ -1,5 +1,57 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export class InstanceSellerResponseDto {
+  @ApiProperty({ nullable: true })
+  legalName: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    description: 'Seller GSTIN snapshot source. Admin-only on this API.',
+  })
+  gstin: string | null;
+
+  @ApiProperty({ nullable: true })
+  registeredAddress: string | null;
+
+  @ApiProperty({ nullable: true })
+  state: string | null;
+
+  @ApiProperty({ nullable: true })
+  stateCode: string | null;
+
+  @ApiProperty({ nullable: true })
+  signatoryName: string | null;
+
+  @ApiProperty({ nullable: true })
+  signatoryDesignation: string | null;
+}
+
+export class InstanceTaxConfigResponseDto {
+  @ApiProperty({ nullable: true })
+  taxEnabled: boolean | null;
+
+  @ApiProperty({ nullable: true })
+  taxType: string | null;
+
+  @ApiProperty({ nullable: true, description: 'Percent, for example 18.' })
+  taxRate: number | null;
+
+  @ApiProperty({ nullable: true })
+  pricesAreTaxInclusive: boolean | null;
+
+  @ApiProperty({ nullable: true })
+  currency: string | null;
+
+  @ApiProperty({ nullable: true })
+  sacCode: string | null;
+
+  @ApiProperty({ nullable: true })
+  sacDescription: string | null;
+
+  @ApiProperty({ nullable: true })
+  invoiceSeriesPrefix: string | null;
+}
+
 export class InstanceConfigResponseDto {
   @ApiProperty({ example: 'singleton' })
   id: string;
@@ -25,6 +77,12 @@ export class InstanceConfigResponseDto {
     nullable: true,
   })
   faviconUrl: string | null;
+
+  @ApiPropertyOptional({ type: InstanceSellerResponseDto, nullable: true })
+  seller: InstanceSellerResponseDto | null;
+
+  @ApiPropertyOptional({ type: InstanceTaxConfigResponseDto, nullable: true })
+  taxConfig: InstanceTaxConfigResponseDto | null;
 
   @ApiProperty({ example: '2026-09-28T00:00:00.000Z' })
   createdAt: Date;

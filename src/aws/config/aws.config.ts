@@ -85,6 +85,22 @@ export class AwsConfigService {
     return value;
   }
 
+  /**
+   * Dedicated bucket for the GST tax invoice PDF. One file per paid order.
+   * Not required at boot. Invoice issue fails if this is blank.
+   */
+  get s3InvoicesBucket(): string {
+    const value = this.configService
+      .get<string>('AWS_S3_INVOICES_BUCKET')
+      ?.trim();
+    if (!value) {
+      throw new Error(
+        'AWS_S3_INVOICES_BUCKET is not configured. Please set it in your .env file.',
+      );
+    }
+    return value;
+  }
+
   get allowedImageBuckets(): string[] {
     return [this.s3ImageBucket];
   }

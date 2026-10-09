@@ -7,7 +7,11 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, UpdateQuery } from 'mongoose';
 import { CreateInstanceConfigDto } from './dto/create-instance-config.dto';
-import { InstanceConfigResponseDto } from './dto/instance-config-response.dto';
+import {
+  InstanceConfigResponseDto,
+  InstanceSellerResponseDto,
+  InstanceTaxConfigResponseDto,
+} from './dto/instance-config-response.dto';
 import { UpdateInstanceConfigDto } from './dto/update-instance-config.dto';
 import {
   INSTANCE_CONFIG_ID,
@@ -16,6 +20,8 @@ import {
 import {
   InstanceConfig,
   InstanceConfigDocument,
+  InstanceSeller,
+  InstanceTaxConfig,
 } from './schemas/instance-config.schema';
 
 @Injectable()
@@ -101,6 +107,8 @@ export class InstanceConfigService {
 
     this.assignOptionalUrl($set, $unset, 'logoUrl', dto.logoUrl);
     this.assignOptionalUrl($set, $unset, 'faviconUrl', dto.faviconUrl);
+    this.assignNested($set, 'seller', dto.seller);
+    this.assignNested($set, 'taxConfig', dto.taxConfig);
 
     if (Object.keys($set).length === 0 && Object.keys($unset).length === 0) {
       return null;
@@ -128,6 +136,21 @@ export class InstanceConfigService {
     $set[field] = value;
   }
 
+  private assignNested(
+    $set: Record<string, unknown>,
+    prefix: 'seller' | 'taxConfig',
+    value: object | undefined,
+  ): void {
+    if (!value) {
+      return;
+    }
+    for (const [key, field] of Object.entries(value)) {
+      if (field !== undefined) {
+        $set[`${prefix}.${key}`] = field;
+      }
+    }
+  }
+
   private toResponse(
     config: InstanceConfigDocument,
   ): InstanceConfigResponseDto {
@@ -137,9 +160,46 @@ export class InstanceConfigService {
       name: config.name,
       logoUrl: config.logoUrl ?? null,
       faviconUrl: config.faviconUrl ?? null,
+      seller: this.toSeller(config.seller),
+      taxConfig: this.toTaxConfig(config.taxConfig),
       createdAt: config.createdAt,
       updatedAt: config.updatedAt,
     });
+  }
+
+  private toSeller(
+    seller?: InstanceSeller | null,
+  ): InstanceSellerResponseDto | null {
+    if (!seller) {
+      return null;
+    }
+    return {
+      legalName: seller.legalName ?? null,
+      gstin: seller.gstin ?? null,
+      registeredAddress: seller.registeredAddress ?? null,
+      state: seller.state ?? null,
+      stateCode: seller.stateCode ?? null,
+      signatoryName: seller.signatoryName ?? null,
+      signatoryDesignation: seller.signatoryDesignation ?? null,
+    };
+  }
+
+  private toTaxConfig(
+    tax?: InstanceTaxConfig | null,
+  ): InstanceTaxConfigResponseDto | null {
+    if (!tax) {
+      return null;
+    }
+    return {
+      taxEnabled: tax.taxEnabled ?? null,
+      taxType: tax.taxType ?? null,
+      taxRate: tax.taxRate ?? null,
+      pricesAreTaxInclusive: tax.pricesAreTaxInclusive ?? null,
+      currency: tax.currency ?? null,
+      sacCode: tax.sacCode ?? null,
+      sacDescription: tax.sacDescription ?? null,
+      invoiceSeriesPrefix: tax.invoiceSeriesPrefix ?? null,
+    };
   }
 }
 
