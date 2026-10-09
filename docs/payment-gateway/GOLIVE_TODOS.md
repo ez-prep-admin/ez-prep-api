@@ -23,14 +23,14 @@ Related: [`unknowns.md`](unknowns.md) · [`gst-invoicing.md`](gst-invoicing.md) 
 | ID | Item | Dev approach (non-blocking) | Before go-live | Status |
 | --- | --- | --- | --- | --- |
 | U-GST-04 | Credit notes on refund | App refund + entitlement revoke ships without in-app credit note; ops process via Zoho; `TODO(golive): U-GST-04` on refund service for future CreditNote module | CA/Zoho credit-note SOP proven; or ship in-app credit notes | open |
-| U-GST-05 | SAC `999293` + 18% confirmation | Store in instance `taxConfig`; never hardcode in business logic | CA written confirmation; update config if different | open |
+| U-GST-05 | SAC `999293` + 18% confirmation | Store in instance `taxConfig`; never hardcode in business logic | Owner confirmed 2026-10-09. Change later only by editing config and re-seeding | owner-confirmed |
 | U-GST-06 | Buyer address | **Resolved for product:** always collect billing address at checkout (see decisions D-10). Implement in phases 07/14 — not a deferral | Verify live invoices show address | product-resolved; verify at 14/15 |
 | U-GST-07 | E-invoice / IRN | No IRN integration in v1; `TODO(golive): U-GST-07` if CA says mandated | CA: not applicable **or** plan IRN phase | open |
 | U-GST-08 | Signature / e-sign on PDF | Ship “computer-generated invoice” + optional signatory fields from config; `TODO(golive): U-GST-08` | CA accepts template | open |
 | U-GST-09 | FY invoice series Zoho mapping | Implement FY series `EZPREP/YYYY-YY/####` in phase 10 | CA/Zoho import OK | open |
 | U-GST-10 | Place of supply = buyer state | Print POS from buyer state on PDF; `TODO(golive): U-GST-10` if CA amends | CA confirms for SAC | open |
-| U-OPS-01 | Prod seller/tax seed | Local test seller config in phase 07/10 | Real legal name, address, GSTIN in prod DB | open |
-| U-OPS-02 | Prod Razorpay live | Local test keys in phase 08/14 | Live keys + webhook URL | open |
+| U-OPS-01 | Prod seller/tax seed | Values confirmed. Local seed script writes them. Business logic still reads the DB | Run the same seed against **production** Mongo at phase 15 | values confirmed; prod DB pending |
+| U-OPS-02 | Prod Razorpay live | `.env.example` names only. Local `.env`: test keys. Production env: live keys. Secrets never committed | Place live keys in prod env and register the prod webhook URL | open |
 
 ---
 
@@ -63,3 +63,5 @@ Record when each ID is closed (also copy a line into STATUS.md session log):
 ```markdown
 - YYYY-MM-DD: U-GST-0X cleared — evidence: …
 ```
+
+- 2026-10-09: U-GST-05 owner-confirmed — Sharun: GST 18% and SAC `999293`. Editable later via instance `taxConfig`, not a code change. Not a separate CA letter.

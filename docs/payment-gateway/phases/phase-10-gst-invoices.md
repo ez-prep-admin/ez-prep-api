@@ -57,7 +57,7 @@ Extend instance-config schema/DTOs/admin update path for seller + taxConfig (adm
 
 ## Implementation tasks
 
-1. Extend instance-config with seller + taxConfig; validate GSTIN vs stateCode.
+1. Extend instance-config with seller + taxConfig. Allow `seller.gstin` to be replaced (entity change). Do not reject the update for checksum or state-prefix mismatch (D-17).
 2. Invoice number allocator (IST year).
 3. PDF template including SAC, address, state codes.
 4. Idempotent issuer + download endpoints.
@@ -85,7 +85,7 @@ Extend instance-config schema/DTOs/admin update path for seller + taxConfig (adm
 4. Invoice tax fields equal order.tax snapshot.
 5. SAC/seller come from config snapshot, not string literals in service.
 6. User cannot download another user’s PDF; admin can.
-7. GSTIN/stateCode validation on instance-config update.
+7. Updating `seller.gstin` succeeds; an already issued invoice still shows the previous GSTIN snapshot.
 8. Indian states endpoint returns code+name (includes Kerala `32`, Karnataka `29`).
 
 ## Risks

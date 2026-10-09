@@ -2,7 +2,7 @@
 
 Open questions that block design, compliance, or go-live. Resolved items stay at the bottom for traceability.
 
-**Architecture unknowns (U-GST-01…03, U-RZ-*, U-BILL-01, U-MIG-01, U-LEG-01, U-GST-06 address): RESOLVED.**  
+**Architecture unknowns (U-GST-01…03, U-GST-05, U-RZ-*, U-BILL-01, U-MIG-01, U-LEG-01, U-GST-06 address): RESOLVED.**  
 **Remaining CA/ops items are go-live TODOs** — they do **not** block phases 01–14. Track in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md); clear before production live (phase 15).
 
 This pack is an engineering plan, **not legal advice**. Confirm with a Chartered Accountant before production invoicing.
@@ -14,15 +14,14 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 ## Open — operations
 
 ### U-OPS-01 — Seed production seller/tax config values
-- **Question:** Exact production strings for seller `legalName`, `registeredAddress`, `gstin`, and Kerala `state` / `stateCode` (`32`).
-- **Why it matters:** Instance DB config; never hardcode in source.
-- **Blocks:** Production invoice issuance.
-- **Record in:** `STATUS.md` after seeding.
+- **Values (owner, 2026-10-09):** legal name `EzPrep - Powered by Clustream`; GSTIN `32BIAPD6927L1ZC`; address `Kochi, Kerala`; state Kerala / `32`. Tax: 18%, SAC `999293`.
+- **Remaining:** Run `npm run commerce:seed-local-tax-config` against **production** Mongo at phase 15. Local Mongo is seeded from the same script. Do not hardcode these strings in checkout or tax services.
+- **Blocks:** Production invoice issuance until the prod database has the row.
 
 ### U-OPS-02 — Production Razorpay live credentials
-- **Question:** Live key id/secret/webhook secret + production webhook URL in Razorpay dashboard.
-- **Blocks:** Production payments.
-- **Record in:** `STATUS.md`.
+- **Known:** Owner has both Razorpay test keys and live keys. Local `.env` uses **test** keys. Production env uses **live** keys. Names are in `.env.example`: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Do not commit the values.
+- **Remaining:** Owner places the keys in each environment. Production webhook URL still has to be registered in the Razorpay dashboard (phase 15).
+- **Blocks:** Production payments until live keys and the webhook URL are in place.
 
 ---
 
@@ -34,11 +33,6 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 - **Interim rule (engineering):** On every admin refund, `STATUS.md` must record that a **credit note was issued in Zoho** (or CA workflow) for the same invoice/order. Do not treat app refund alone as GST-complete.
 - **Options:** A) Manual Zoho credit note per refund (v1). B) Build in-app credit notes (later phase).
 - **Blocks:** Clean GSTR adjustment after first production refund — not phase 01 coding.
-
-### U-GST-05 — SAC and 18% confirmation for *your* registration
-- **Question:** Does your GST registration / CA confirm SAC `999293` and 18% for EZ Prep’s actual online mock-test / coaching-style supplies (vs any exempt education entry)?
-- **Why it matters:** Misclassification is an audit risk. Config defaults to 999293 / 18% per your stated intent; CA must sign off.
-- **Blocks:** First live invoice confidence.
 
 ### U-GST-06 — Recipient address on tax invoice — RESOLVED (product)
 - **Decision:** Always collect billing **address** (line1, optional line2, city, pincode) + name + state at checkout (D-10).
@@ -69,6 +63,9 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 
 ## Resolved
 
+### U-GST-05 — SAC and 18% — RESOLVED (owner, 2026-10-09)
+- Sharun confirmed GST **18%** and SAC **`999293`**. Stored in instance `taxConfig` via the seed script. Change later by editing that config and re-seeding, not by hardcoding. No separate CA letter is on file.
+
 ### U-GST-01 — GST rate and central tax config — RESOLVED
 - GST-inclusive; central `taxConfig` at 18%; not per-offer; `TaxService` + snapshots. See `gst-invoicing.md`.
 
@@ -76,7 +73,8 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 - Seller legal name, registered address, GSTIN, SAC from instance config; PDF field list in `gst-invoicing.md`. Address/SAC first-class config.
 
 ### U-GST-03 — Seller state — RESOLVED
-- Explicit `seller.state` / `stateCode` (Kerala / 32); GSTIN validated against stateCode; no GSTIN-only parsing at runtime.
+- Explicit `seller.state` / `stateCode` (Kerala / 32). Do not derive seller state from the GSTIN at runtime.
+- Owner 2026-10-09: `seller.gstin` may change if the entity changes. No checksum gate that rejects the new value. Issued invoices keep the GSTIN snapshot from issue time.
 
 ### U-RZ-01 — Environments and webhooks — RESOLVED
 - Local + production only; test mode + optional tunnel; signed fixtures; no staging prerequisite.
@@ -103,6 +101,6 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 | Purchase / duration | One-time INR + presets | D-03 |
 | Offers / sale | One ACTIVE per product+duration | D-04 |
 | Stacking | Extend from expiresAt | D-09 |
-| Billing (product) | Name + state; address pending U-GST-06 | D-10 |
+| Billing (product) | Name + state + address always collected | D-10 |
 | Invoice timing | Only after CAPTURED/PAID | D-11 |
 | Refunds (app) | Admin full + revoke; credit note ops U-GST-04 | D-12 |

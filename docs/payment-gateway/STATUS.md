@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 06 **done** — next **07** |
+| Current phase | 07 **in_progress** — awaiting developer confirmation |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -69,7 +69,7 @@ Date: YYYY-MM-DD
 | 04 | Products + Offers API | **done** | 2026-10-07 | Sharun — indexes verified; paise convention recorded |
 | 05 | Admin commerce UI | **done** | 2026-10-07 | Sharun — local smoke create/offer/publish |
 | 06 | Admin entitlements UI | **done** | 2026-10-08 | Sharun — grant/revoke UI + local ENFORCED smoke |
-| 07 | Orders + TaxService + FakeGateway | pending | | Pending: seed **local** seller/taxConfig; billing includes address |
+| 07 | Orders + TaxService + FakeGateway | **in_progress** | | Pending: seed **local** seller/taxConfig; `PAYMENT_PROVIDER=fake` |
 | 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
 | 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
 | 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
@@ -89,22 +89,23 @@ Date: YYYY-MM-DD
 | --- | --- | --- |
 | `npm run commerce:backfill-access-mode-free` | Phase 01 — each DB (local, later prod) | Counts updated (`matchedCount` / `modifiedCount`) |
 | `npm run commerce:report-exam-category-mismatches` | Phase 01 | Zero mismatches or fixes applied |
+| `npm run commerce:seed-local-tax-config` | Phase 07 local; phase 15 prod | `matchedCount` / `modifiedCount`. Same owner-confirmed payload |
 | Optional ENTITLED manifest | Phase 15 only if used | Manifest path |
 
 ### B. Instance config (Mongo)
 
 | When | What |
 | --- | --- |
-| Phase 07/10 local | Seed test `seller` + `taxConfig` (not production GSTIN unless intentional) |
-| Phase 15 prod | Real values — `U-OPS-01` / GOLIVE_TODOS |
+| Phase 07 local | Seed owner-confirmed seller + taxConfig (`EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kochi, Kerala / `32`, 18%, SAC `999293`) |
+| Phase 15 prod | Re-run the same seed against production Mongo — `U-OPS-01` |
 
 ### C. Env / Razorpay
 
 | When | What |
 | --- | --- |
 | Phase 02+ | `ACCESS_ENFORCEMENT_MODE` |
-| Phase 08/14 local | Test Razorpay keys; optional webhook tunnel |
-| Phase 15 prod | Live keys + webhook — `U-OPS-02` |
+| Phase 08/14 local | Test Razorpay keys in local `.env` (`rzp_test_...`); optional webhook tunnel. Names in `.env.example` |
+| Phase 15 prod | Live keys in the production env (`rzp_live_...`) + webhook URL — `U-OPS-02`. Do not commit keys |
 
 ### D. Accounting (Zoho)
 
@@ -346,3 +347,48 @@ Date: 2026-10-08
 **Regression audit (existing specs):** additive only — `entitlements.service.spec.ts` new cases; new `admin-entitlements.controller.spec.ts`; admin `index.test.ts` export assert; `users/[id]/page.test.tsx` mock wiring + one additive case; new `grant-options.test.ts`. No existing test cases rewritten.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 07
+
+### 2026-10-08 — Phase 07 — Orders + Payments port
+
+**Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
+**Tests:** Jest — inclusive tax, indian states, TaxService, FakeGateway, registry, order transitions, checkout DTO, checkout service, existing instance-config suites — **pass** (53); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped (not closed):**
+- Optional `taxConfig` and `seller` on the instance-config singleton (schema version stays `1`; admin DTOs unchanged — Phase 10 owns edits). GSTIN replacement stays allowed (D-17, 2026-10-09)
+- `npm run commerce:seed-local-tax-config` writes **local test** seller/tax placeholders. It does not create the singleton and does not write a production GSTIN
+- `POST /api/v1/checkout/orders` and `GET /api/v1/checkout/orders/:id` (JWT). Amount from the offer in paise. Billing requires name, stateCode, address line, city, and 6-digit pincode. Unknown state codes are rejected
+- Order `CREATED` → `PENDING_PAYMENT` via FakeGateway, Payment `INITIATED`, 30-minute `expiresAt`, order numbers `ORD-…`
+- Idempotent replay for the same user; another user with the same key gets 409 and does not see the order; another user’s GET is 404
+- Client `amount` is rejected by `forbidNonWhitelisted`
+- Totals under 100 paise rejected. Tax snapshot is integer paise (₹999 @ 18% → taxable 84661, tax 15239; same-state CGST 7619 / SGST 7620; interstate IGST 15239)
+- `PAYMENT_PROVIDER=fake` default. `markOrderPaid` plus `FakeGateway.verifyPayment` can reach CAPTURED/PAID and call a no-op paid handler. No entitlement provisioning. Verify/webhook HTTP routes stay in Phase 08. `GET /meta/indian-states` stays in Phase 10
+- `TODO(golive): U-GST-05` and `TODO(golive): U-OPS-01` on the tax path and local seed
+
+**Developer ops (manual) — confirm each:**
+- [ ] Run `npm run commerce:seed-local-tax-config` against **local** Mongo. The instance-config singleton must already exist. Record `matchedCount` / `modifiedCount` below. Confirm the log shows `taxRate: 18`, `sellerStateCode: "32"`, and the local-test note (not a production GSTIN)
+- [ ] Confirm local `.env` has `PAYMENT_PROVIDER=fake` (add it if missing; `.env.example` already documents the default)
+- [ ] N/A — Razorpay keys, webhook tunnel, admin UI, ezprep-app, production seller/GSTIN (`U-OPS-01`)
+
+**Seed counts:** pending developer run  
+
+**Developer confirmation:**  
+Pending. Do not mark this phase done until the ops above are checked and confirmed.  
+
+**DoD:** pending developer confirmation  
+**Deviations:** HTTP verify is Phase 08 (internal `verifyPayment` / `markOrderPaid` covered by Jest). Public Indian-states route is Phase 10 (checkout resolves `state` from an internal GST code list). Checkout window is 30 minutes. Tax breakdown is stored in paise.  
+**Regression audit (existing specs):** instance-config specs were not edited and stayed green. `app.module.ts` only registers the new modules. No existing test cases rewritten.  
+**GOLIVE_TODOS touched:** referenced existing `U-GST-05` and `U-OPS-01` (still open)  
+**Next:** developer confirmation, then phase 08
+
+### 2026-10-09 — Go-live values recorded (does not close phase 07)
+
+**Owner confirmed:**
+- GST **18%**, SAC **`999293`**. Editable later by changing instance `taxConfig` and re-seeding (`U-GST-05` owner-confirmed, no CA letter on file).
+- Seller: legal name `EzPrep - Powered by Clustream`; GSTIN `32BIAPD6927L1ZC`; address `Kochi, Kerala`; state Kerala / `32`.
+- Razorpay: test keys in local `.env`, live keys in the production env. `.env.example` lists `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` blank. Real keys are not committed.
+
+**Local re-seed:** matchedCount=1 modifiedCount=1 (replaced the earlier test GSTIN).  
+**Code:** seed script now writes those seller/tax values. Checkout and `TaxService` still read the database.  
+**GOLIVE_TODOS touched:** `U-GST-05` owner-confirmed. `U-OPS-01` values known, production database seed still phase 15. `U-OPS-02` still open until live keys and the prod webhook URL are in place.
+
+**GSTIN edits (owner, 2026-10-09):** `seller.gstin` may be replaced if the legal entity changes. Phase 10 must not reject a new GSTIN for a checksum or state-prefix mismatch. Invoices already issued keep the seller snapshot from issue time. See D-17.

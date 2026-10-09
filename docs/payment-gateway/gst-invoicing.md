@@ -73,13 +73,13 @@ Extend instance-config (singleton) — **not hardcoded**:
 
 | Field | Notes |
 | --- | --- |
-| `legalName` | Required |
-| `gstin` | Required; validate against `stateCode` |
-| `registeredAddress` | Required on invoice |
-| `state` | e.g. `Kerala` — explicit |
-| `stateCode` | e.g. `32` — explicit |
+| `legalName` | `EzPrep - Powered by Clustream` (owner, 2026-10-09) |
+| `gstin` | `32BIAPD6927L1ZC` today. Replace this config value if the legal entity changes. Do not block the new GSTIN with a checksum or state-prefix check |
+| `registeredAddress` | `Kochi, Kerala` |
+| `state` | `Kerala` |
+| `stateCode` | `32` |
 
-Production seed: `U-OPS-01` / `STATUS.md`.
+Local seed writes these values. Production Mongo still needs the same seed at phase 15 (`U-OPS-01`). SAC `999293` and 18% are owner-confirmed (`U-GST-05`) and stay in config so they can change without a code edit.
 
 ---
 

@@ -34,6 +34,9 @@ import { AccessModule } from './access/access-control.module';
 import { ProductsModule } from './products/products.module';
 import { OffersModule } from './offers/offers.module';
 import { CatalogModule } from './catalog/catalog.module';
+import { TaxModule } from './tax/tax.module';
+import { PaymentsModule } from './payments/payments.module';
+import { OrdersModule } from './orders/orders.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -122,6 +125,9 @@ const observeRootModule = createObserveRootModule();
     ProductsModule,
     OffersModule,
     CatalogModule,
+    TaxModule,
+    PaymentsModule,
+    OrdersModule,
   ],
   controllers: [AppController],
   providers: [

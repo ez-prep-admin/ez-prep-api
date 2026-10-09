@@ -315,9 +315,9 @@ Extend existing [`instance-config`](../../src/instance-config/schemas/instance-c
 
 | Field | Example |
 | --- | --- |
-| `legalName` | (owner-provided) |
-| `gstin` | (owner-provided; validate vs stateCode) |
-| `registeredAddress` | (owner-provided) |
+| `legalName` | `EzPrep - Powered by Clustream` |
+| `gstin` | `32BIAPD6927L1ZC` (prefix matches `stateCode`) |
+| `registeredAddress` | `Kochi, Kerala` |
 | `state` | `Kerala` |
 | `stateCode` | `32` |
 

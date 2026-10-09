@@ -1,0 +1,7 @@
+export enum PaymentStatus {
+  INITIATED = 'INITIATED',
+  AUTHORIZED = 'AUTHORIZED',
+  CAPTURED = 'CAPTURED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}

@@ -121,7 +121,7 @@ Reuse last saved billing profile; allow edit. Address is required (product decis
 | --- | --- |
 | Buyer type | B2C only |
 | Price basis | GST-inclusive amounts entered by admin (paise; e.g. ₹999 → `99900`) |
-| Rate / classification | 18% GST for commercial training/coaching intent; central instance `taxConfig` only — **not** per-offer; CA confirm `U-GST-05` |
+| Rate / classification | 18% GST, SAC `999293`, owner-confirmed 2026-10-09 (`U-GST-05`). Central instance `taxConfig` only — **not** per-offer. Edit config if this changes |
 | Timing | Generate only after payment `CAPTURED` / order `PAID` |
 | Never invoice | Failed, abandoned, cancelled, or expired orders |
 | Numbering | `EZPREP/YYYY-YY/####` **Indian financial year** (IST), sequence resets each FY — Rule 46 alignment (`U-GST-09`) |
@@ -141,9 +141,11 @@ Required PDF fields and `TaxService.calculateInclusiveTax` — see [`gst-invoici
 Stable commerce/tax identity lives in **instance-config (or nested commerce config in Mongo)**:
 
 - `taxConfig`: enabled, type GST, rate 18, inclusive prices, currency INR, `sacCode`, `sacDescription`, invoice prefix
-- `seller`: legalName, gstin, registeredAddress, state, stateCode (Kerala / `32`); GSTIN validated against stateCode
+- `seller`: legalName, gstin, registeredAddress, state, stateCode (current: Kerala / `32`)
 
-Do not hardcode SAC `999293` or seller identity in source. Do not make SAC/rate per-product admin fields in v1. Change rate/classification only via controlled config updates.
+`seller.gstin` may be replaced later if the legal entity changes. Do not freeze `32BIAPD6927L1ZC`, and do not reject a new GSTIN for a checksum or state-prefix mismatch. Seller `state` / `stateCode` stay explicit fields; do not derive them from the GSTIN at runtime. Invoices already issued keep the seller snapshot from issue time.
+
+Do not hardcode SAC `999293` or seller identity in source. Do not make SAC/rate per-product admin fields in v1. Change rate, classification, or GSTIN only via config updates.
 
 ---
 
