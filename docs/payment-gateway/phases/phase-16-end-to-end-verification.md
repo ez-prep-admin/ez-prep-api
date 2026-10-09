@@ -6,7 +6,7 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 ## Prerequisites
 
-- Phases 00–15 implemented. Phase 10 is done; its PDF smoke is still executed here (owner, 2026-10-09). Phase 11 is done; the extensive refund UI integration (J5) is still executed here (owner, 2026-10-09).
+- Phases 00–15 implemented. Phase 10 PDF smoke, phase 11 refund UI (J5), phase 12 recon (J6), and phase 13’s detailed access UI stay on this pass. Phase 13’s broad smoke is already signed (owner, 2026-10-10). The ordered script, including product and offer setup and invalidation, is the **Full pass** section of `E2E_TEST_STATUS.md`.
 - Each of phases 11–15 has appended its real UI steps to `E2E_TEST_STATUS.md`.
 - Local API, ezprep-app, and mock-app-admin running. Razorpay **test** mode. `INVOICES_ENABLED=true` and `AWS_S3_INVOICES_BUCKET` set.
 

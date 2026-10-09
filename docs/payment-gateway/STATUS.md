@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 13 **pending** — phase 12 closed 2026-10-10 |
+| Current phase | 14 **pending** — phase 13 closed 2026-10-10; detailed UI pass is phase 16 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -75,10 +75,10 @@ Date: YYYY-MM-DD
 | 10 | GST invoices | **done** | 2026-10-09 | Sharun — code + Jest; PDF smoke deferred to phase 16 |
 | 11 | Admin refunds | **done** | 2026-10-09 | Sharun — broad admin refund smoke; full UI-integrated J5 pass is phase 16 |
 | 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
-| 13 | User access UI | pending | | Pending: append UI steps to E2E_TEST_STATUS.md |
+| 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
 | 14 | Checkout + subscriptions | pending | | Pending: address+state checkout; test key id |
 | 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
-| 16 | End-to-end verification | pending | | Last gate before go-live. Includes phase 10 PDF smoke, phase 11 integrated refund UI (J5), and phase 12 recon + `GET /admin/commerce-audit` (J6). Checklist: E2E_TEST_STATUS.md |
+| 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
 ---
 
@@ -572,3 +572,32 @@ Date: 2026-10-10
 **Regression audit (existing specs):** products, offers, and invoice specs gained a `CommerceAuditService` mock provider (structural; those services now depend on it). Razorpay gateway spec mock gained `fetchOrder` / `fetchPayments` (structural; the client interface grew). Existing assertions were not rewritten. New specs: reconciliation, scheduler, commerce audit, admin audit controller. Additive cases: fake/razorpay fetch mapping, product publish audit, offer update audit, invoice issue-once audit.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 13
+
+### 2026-10-10 — Phase 13 — User access UI
+
+**Code:** `ezprep-app` (locked cards, View plans, overview CTA, launch-error banner, `/dashboard/checkout` shell). `ez-prep-api` docs only. No API or admin behavior change.  
+**Tests:** ezprep-app `npm run typecheck` — pass. ESLint on the phase files — 0 errors (two pre-existing `exhaustive-deps` warnings in the full-mock and sprint clients). Full `npm run lint` still fails on pre-existing unescaped-entity errors outside this phase. No new test runner (D-15).
+
+**Shipped:**
+- Paper types read sibling `accessMode` and `access: { allowed, reason }`
+- Denied Start/Retake cards show a Locked chip and **View plans**. Resume stays when `userAttemptAction` is `RESUME` and `resumeAttemptId` is set
+- View plans loads `GET /catalog/products/for-mock-test/:id` from a card and `GET /catalog/products/for-exam/:id` from the overview CTA. **Buy** goes to `/dashboard/checkout?offerId=`
+- Checkout page is a shell: heading `Checkout enabling soon`. No Razorpay and no order call
+- `startAttempt` `details.code = ENTITLEMENT_REQUIRED` shows the API message and **View plans**
+- Overview CTA only when a paper list returns `access.allowed === false`. Hidden while that probe loads or if it fails
+- Subscriptions stays Coming Soon. “Free Early Access” copy is unchanged. `NEXT_PUBLIC_ACCESS_UI` was not added
+
+**Developer ops (manual) — confirm each:**
+- [x] Broad local smoke (owner, 2026-10-10): locked cards, View plans, and the checkout shell behave as shipped
+- [x] N/A for this close — the detailed pass (FREE vs ENTITLED, overview CTA, grant/revoke, Resume, launch banner, mobile, offer invalidation, and the full admin-to-student script) is phase 16 ([`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) run order plus J1, J4, J7). Do not check those boxes here
+- [x] N/A — no DB scripts, Razorpay dashboard, Zoho, or admin code. Restore `LEGACY` after any ENFORCED check during the phase 16 pass
+
+**Developer confirmation:**  
+I, Sharun, confirm the broad access UI smoke works, the remaining detailed and end-to-end cases are recorded for phase 16, and this phase may be marked done.  
+Date: 2026-10-10
+
+**DoD:** met  
+**Deviations:** live access JSON is `accessMode` plus `access: { allowed, reason }`, not `access.accessMode`. Overview CTA is derived from paper `access.allowed`, not from `GET /me/entitlements`. Resume is kept on a denied paper (D-08). No `NEXT_PUBLIC_ACCESS_UI` flag. Detailed UI proof is phase 16, not a gate on this phase.  
+**Regression audit (existing specs):** ezprep-app has no test suite. Full-mock and sprint `useEffect` dependency warnings were already present.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 14

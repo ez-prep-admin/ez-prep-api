@@ -101,11 +101,11 @@ Feature flag optional `NEXT_PUBLIC_ACCESS_UI=1`; revert PR.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Access UI shipped
-- [ ] Catalog client shipped
-- [ ] Checkout shell route exists
-- [ ] Manual checklist recorded in STATUS.md
+- [x] `STATUS.md` updated with ops + **developer confirmation** (detailed UI pass deferred to phase 16)
+- [x] Access UI shipped
+- [x] Catalog client shipped
+- [x] Checkout shell route exists
+- [x] Manual checklist recorded in STATUS.md and the phase 16 run order in `E2E_TEST_STATUS.md`
 
 
 ## STATUS.md update (mandatory)

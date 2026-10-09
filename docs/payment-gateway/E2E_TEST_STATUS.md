@@ -39,6 +39,99 @@ Canonical tax for a ₹999 offer at 18% inclusive: taxable `84661`, tax `15239`.
 
 ---
 
+## Full pass — run this once, in order
+
+This is the start-to-finish script for phase 16. Check the journey and edge boxes as you go. Do not check them before that session. Phases 14 and 15 must already be in the build; until checkout exists, stop after the access section and leave the payment rows unchecked.
+
+Apps: API on port 3000, ezprep-app on 3001, mock-app-admin on its local port. One admin user. Two students: **Student A** (no grant) and **Student B** (used only for the other-user invoice 404).
+
+### 1. Boot and baseline
+
+1. API `.env`: `ACCESS_ENFORCEMENT_MODE=LEGACY`, `PAYMENT_PROVIDER=razorpay` with test keys, `INVOICES_ENABLED=true`, `RECONCILIATION_ENABLED` not the string `true`. Seller seed already applied (legal name, GSTIN `32BIAPD6927L1ZC`, Kerala `32`, SAC `999293`, 18%).
+2. Restart the API. Log into admin and both students.
+3. As Student A, open one exam and start a paper. Under `LEGACY` it starts even if you later mark it entitled. This only proves the flag is still legacy.
+
+### 2. Pick the papers
+
+Use one exam the student can already open.
+
+- **Paper L** — the paper you will lock. Prefer an existing topic-wise paper.
+- **Paper F** — a different paper on the same exam. It stays `FREE`.
+
+Admin mock-test, full-mock, and sprint screens do not have an Access mode control. Do not save the topic-wise edit form to flip it: `PATCH /api/v1/mock-tests/:id` re-samples questions when the quota changes, and it is the wrong tool for a one-field change. Set `accessMode` to `ENTITLED` on Paper L’s mock-test document in local Mongo, and leave Paper F as `FREE`. Full-mock and sprint publish accept `accessMode` on `POST /api/v1/full-mock-tests/drafts/:id/publish` and `POST /api/v1/sprint-tests/drafts/:id/publish`. The admin publish forms do not send it, so those papers stay `FREE` unless the publish body includes `ENTITLED`. Phase 15 may add an admin control. Until then, use the Mongo field.
+
+Record the exam id, Paper L id, and Paper F id in the close-out notes.
+
+### 3. Admin — create the product and the offer
+
+Admin → **Products** (`/admin/products`).
+
+1. Create a product. Name it something you can see in the plans dialog, for example `E2E Exam Pack`. Add one grant: scope **EXAM**, target = the exam from step 2. Save. Status is **DRAFT**.
+2. Set `ACCESS_ENFORCEMENT_MODE=ENFORCED` and restart the API. Leave it there until the restore step. As Student A, Paper L shows **Locked** and **View plans**. The unpublished draft is not listed. Empty copy: `No plans are available for this yet.` Paper F still starts.
+3. On the product, **Publish**. Confirm `Publish this product?`. Status becomes **PUBLISHED**. Version is at least 1.
+4. **Add Offer**. Duration `3 months` (`3M`). List amount `999` (the field is rupees; the API stores `99900`). Leave sale amount empty. Status **Active**. **Create Offer**. The table shows `ACTIVE`.
+5. Add a second offer with the same duration `3M` and status **Active**. The duration option is marked `(ACTIVE exists)` and the save is rejected. One active offer per duration.
+6. Optional second duration: add `12 months` at another rupee price, status **Active**. Both active rows may appear in View plans.
+
+Student A, Paper L → **View plans**. The dialog title is `View plans`. The paper description is `Published plans that cover this test.` The pack name is listed. The 3 month row shows `3 months` and `₹999`. **Buy** opens `/dashboard/checkout?offerId=<that offer id>`.
+
+Overview `/dashboard/exam/:id` shows heading `Some tests on this exam are locked` and **View plans**. That dialog uses the exam catalog (`EXAM` and `EXAM_GROUP` grants only) and the description `Published plans that cover this exam.` Paper F has no lock and **Start** still works. Topic-wise, full-mock, and sprint tabs all still open.
+
+### 4. What each grant covers
+
+Create these as separate published products, each with one active offer, then delete or archive them after the check so they do not clutter J1.
+
+- **EXAM** grant: overview CTA and Paper L both list it. A paper on a different exam does not.
+- **EXAM_GROUP** grant for that exam’s group: same, for every exam in the group. An exam outside the group does not list it.
+- **MOCK_TEST** grant for Paper L only: Paper L **View plans** lists it. The overview dialog does not (exam catalog ignores mock-test grants). Paper F does not list it.
+
+### 5. Invalidate the offer and the product
+
+Do these on a copy, or restore an active offer before J1’s payment, so the ₹999 offer used for tax is active again at pay time.
+
+1. **Inactive offer.** Edit the ₹999 offer. Set status to **Inactive**. **Update Offer**. Student A reopens **View plans**: that offer is gone. If it was the only offer, the dialog says `No plans are available for this yet.` Checkout create with that offer id is rejected (`Offer is not active`). Set it back to **Active** before paying.
+2. **Sale window ended.** On an active offer set a sale amount below the list price and a sale window that has already ended. View plans shows the list price, not the sale price. A window that includes now shows the sale price. Clear the sale amount before the ₹999 tax check.
+3. **Draft stays unsold.** Duplicate the published product. The copy is a new draft and does not appear in View plans until you publish it. Delete the draft when finished (**Delete**). Archiving a draft is rejected; delete it instead.
+4. **Archive the product.** **Archive** on a published product. It disappears from View plans and from checkout (`Product is not published`). An entitlement already granted or purchased for that product stays active until it expires or is revoked. Archive does not refund and does not revoke. Un-archive is not a button; create or duplicate again if you still need a published pack. Do not archive the J1 pack until after refund testing, or J1 has nothing to buy.
+5. **Price edit after payment.** After J1 is paid, change the offer’s list amount. The plans dialog shows the new rupee price. The paid order snapshot and the already issued PDF stay at ₹999.00.
+
+### 6. Student — pay, stack, and a second state
+
+Requires phase 14 checkout, not the phase 13 shell.
+
+1. Student A, Paper L, **View plans**, **Buy** on the ₹999 / 3 month offer.
+2. Checkout requires billing name, state, address line 1, city, and a 6-digit pincode. Address line 2 is optional. States come from `GET /api/v1/meta/indian-states`.
+3. Choose Kerala (`32`). Pay with a Razorpay **test** success instrument.
+4. Subscriptions shows the entitlement (product, scope, start, end) and one invoice download. The file is a GST invoice, not a second receipt. PDF checks are J1.
+5. Paper L **Start** works. Paper F still starts. The overview CTA and the lock are gone.
+6. Buy a second covering offer while the first entitlement is still active (J2). The new window starts at the current expiry. It does not restart from today. A second invoice uses the next FY sequence number.
+7. New checkout as a different state, Karnataka `29` (J3). PDF is IGST only.
+
+### 7. Grant and revoke without payment
+
+Admin → **Users** → Student A → **Entitlements** → **Grant access**. Use Student A before the purchase, or use a third student who has not paid.
+
+1. With no grant and `ENFORCED`, Paper L is locked.
+2. Grant scope **EXAM** (or the paper) and a duration. No product id. The row is **ACTIVE**. The paper starts. No new order and no new invoice.
+3. **Revoke**. Status **REVOKED**. Paper L is locked again and **View plans** is back.
+4. A second, still-active grant continues to allow start after the first is revoked.
+
+### 8. Refund, failure, and recon
+
+Use the paid J1 order.
+
+- Admin → **Orders** → the order. **Refund** only when status is Paid. Reason required. Confirm title `Refund this order?`. Success `Order refunded`. Payment entitlements from that order revoke. Grants from step 7 that were not from this order stay active. The invoice stays issued. Student UI has no refund button. A second refund errors.
+- Dismiss Razorpay, fail a test payment, and run the recon tick only as written under Phase 12 below (J6). Restore `RECONCILIATION_ENABLED=false` and age `60` before you leave.
+
+### 9. Restore
+
+1. `ACCESS_ENFORCEMENT_MODE=LEGACY` unless this pass is the go-live soak (J8), then record the value you left.
+2. `RECONCILIATION_ENABLED` is not `true`. `RECONCILIATION_MIN_AGE_MINUTES=60`.
+3. Seller GSTIN is `32BIAPD6927L1ZC` if you edited it for the snapshot check.
+4. Restart the API.
+
+---
+
 ## Already signed (do not block phase 16 on these)
 
 These were confirmed in [`STATUS.md`](STATUS.md). Phase 16 re-checks the user-visible versions where noted.
@@ -55,6 +148,9 @@ These were confirmed in [`STATUS.md`](STATUS.md). Phase 16 re-checks the user-vi
 | 08 | Sharun 2026-10-09 | Razorpay test keys in API `.env`; webhook URL deferred to checkout | **Re-check** with Checkout.js |
 | 09 | Sharun 2026-10-09 | Fake pay provisions access; ENFORCED start; LEGACY restored | **Re-check** via the buy button |
 | 10 | Sharun 2026-10-09 | Code + Jest. PDF smoke deferred here (no Postman) | **Re-check** on the invoice download |
+| 11 | Sharun 2026-10-09 | Broad admin refund smoke | **Re-check** J5 with the paid order |
+| 12 | Sharun 2026-10-10 | Jest. Recon tick and audit list deferred here | **Re-check** J6 |
+| 13 | Sharun 2026-10-10 | Broad lock, View plans, and checkout shell | **Re-check** the full pass script and J1, J4, J7 |
 
 ---
 
@@ -147,8 +243,14 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 ### Catalog and money
 
 - [ ] Offer price on the plans sheet and checkout equals the published offer, displayed in rupees, and the order stored is paise.
-- [ ] Paused or archived offer is rejected at order create.
-- [ ] Changing an offer after a paid order does not change that order’s `pricingSnapshot` or the invoice totals.
+- [ ] A **DRAFT** product does not appear in View plans. Publish it, then it does.
+- [ ] An offer set to **Inactive** disappears from View plans. Checkout create with that offer id is rejected (`Offer is not active`). Setting it back to **Active** lists it again.
+- [ ] A second **Active** offer for the same duration on the same product is rejected. The duration option shows `(ACTIVE exists)`.
+- [ ] A sale window that has ended shows the list price. A window that includes now shows the sale price.
+- [ ] **Archive** removes the product from View plans and checkout. It does not revoke an entitlement already granted or purchased.
+- [ ] A **MOCK_TEST** product is listed on that paper’s View plans and is not listed on the exam overview dialog. An **EXAM** or **EXAM_GROUP** product is listed on both when it covers that exam.
+- [ ] Duplicate creates a draft that is not sold until published. Deleting a draft removes it. Archiving a draft is rejected.
+- [ ] Changing an offer after a paid order does not change that order’s `pricingSnapshot` or the invoice totals. View plans shows the new price.
 - [ ] Two rapid Pay clicks create one order for one idempotency key, or the second click is ignored. They do not double-charge or double-provision.
 
 ### Checkout and provider
@@ -189,9 +291,13 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 ### UI
 
 - [ ] Empty subscriptions (new student): clear empty state, no broken invoice link.
-- [ ] Checkout with the plans route missing `offerId`: visible error, no Razorpay modal.
+- [ ] Checkout with no `offerId`: visible error, no Razorpay modal. Phase 13 shell copy, until phase 14 replaces it: `Choose a plan from View plans to continue.`
+- [ ] An in-progress paper still shows **Resume** when `access.allowed` is false. Start and Retake on that denied paper show **View plans**.
+- [ ] A direct start the API rejects with `ENTITLEMENT_REQUIRED` shows the API message and **View plans**. Other start errors stay red text with no plans button.
+- [ ] While one paper is starting, the other cards’ buttons are disabled. **View plans** does not enter that loading state.
 - [ ] Loading and disabled states on Start, Buy, and Pay survive double clicks.
 - [ ] Desktop and a narrow mobile width for lock, plans, checkout, and subscriptions.
+- [ ] Exam tabs stay open for a student who is locked out of Paper L. Header copy `Free Early Access` stays until phase 15 changes it.
 
 ---
 
@@ -242,7 +348,15 @@ Run this only during that pass. Checkout `expiresAt` is 30 minutes and is not th
 
 ### Phase 13 — User access UI
 
-Planned proof is the lock, View plans, overview CTA, and launch-error bullets in J1, J4, and J7. When phase 13 finishes, add the component routes and any copy that phase 16 must match.
+Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. `/dashboard/subscriptions` stays Coming Soon until phase 14. Header copy `Free Early Access` is unchanged until phase 15.
+
+Routes and copy phase 16 must match:
+
+- Overview `/dashboard/exam/:id`. CTA heading: `Some tests on this exam are locked`. Body: `You can still open every tab. Free tests start as usual. Locked tests show View plans.` Button: `View plans`. Hidden while the paper probe is loading, if the probe fails, or when every loaded paper has `access.allowed !== false`. The dialog calls `GET /api/v1/catalog/products/for-exam/:examId`.
+- Topic-wise, full-mock, and sprint cards. When `access.allowed` is false and the action is not Resume: chip `Locked` and button `View plans` instead of Start or Retake. Resume stays when `userAttemptAction` is `RESUME` and `resumeAttemptId` is set. The dialog calls `GET /api/v1/catalog/products/for-mock-test/:mockTestId`.
+- Dialog title: `View plans`. Exam description: `Published plans that cover this exam.` Paper description: `Published plans that cover this test.` Each offer shows `1 month`, `3 months`, `6 months`, `12 months`, or `Lifetime`, and rupees from `effectiveAmount` (else sale, else list). Button `Buy` opens `/dashboard/checkout?offerId=<offer id>`. A published product with no ACTIVE offer is omitted. Empty copy: `No plans are available for this yet.`
+- Start error banner shows the API message. Button `View plans` appears only when `details.code` is `ENTITLEMENT_REQUIRED`.
+- Checkout shell `/dashboard/checkout`. Heading: `Checkout enabling soon`. Body: `Payment is not available yet. Free tests still start from the exam tabs.` With `offerId`: `Selected offer: <id>`. Without it: `Choose a plan from View plans to continue.` No Razorpay script and no order request.
 
 ### Phase 14 — Checkout and subscriptions
 
