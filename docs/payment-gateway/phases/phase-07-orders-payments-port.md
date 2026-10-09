@@ -99,11 +99,11 @@ New modules; default provider fake.
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Port + FakeGateway
-- [ ] Checkout order API
-- [ ] State machine tests
-- [ ] PAYMENT_PROVIDER documented
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] Port + FakeGateway
+- [x] Checkout order API
+- [x] State machine tests
+- [x] PAYMENT_PROVIDER documented
 
 
 ## STATUS.md update (mandatory)

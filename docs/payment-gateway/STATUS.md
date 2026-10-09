@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 07 **in_progress** — awaiting developer confirmation |
+| Current phase | 07 **done** — next **08** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -69,7 +69,7 @@ Date: YYYY-MM-DD
 | 04 | Products + Offers API | **done** | 2026-10-07 | Sharun — indexes verified; paise convention recorded |
 | 05 | Admin commerce UI | **done** | 2026-10-07 | Sharun — local smoke create/offer/publish |
 | 06 | Admin entitlements UI | **done** | 2026-10-08 | Sharun — grant/revoke UI + local ENFORCED smoke |
-| 07 | Orders + TaxService + FakeGateway | **in_progress** | | Pending: seed **local** seller/taxConfig; `PAYMENT_PROVIDER=fake` |
+| 07 | Orders + TaxService + FakeGateway | **done** | 2026-10-09 | Sharun — local seller/tax seed + `PAYMENT_PROVIDER=fake` |
 | 08 | Razorpay adapter | pending | | Pending: test keys in `.env`; optional tunnel |
 | 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
 | 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
@@ -353,34 +353,35 @@ Date: 2026-10-08
 **Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
 **Tests:** Jest — inclusive tax, indian states, TaxService, FakeGateway, registry, order transitions, checkout DTO, checkout service, existing instance-config suites — **pass** (53); `tsc -p tsconfig.build.json --noEmit` — pass  
 
-**Shipped (not closed):**
+**Shipped:**
 - Optional `taxConfig` and `seller` on the instance-config singleton (schema version stays `1`; admin DTOs unchanged — Phase 10 owns edits). GSTIN replacement stays allowed (D-17, 2026-10-09)
-- `npm run commerce:seed-local-tax-config` writes **local test** seller/tax placeholders. It does not create the singleton and does not write a production GSTIN
+- `npm run commerce:seed-local-tax-config` writes the owner-confirmed seller and taxConfig. Re-run the same script against production Mongo at phase 15
 - `POST /api/v1/checkout/orders` and `GET /api/v1/checkout/orders/:id` (JWT). Amount from the offer in paise. Billing requires name, stateCode, address line, city, and 6-digit pincode. Unknown state codes are rejected
 - Order `CREATED` → `PENDING_PAYMENT` via FakeGateway, Payment `INITIATED`, 30-minute `expiresAt`, order numbers `ORD-…`
 - Idempotent replay for the same user; another user with the same key gets 409 and does not see the order; another user’s GET is 404
 - Client `amount` is rejected by `forbidNonWhitelisted`
 - Totals under 100 paise rejected. Tax snapshot is integer paise (₹999 @ 18% → taxable 84661, tax 15239; same-state CGST 7619 / SGST 7620; interstate IGST 15239)
 - `PAYMENT_PROVIDER=fake` default. `markOrderPaid` plus `FakeGateway.verifyPayment` can reach CAPTURED/PAID and call a no-op paid handler. No entitlement provisioning. Verify/webhook HTTP routes stay in Phase 08. `GET /meta/indian-states` stays in Phase 10
-- `TODO(golive): U-GST-05` and `TODO(golive): U-OPS-01` on the tax path and local seed
+- Seller and tax values stay in instance config. `U-GST-05` owner-confirmed. Production Mongo seed remains `U-OPS-01` for phase 15
 
 **Developer ops (manual) — confirm each:**
-- [ ] Run `npm run commerce:seed-local-tax-config` against **local** Mongo. The instance-config singleton must already exist. Record `matchedCount` / `modifiedCount` below. Confirm the log shows `taxRate: 18`, `sellerStateCode: "32"`, and the local-test note (not a production GSTIN)
-- [ ] Confirm local `.env` has `PAYMENT_PROVIDER=fake` (add it if missing; `.env.example` already documents the default)
-- [ ] N/A — Razorpay keys, webhook tunnel, admin UI, ezprep-app, production seller/GSTIN (`U-OPS-01`)
+- [x] Run `npm run commerce:seed-local-tax-config` against **local** Mongo. Singleton already existed. First run matchedCount=1 modifiedCount=1 (test placeholder). Re-seed after owner-confirmed seller values: matchedCount=1 modifiedCount=1
+- [x] Local `.env` has `PAYMENT_PROVIDER=fake`
+- [x] N/A — Razorpay adapter, webhook tunnel, admin UI, ezprep-app. Production Mongo seed and live Razorpay keys stay phase 15 (`U-OPS-01`, `U-OPS-02`)
 
-**Seed counts:** pending developer run  
+**Seed counts:** matchedCount=1 modifiedCount=1 (final local row: legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kochi, Kerala / `32`, taxRate 18, SAC `999293`)
 
 **Developer confirmation:**  
-Pending. Do not mark this phase done until the ops above are checked and confirmed.  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-09
 
-**DoD:** pending developer confirmation  
-**Deviations:** HTTP verify is Phase 08 (internal `verifyPayment` / `markOrderPaid` covered by Jest). Public Indian-states route is Phase 10 (checkout resolves `state` from an internal GST code list). Checkout window is 30 minutes. Tax breakdown is stored in paise.  
+**DoD:** met  
+**Deviations:** HTTP verify is Phase 08 (internal `verifyPayment` / `markOrderPaid` covered by Jest). Public Indian-states route is Phase 10 (checkout resolves `state` from an internal GST code list). Checkout window is 30 minutes. Tax breakdown is stored in paise. Local seed uses the owner-confirmed seller identity, not a fake GSTIN.  
 **Regression audit (existing specs):** instance-config specs were not edited and stayed green. `app.module.ts` only registers the new modules. No existing test cases rewritten.  
-**GOLIVE_TODOS touched:** referenced existing `U-GST-05` and `U-OPS-01` (still open)  
-**Next:** developer confirmation, then phase 08
+**GOLIVE_TODOS touched:** `U-GST-05` owner-confirmed. `U-OPS-01` values known, production database seed still phase 15. `U-OPS-02` still open  
+**Next:** phase 08
 
-### 2026-10-09 — Go-live values recorded (does not close phase 07)
+### 2026-10-09 — Go-live values recorded (phase 07 closed the same day)
 
 **Owner confirmed:**
 - GST **18%**, SAC **`999293`**. Editable later by changing instance `taxConfig` and re-seeding (`U-GST-05` owner-confirmed, no CA letter on file).
