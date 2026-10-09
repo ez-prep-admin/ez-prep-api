@@ -9,6 +9,7 @@ import { Model, Types } from 'mongoose';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { assertPaymentTransition } from '../payments/domain/payment-transitions';
+import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { generateOrderNumber } from './domain/generate-order-number';
 import {
@@ -46,6 +47,7 @@ export class OrdersService {
     private readonly paymentModel: Model<PaymentDocument>,
     @Inject(ORDER_PAID_HANDLER)
     private readonly paidHandler: OrderPaidHandler,
+    private readonly provisioning: EntitlementProvisioningService,
   ) {}
 
   async findByIdempotencyKey(key: string): Promise<OrderDocument | null> {
@@ -123,8 +125,10 @@ export class OrdersService {
   }
 
   /**
-   * Moves payment to CAPTURED and order to PAID. Does not grant entitlements.
-   * A repeated PAID signal returns the order and does not call the paid handler.
+   * Moves payment to CAPTURED and order to PAID, then provisions entitlements.
+   * The paid handler runs only on the first transition to PAID.
+   * A later PAID signal does not call the handler. If `provisionedAt` is still
+   * unset, that signal calls provisionForPaidOrder directly.
    */
   async markOrderPaid(
     orderId: string,
@@ -137,6 +141,9 @@ export class OrdersService {
 
     const decision = assertOrderTransition(order.status, OrderStatus.PAID);
     if (decision === 'noop') {
+      if (!order.provisionedAt) {
+        await this.provisioning.provisionForPaidOrder(this.idOf(order));
+      }
       return order;
     }
 

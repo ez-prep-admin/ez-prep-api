@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 08 **done** — next **09** |
+| Current phase | 09 **done** — next **10** |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -71,7 +71,7 @@ Date: YYYY-MM-DD
 | 06 | Admin entitlements UI | **done** | 2026-10-08 | Sharun — grant/revoke UI + local ENFORCED smoke |
 | 07 | Orders + TaxService + FakeGateway | **done** | 2026-10-09 | Sharun — local seller/tax seed + `PAYMENT_PROVIDER=fake` |
 | 08 | Razorpay adapter | **done** | 2026-10-09 | Sharun — test keys in `.env`; webhook URL deferred to phase 14 |
-| 09 | Provisioning + stacking | pending | | Pending: verify access after fake pay |
+| 09 | Provisioning + stacking | **done** | 2026-10-09 | Sharun — fake pay provisions access; ENFORCED start verified; LEGACY restored |
 | 10 | GST invoices | pending | | Pending: local PDF smoke; FY series |
 | 11 | Admin refunds | pending | | Pending: document Zoho credit-note step (U-GST-04) |
 | 12 | Reconciliation + audit | pending | | Pending: recon env flag noted |
@@ -429,3 +429,43 @@ Date: 2026-10-09
 **Regression audit (existing specs):** checkout, fake gateway, and order suites were not rewritten. Registry spec: one existing case retargeted from `razorpay` to `stripe` (structural; razorpay is now a real provider) plus additive razorpay cases. New specs only otherwise.  
 **GOLIVE_TODOS touched:** `U-OPS-02` still open  
 **Next:** phase 09
+
+### 2026-10-09 — Phase 09 — Provisioning and stacking
+
+**Code:** `ez-prep-api` on branch `payment-gateway` (admin and ezprep-app untouched)  
+**Tests:** Jest — stacking window, entitlement provisioning, markOrderPaid repair, existing checkout / webhook / entitlements / access suites — **pass** (76 in `src/entitlements`, `src/access`, `src/orders`, `src/webhooks`); `tsc -p tsconfig.build.json --noEmit` — pass  
+
+**Shipped:**
+- `stackEntitlementWindow` uses the existing UTC calendar-month helper. Lifetime on either side stays lifetime (`expiresAt = null`). A second purchase of the same product starts at the latest future `expiresAt`. `31 Jan + 1M` still overflows to `3 Mar` (same rule as admin grants, R-11). IST is not used here.
+- `EntitlementProvisioningService.provisionForPaidOrder` creates one `PAYMENT` entitlement per order-item grant snapshot. Key: `order:{orderId}:grant:{scopeType}:{scopeId}:v{productVersion}`. Duplicate key is success. `order.provisionedAt` is set only after every grant is inserted or already present. Replay is a no-op.
+- Verify and webhook still share `markOrderPaid`. The paid handler provisions on the first transition to PAID. A later PAID signal does not call the handler again. If `provisionedAt` is still unset, that signal calls `provisionForPaidOrder` directly.
+- No-op `PaidOrderNotifier` after a successful provision. Phase 10 replaces it. No invoice PDF, refunds, or UI.
+- Grants are read from the order snapshot. Live product edits do not change what a paid order grants.
+
+**Repair (no admin HTTP route in this phase):** call `EntitlementProvisioningService.provisionForPaidOrder(orderId)` again for a `PAID` order whose `provisionedAt` is unset. The next webhook `markOrderPaid` does the same. A repeated checkout verify on an already PAID order returns the order and does not re-enter `markOrderPaid`.
+
+**Local ENFORCED smoke (how to verify fake pay grants access):**
+1. Keep `PAYMENT_PROVIDER=fake`. Publish a product whose grant is an exam group (or exam) that covers a paper, with an ACTIVE offer.
+2. Set that paper to `accessMode: ENTITLED`.
+3. Create a checkout order for a user who has no covering entitlement and verify it with the fake provider so the order reaches PAID.
+4. Confirm entitlements exist for that user and `orders.provisionedAt` is set.
+5. In API `.env`, set `ACCESS_ENFORCEMENT_MODE=ENFORCED` and restart.
+6. As that user, `POST /api/v1/mock-test-attempts/start` for the paper → expect success.
+7. Pay a second order for the same product → the new entitlement `startsAt` equals the previous `expiresAt`, and the new `expiresAt` is one preset further out.
+8. Restore `ACCESS_ENFORCEMENT_MODE=LEGACY` and restart.
+
+**Developer ops (manual) — confirm each:**
+- [x] Fake-pay smoke above: PAID order provisions the snapshot grant
+- [x] Local ENFORCED `startAttempt` succeeds for that grant, then restore `LEGACY`
+- [x] Second purchase of the same product extends `expiresAt`
+- [x] N/A — no new env vars, DB scripts, Razorpay tunnel, admin UI, or ezprep-app changes. Invoice PDF stays phase 10. Production keys stay `U-OPS-02`
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-09
+
+**DoD:** met  
+**Deviations:** no Mongo transaction (unique `provisioningKey` + `provisionedAt`). Checkout verify does not retry provisioning after the order is already PAID. `PaidOrderNotifier` is provided by `EntitlementsModule` so orders can import it without a module cycle. Minor admin/app UI polish noticed during smoke is deferred; this phase has no UI scope.  
+**Regression audit (existing specs):** checkout and webhook suites gained an `EntitlementProvisioningService` mock provider (structural; `OrdersService` now depends on it). Existing assertions were not rewritten. New specs: stacking window, provisioning service, markOrderPaid repair.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 10

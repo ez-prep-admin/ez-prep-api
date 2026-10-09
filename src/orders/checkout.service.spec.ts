@@ -13,6 +13,7 @@ import { OfferStatus } from '../common/enums/offer-status.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { ProductStatus } from '../common/enums/product-status.enum';
+import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { Offer } from '../offers/schemas/offer.schema';
 import { FakeGateway } from '../payments/infrastructure/fake/fake.gateway';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
@@ -48,6 +49,7 @@ describe('CheckoutService', () => {
   const productsService = { findDocumentById: jest.fn() };
   const taxService = { calculateForCheckout: jest.fn() };
   const paidHandler = { onOrderPaid: jest.fn() };
+  const provisioning = { provisionForPaidOrder: jest.fn() };
   const registry = { get: jest.fn() };
 
   const offer = {
@@ -104,6 +106,8 @@ describe('CheckoutService', () => {
     product.isDeleted = false;
     paidHandler.onOrderPaid.mockReset();
     paidHandler.onOrderPaid.mockResolvedValue(undefined);
+    provisioning.provisionForPaidOrder.mockReset();
+    provisioning.provisionForPaidOrder.mockResolvedValue(undefined);
     registry.get.mockReset();
     registry.get.mockReturnValue(new FakeGateway());
 
@@ -189,6 +193,7 @@ describe('CheckoutService', () => {
         { provide: TaxService, useValue: taxService },
         { provide: PaymentGatewayRegistry, useValue: registry },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
+        { provide: EntitlementProvisioningService, useValue: provisioning },
       ],
     }).compile();
 

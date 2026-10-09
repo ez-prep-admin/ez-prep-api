@@ -81,10 +81,10 @@ Paid orders without provision flag can be repaired by admin re-run job (document
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Shared provision pipeline
-- [ ] Stacking tested
-- [ ] Snapshot-based grants verified
+- [x] `STATUS.md` updated with ops + **developer confirmation**
+- [x] Shared provision pipeline
+- [x] Stacking tested
+- [x] Snapshot-based grants verified
 
 
 ## STATUS.md update (mandatory)

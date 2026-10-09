@@ -12,6 +12,7 @@ import { join } from 'path';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { WebhookEventStatus } from '../common/enums/webhook-event-status.enum';
+import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { ORDER_PAID_HANDLER } from '../orders/domain/order-paid-handler';
 import { OrdersService } from '../orders/orders.service';
 import { Order } from '../orders/schemas/order.schema';
@@ -49,6 +50,7 @@ describe('RazorpayWebhookService', () => {
   const payments: Array<Record<string, any>> = [];
   const events: Array<Record<string, any>> = [];
   const paidHandler = { onOrderPaid: jest.fn() };
+  const provisioning = { provisionForPaidOrder: jest.fn() };
 
   const orderModel = { findOne: jest.fn(), findById: jest.fn() };
   const paymentModel = { findOne: jest.fn(), create: jest.fn() };
@@ -63,6 +65,8 @@ describe('RazorpayWebhookService', () => {
     events.length = 0;
     paidHandler.onOrderPaid.mockReset();
     paidHandler.onOrderPaid.mockResolvedValue(undefined);
+    provisioning.provisionForPaidOrder.mockReset();
+    provisioning.provisionForPaidOrder.mockResolvedValue(undefined);
 
     orderModel.findOne.mockImplementation(
       (filter: Record<string, unknown>) => ({
@@ -135,6 +139,7 @@ describe('RazorpayWebhookService', () => {
           useValue: { createOrder: jest.fn() },
         },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
+        { provide: EntitlementProvisioningService, useValue: provisioning },
       ],
     }).compile();
 

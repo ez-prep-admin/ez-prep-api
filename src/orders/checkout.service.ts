@@ -99,7 +99,7 @@ export class CheckoutService {
 
   /**
    * Verify a provider payload and mark the order paid.
-   * Does not provision entitlements (phase 09).
+   * The first transition to PAID provisions entitlements through the paid handler.
    */
   async verifyPayment(
     userId: string,

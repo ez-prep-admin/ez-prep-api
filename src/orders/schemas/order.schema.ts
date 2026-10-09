@@ -164,6 +164,13 @@ export class Order {
   @Prop({ type: Date })
   paidAt?: Date;
 
+  /**
+   * Set after snapshot grants have been provisioned.
+   * Unset on a PAID order means repair is still required.
+   */
+  @Prop({ type: Date })
+  provisionedAt?: Date;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

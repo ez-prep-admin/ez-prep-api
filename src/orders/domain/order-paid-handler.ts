@@ -6,7 +6,7 @@ export interface OrderPaidEvent {
 
 /**
  * Called after an order first reaches PAID.
- * Phase 07 ships a no-op. Phase 09 replaces it with entitlement provisioning.
+ * Provisions entitlements from the order snapshot.
  */
 export interface OrderPaidHandler {
   onOrderPaid(event: OrderPaidEvent): Promise<void>;
