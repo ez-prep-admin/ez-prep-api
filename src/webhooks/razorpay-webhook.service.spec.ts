@@ -26,6 +26,7 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { RefundsService } from '../refunds/refunds.service';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import { WebhookEvent } from './schemas/webhook-event.schema';
+import { WebhookDeliveryStat } from './schemas/webhook-delivery-stat.schema';
 import { memoryFindOneAndUpdate } from '../orders/testing/memory-documents';
 
 const WEBHOOK_SECRET = 'test_webhook_secret';
@@ -76,6 +77,17 @@ describe('RazorpayWebhookService', () => {
     findOneAndUpdate: jest.fn(),
   };
   const webhookModel = { create: jest.fn(), findOne: jest.fn() };
+  const deliveryStats = { updateOne: jest.fn().mockResolvedValue({}) };
+  const razorpayClient = {
+    createOrder: jest.fn(),
+    fetchOrder: jest.fn(),
+  };
+  const commerceSettings: Record<string, unknown> = {
+    paymentProvider: 'razorpay',
+    nodeEnv: 'test',
+    instanceId: '',
+    webhookRetryWindowMinutes: 30,
+  };
 
   let service: RazorpayWebhookService;
   let ordersService: OrdersService;
@@ -90,6 +102,10 @@ describe('RazorpayWebhookService', () => {
     provisioning.provisionForPaidOrder.mockResolvedValue(undefined);
     refunds.settleProcessed.mockReset();
     refunds.settleFailed.mockReset();
+    razorpayClient.fetchOrder.mockReset();
+    razorpayClient.fetchOrder.mockRejectedValue(new Error('provider down'));
+    commerceSettings.instanceId = '';
+    deliveryStats.updateOne.mockClear();
 
     orderModel.findOne.mockImplementation(
       (filter: Record<string, unknown>) => ({
@@ -167,18 +183,20 @@ describe('RazorpayWebhookService', () => {
         FakeGateway,
         RazorpayGateway,
         { provide: getModelToken(WebhookEvent.name), useValue: webhookModel },
+        {
+          provide: getModelToken(WebhookDeliveryStat.name),
+          useValue: deliveryStats,
+        },
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: ConfigService, useValue: config },
         {
           provide: CommerceConfigService,
-          useValue: {
-            settings: { paymentProvider: 'razorpay', nodeEnv: 'test' },
-          },
+          useValue: { settings: commerceSettings },
         },
         {
           provide: RAZORPAY_ORDERS_CLIENT,
-          useValue: { createOrder: jest.fn() },
+          useValue: razorpayClient,
         },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
         { provide: EntitlementProvisioningService, useValue: provisioning },
@@ -306,6 +324,55 @@ describe('RazorpayWebhookService', () => {
     ).rejects.toBeInstanceOf(InternalServerErrorException);
     expect(events[0].status).toBe(WebhookEventStatus.FAILED);
     expect(paidHandler.onOrderPaid).not.toHaveBeenCalled();
+  });
+
+  it('stops retrying a missing order after the webhook window', async () => {
+    await expect(
+      deliver('payment-captured.json', 'evt_window'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    events[0].receivedAt = new Date(Date.now() - 31 * 60 * 1000);
+
+    const later = await deliver('payment-captured.json', 'evt_window');
+
+    expect(later.status).toBe(WebhookEventStatus.FAILED);
+    expect(paidHandler.onOrderPaid).not.toHaveBeenCalled();
+  });
+
+  it('ignores a payment whose provider order has no notes', async () => {
+    razorpayClient.fetchOrder.mockResolvedValue({
+      id: 'order_test_1',
+      notes: {},
+    });
+
+    const result = await deliver('payment-captured.json', 'evt_foreign');
+
+    expect(result.status).toBe(WebhookEventStatus.IGNORED);
+    expect(events[0].error).toBe('foreign_payment');
+    expect(paidHandler.onOrderPaid).not.toHaveBeenCalled();
+  });
+
+  it('ignores another instance without reading orders', async () => {
+    commerceSettings.instanceId = 'this-instance';
+    const payload = JSON.parse(fixture('payment-captured.json').toString());
+    payload.payload.payment.entity.notes = {
+      instanceId: 'other-instance',
+      orderId: new Types.ObjectId().toHexString(),
+    };
+    const rawBody = Buffer.from(JSON.stringify(payload));
+    orderModel.findOne.mockClear();
+
+    const result = await service.handle({
+      rawBody,
+      headers: {
+        'x-razorpay-signature': sign(rawBody),
+        'x-razorpay-event-id': 'evt_other',
+      },
+    });
+
+    expect(result.status).toBe(WebhookEventStatus.IGNORED);
+    expect(events[0].error).toBe('other_instance');
+    expect(orderModel.findOne).not.toHaveBeenCalled();
+    expect(razorpayClient.fetchOrder).not.toHaveBeenCalled();
   });
 
   it('does not call the paid handler again when verify already paid the order', async () => {

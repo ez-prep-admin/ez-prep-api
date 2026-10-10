@@ -64,14 +64,24 @@ function valueMatches(actual: unknown, expected: unknown): boolean {
     if ('$in' in ops && Array.isArray(ops.$in)) {
       return ops.$in.some(value => same(actual, value));
     }
-    if ('$lt' in ops) {
-      if (actual == null || ops.$lt == null) {
+    if ('$lt' in ops || '$lte' in ops || '$gt' in ops || '$gte' in ops) {
+      if (actual == null) {
         return false;
       }
-      return (
-        new Date(actual as string).getTime() <
-        new Date(ops.$lt as string).getTime()
-      );
+      const actualMs = new Date(actual as string).getTime();
+      if ('$lt' in ops && ops.$lt != null) {
+        if (!(actualMs < new Date(ops.$lt as string).getTime())) return false;
+      }
+      if ('$lte' in ops && ops.$lte != null) {
+        if (!(actualMs <= new Date(ops.$lte as string).getTime())) return false;
+      }
+      if ('$gt' in ops && ops.$gt != null) {
+        if (!(actualMs > new Date(ops.$gt as string).getTime())) return false;
+      }
+      if ('$gte' in ops && ops.$gte != null) {
+        if (!(actualMs >= new Date(ops.$gte as string).getTime())) return false;
+      }
+      return true;
     }
     if ('$exists' in ops) {
       const exists = actual !== undefined && actual !== null;

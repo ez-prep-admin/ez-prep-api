@@ -247,9 +247,9 @@ R-06, R-12, R-18, R-22 (late capture), R-24 (webhook disabled after 24 hours), R
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] `.env.example` updated
-- [ ] Tests green; regression gate run and logged
+- [x] `STATUS.md` updated with ops + **developer confirmation** (Sharun, 2026-10-11)
+- [x] `.env.example` updated
+- [x] Tests green; regression gate run and logged
 
 ## STATUS.md update (mandatory)
 

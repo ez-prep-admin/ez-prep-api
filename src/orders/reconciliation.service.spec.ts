@@ -15,7 +15,12 @@ import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { ReconciliationService } from './reconciliation.service';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
-import { memoryFindOneAndUpdate } from './testing/memory-documents';
+import { RepairSweepsService } from './repair-sweeps.service';
+import { CommerceHealthService } from '../commerce-health/commerce-health.service';
+import {
+  memoryFindOneAndUpdate,
+  matchesFilter,
+} from './testing/memory-documents';
 
 describe('ReconciliationService', () => {
   const orders: Array<Record<string, any>> = [];
@@ -50,19 +55,14 @@ describe('ReconciliationService', () => {
     razorpay.fetchOrderStatus.mockReset();
     configValues.RECONCILIATION_MIN_AGE_MINUTES = '60';
 
-    orderModel.find.mockImplementation((query: Record<string, any>) => ({
+    orderModel.find.mockImplementation((query: Record<string, unknown>) => ({
       sort() {
         return this;
       },
       limit() {
         return this;
       },
-      exec: async () =>
-        orders.filter(
-          order =>
-            order.status === query.status &&
-            order.createdAt.getTime() < query.createdAt.$lt.getTime(),
-        ),
+      exec: async () => orders.filter(order => matchesFilter(order, query)),
     }));
     orderModel.findById.mockImplementation((id: string) => ({
       exec: async () =>
@@ -104,6 +104,14 @@ describe('ReconciliationService', () => {
         {
           provide: CommerceAuditService,
           useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: RepairSweepsService,
+          useValue: { sweep: jest.fn().mockResolvedValue({ examined: 0 }) },
+        },
+        {
+          provide: CommerceHealthService,
+          useValue: { degradedTick: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

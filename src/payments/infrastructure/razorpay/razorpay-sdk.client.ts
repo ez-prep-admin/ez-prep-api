@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import Razorpay from 'razorpay';
+import { ProviderRefundRejectedError } from '../../domain/payment-gateway';
 import {
   RazorpayCreatedOrder,
   RazorpayFetchedOrder,
@@ -75,17 +76,61 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
         status: refund.status,
       };
     } catch (error) {
-      if (error instanceof BadGatewayException) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof ProviderRefundRejectedError
+      ) {
         throw error;
       }
       const description = razorpayErrorDescription(error);
+      const code = Number(statusCodeOf(error));
       this.logger.warn(
         `Razorpay refund failed (status ${statusCodeOf(error)}): ${description ?? 'no description'}`,
       );
+      if (code >= 400 && code < 500) {
+        throw new ProviderRefundRejectedError(
+          description ?? 'Payment provider rejected the refund',
+        );
+      }
       const balance = await this.availableBalancePaise();
       throw new BadGatewayException(
         refundFailureMessage(description, input.amount, balance),
       );
+    }
+  }
+
+  async listPaymentRefunds(paymentId: string): Promise<RazorpayRefundResult[]> {
+    const id = paymentId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider payment id');
+    }
+    try {
+      const result = await (
+        this.sdk().payments as unknown as {
+          fetchMultipleRefund: (paymentId: string) => Promise<{
+            items?: Array<{
+              id: string;
+              amount: number | string;
+              currency: string;
+              status: string;
+            }>;
+          }>;
+        }
+      ).fetchMultipleRefund(id);
+      return (result.items ?? []).map(refund => ({
+        id: refund.id,
+        amount: integerAmount(refund.amount),
+        currency: refund.currency,
+        status: refund.status,
+      }));
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay refund list failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
     }
   }
 

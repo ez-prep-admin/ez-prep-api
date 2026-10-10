@@ -3,6 +3,7 @@ import {
   Get,
   Header,
   Param,
+  Query,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
@@ -34,11 +35,15 @@ export class AdminInvoicesController {
 
   @Get()
   @ApiOperation({ summary: 'List tax invoices (Admin)' })
-  async list() {
-    const data = await this.invoiceService.listForAdmin();
+  async list(@Query('page') page?: string, @Query('limit') limit?: string) {
+    const result = await this.invoiceService.listForAdmin({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
     return {
       message: 'Invoices retrieved successfully',
-      data,
+      data: result.data,
+      meta: result.meta,
     };
   }
 

@@ -5,9 +5,11 @@ import {
   CreatePaymentOrderInput,
   FetchedProviderPayment,
   NormalizedPaymentEvent,
+  FetchedOrderPayment,
   PaymentGateway,
   PaymentVerificationResult,
   ProviderOrder,
+  ProviderOrderNotes,
   ProviderRefund,
   ProviderWebhookInput,
   RefundInput,
@@ -18,6 +20,9 @@ import {
 export class FakeGateway implements PaymentGateway {
   readonly provider = 'fake';
   private readonly stagedStatus = new Map<string, NormalizedPaymentEvent>();
+  private readonly stagedPayments = new Map<string, FetchedOrderPayment[]>();
+  private readonly stagedRefunds = new Map<string, ProviderRefund[]>();
+  private readonly stagedNotes = new Map<string, ProviderOrderNotes>();
 
   /**
    * Test hook. Unstaged ids report IGNORED so reconciliation expires them.
@@ -157,6 +162,37 @@ export class FakeGateway implements PaymentGateway {
       amount: 0,
       currency: 'INR',
     };
+  }
+
+  stageOrderPayments(
+    providerOrderId: string,
+    payments: FetchedOrderPayment[],
+  ): void {
+    this.stagedPayments.set(providerOrderId, payments);
+  }
+
+  stageRefunds(providerPaymentId: string, refunds: ProviderRefund[]): void {
+    this.stagedRefunds.set(providerPaymentId, refunds);
+  }
+
+  stageOrderNotes(providerOrderId: string, notes: ProviderOrderNotes): void {
+    this.stagedNotes.set(providerOrderId, notes);
+  }
+
+  async fetchOrderPayments(
+    providerOrderId: string,
+  ): Promise<FetchedOrderPayment[]> {
+    return this.stagedPayments.get(providerOrderId) ?? [];
+  }
+
+  async listRefunds(providerPaymentId: string): Promise<ProviderRefund[]> {
+    return this.stagedRefunds.get(providerPaymentId) ?? [];
+  }
+
+  async fetchProviderOrderNotes(
+    providerOrderId: string,
+  ): Promise<ProviderOrderNotes> {
+    return this.stagedNotes.get(providerOrderId) ?? {};
   }
 
   async refund(input: RefundInput): Promise<ProviderRefund> {

@@ -36,10 +36,10 @@ export function buildProvisioningKey(input: {
 /**
  * Grants entitlements from a paid order's item snapshots.
  * Safe to call again: unique provisioning keys and `order.provisionedAt`
- * keep a replay from inserting a second set. The paid notifier runs before
- * `provisionedAt` is saved. If it throws, the next paid signal retries.
- * Repair a PAID order whose `provisionedAt` is still unset by calling this
- * method again. There is no admin HTTP route for that in this phase.
+ * keep a replay from inserting a second set.
+ * Grants are inserted, then `provisionedAt` is saved. The invoice notifier
+ * runs after that and must not throw into verify or the webhook. A missing
+ * invoice is repaired by the sweep.
  */
 @Injectable()
 export class EntitlementProvisioningService {
@@ -116,10 +116,20 @@ export class EntitlementProvisioningService {
       });
     }
 
-    await this.paidOrderNotifier.onOrderProvisioned(canonicalOrderId);
-
     order.provisionedAt = new Date();
+    const paidAt = order.paidAt ?? order.provisionedAt;
+    order.nextRepairAt = new Date(paidAt.getTime() + 2 * 60 * 1000);
     await order.save();
+
+    try {
+      await this.paidOrderNotifier.onOrderProvisioned(canonicalOrderId);
+    } catch (error) {
+      this.logger.warn(
+        `Invoice schedule failed for order ${canonicalOrderId}: ${
+          error instanceof Error ? error.message : 'unexpected error'
+        }`,
+      );
+    }
 
     await this.commerceAuditService.log({
       actorUserId: String(order.userId),

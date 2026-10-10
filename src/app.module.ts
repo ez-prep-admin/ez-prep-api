@@ -38,6 +38,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { TaxModule } from './tax/tax.module';
 import { PaymentsModule } from './payments/payments.module';
 import { OrdersModule } from './orders/orders.module';
+import { CommerceHealthModule } from './commerce-health/commerce-health.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { MetaModule } from './meta/meta.module';
@@ -134,6 +135,7 @@ const observeRootModule = createObserveRootModule();
     TaxModule,
     PaymentsModule,
     OrdersModule,
+    CommerceHealthModule,
     WebhooksModule,
     InvoicesModule,
     RefundsModule,

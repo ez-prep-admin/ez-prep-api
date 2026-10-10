@@ -205,6 +205,28 @@ export class Order {
   @Prop({ type: Boolean })
   redundantPurchase?: boolean;
 
+  /** Next pending reconciliation or late-capture check. */
+  @Prop({ type: Date })
+  nextReconAt?: Date;
+
+  @Prop({ type: Number })
+  reconAttempts?: number;
+
+  /** Pending reconciliation stopped after the attempt cap. */
+  @Prop({ type: Boolean })
+  needsReview?: boolean;
+
+  /** Late-capture watch ends at this instant. Unset when the order never opened a provider order. */
+  @Prop({ type: Date })
+  lateWatchUntil?: Date;
+
+  /** Next repair sweep attempt. Cleared when provisioning and the invoice are in place. */
+  @Prop({ type: Date })
+  nextRepairAt?: Date;
+
+  @Prop({ type: Number })
+  repairAttempts?: number;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -216,6 +238,7 @@ OrderSchema.index({ idempotencyKey: 1 }, { unique: true });
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ userId: 1, status: 1, createdAt: 1 });
 OrderSchema.index({ status: 1, createdAt: 1 });
+OrderSchema.index({ status: 1, nextReconAt: 1 });
 OrderSchema.index({ providerOrderId: 1 });
 
 OrderSchema.virtual('id').get(function () {

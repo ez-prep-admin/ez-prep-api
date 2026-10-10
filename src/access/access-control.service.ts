@@ -141,6 +141,8 @@ export class AccessControlService {
     );
 
     const mode = this.getEnforcementMode();
+    let legacyAllow = 0;
+    let entitlementRequired = 0;
 
     for (const paper of pending) {
       const mockMatch = entitlements.some(
@@ -201,7 +203,8 @@ export class AccessControlService {
       }
 
       if (mode === AccessEnforcementMode.LEGACY) {
-        this.logger.warn(
+        legacyAllow += 1;
+        this.logger.debug(
           `LEGACY_ALLOW userId=${userId} mockTestId=${paper.id}`,
         );
         result.set(paper.id, {
@@ -212,7 +215,8 @@ export class AccessControlService {
         continue;
       }
 
-      this.logger.warn(
+      entitlementRequired += 1;
+      this.logger.debug(
         `ENTITLEMENT_REQUIRED mockTestId=${paper.id} reason=${AccessDecisionReason.ENTITLEMENT_REQUIRED}`,
       );
       result.set(paper.id, {
@@ -220,6 +224,12 @@ export class AccessControlService {
         reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
         accessMode: AccessMode.ENTITLED,
       });
+    }
+
+    if (legacyAllow > 0 || entitlementRequired > 0) {
+      this.logger.log(
+        `Access list summary legacyAllow=${legacyAllow} entitlementRequired=${entitlementRequired}`,
+      );
     }
 
     return result;

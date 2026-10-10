@@ -6,6 +6,10 @@ import { RefundsModule } from '../refunds/refunds.module';
 import { RazorpayWebhookController } from './razorpay-webhook.controller';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import {
+  WebhookDeliveryStat,
+  WebhookDeliveryStatSchema,
+} from './schemas/webhook-delivery-stat.schema';
+import {
   WebhookEvent,
   WebhookEventSchema,
 } from './schemas/webhook-event.schema';
@@ -14,6 +18,7 @@ import {
   imports: [
     MongooseModule.forFeature([
       { name: WebhookEvent.name, schema: WebhookEventSchema },
+      { name: WebhookDeliveryStat.name, schema: WebhookDeliveryStatSchema },
     ]),
     PaymentsModule,
     OrdersModule,

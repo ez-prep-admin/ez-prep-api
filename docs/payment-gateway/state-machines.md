@@ -45,6 +45,7 @@ PAID ──► REFUNDED   (full refund completed)
 | --- | --- | --- |
 | (new) | CREATED | Order row inserted |
 | CREATED | PENDING_PAYMENT | Provider order created |
+| CREATED | EXPIRED | Checkout abandoned past `expiresAt` before a provider order existed |
 | PENDING_PAYMENT | PAID | Verified capture (verify or webhook) |
 | PENDING_PAYMENT | FAILED | Terminal provider failure |
 | PENDING_PAYMENT | EXPIRED | TTL / reconciliation |

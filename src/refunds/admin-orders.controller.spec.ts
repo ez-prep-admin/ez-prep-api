@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
 import { AdminOrdersController } from './admin-orders.controller';
+import { RepairSweepsService } from '../orders/repair-sweeps.service';
 import { RefundsService } from './refunds.service';
 
 describe('AdminOrdersController', () => {
@@ -19,7 +20,10 @@ describe('AdminOrdersController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AdminOrdersController],
-      providers: [{ provide: RefundsService, useValue: service }],
+      providers: [
+        { provide: RefundsService, useValue: service },
+        { provide: RepairSweepsService, useValue: { repairOrder: jest.fn() } },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })

@@ -17,6 +17,11 @@ export type CommerceSettings = {
   accessModeWarning?: string;
   trustProxyHops: number;
   maxOpenOrdersPerUser: number;
+  webhookRetryWindowMinutes: number;
+  lateCaptureWatchHours: number;
+  reconciliationBatch: number;
+  reconciliationMaxAttempts: number;
+  refundUnknownWindowMinutes: number;
 };
 
 type EnvSource = {
@@ -52,6 +57,23 @@ export function parseCommerceSettings(env: EnvSource): CommerceSettings {
     accessModeWarning: parsed.warning,
     trustProxyHops: nonNegativeInt(env.get('TRUST_PROXY_HOPS'), 0),
     maxOpenOrdersPerUser: positiveInt(env.get('MAX_OPEN_ORDERS_PER_USER'), 3),
+    webhookRetryWindowMinutes: nonNegativeInt(
+      env.get('WEBHOOK_RETRY_WINDOW_MINUTES'),
+      30,
+    ),
+    lateCaptureWatchHours: nonNegativeInt(
+      env.get('LATE_CAPTURE_WATCH_HOURS'),
+      72,
+    ),
+    reconciliationBatch: positiveInt(env.get('RECONCILIATION_BATCH'), 50),
+    reconciliationMaxAttempts: positiveInt(
+      env.get('RECONCILIATION_MAX_ATTEMPTS'),
+      12,
+    ),
+    refundUnknownWindowMinutes: nonNegativeInt(
+      env.get('REFUND_UNKNOWN_WINDOW_MINUTES'),
+      60,
+    ),
   };
 }
 

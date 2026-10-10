@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14C **pending** — phase 14B closed 2026-10-11. Ad-hoc order continues 14C → 14D, before phase 15 |
+| Current phase | 14D **pending** — phase 14C closed 2026-10-11. Ad-hoc order continues 14D, before phase 15 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -80,7 +80,7 @@ Date: YYYY-MM-DD
 | 14A | Fail-closed config + catalog integrity (ad-hoc) | **done** | 2026-10-10 | Sharun — production boot guard, frozen grants, re-anchor, and lifetime block verified locally |
 | 14E | GST, seller identity, per-instance commerce (ad-hoc) | **done** | 2026-10-10 | Sharun — local seed applied (`Kerala`); PDF and ExamFlex invoice smoke stay phase 16 |
 | 14B | Payment state integrity (ad-hoc) | **done** | 2026-10-11 | Sharun — local indexes, Razorpay notes, automatic capture, late pay, second method, and double-click |
-| 14C | Webhook, refund, repair robustness (ad-hoc) | pending | | PR-02 watch, 05, 06, 08, 09, 13, 14, 19, 21, 22, 33, 34, 37, 38; D-22, D-25, D-28 |
+| 14C | Webhook, refund, repair robustness (ad-hoc) | **done** | 2026-10-11 | Sharun — local tick, dashboard refund, health webhook block, S3 restore, wrong secret, defaults restored |
 | 14D | Checkout client + admin ops (ad-hoc) | pending | | PR-08 action, 11, 16 UI, 17 client, 19 page, 24, 28, 39 |
 | 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
@@ -830,3 +830,27 @@ Date: 2026-10-11
 **Deviations:** Pending capture is HTTP 200 with `confirmation: 'PENDING_CAPTURE'`, matching the behavior table. The task list's "202 path" was not implemented. Webhook retry, notes lookup, and other-instance ignore stay in 14C. The capture path passes `proof: WEBHOOK` only. A crash between the order write and provisioning is still repaired in 14C, not by a multi-document transaction.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 14C
+
+### 2026-10-11 — Phase 14C — Webhook, refund, and repair
+
+**Code:** ez-prep-api working tree. No commit. App and admin were not changed.
+
+**Tests:** API Jest 197 suites / 1588 tests passed. Commerce e2e 6 suites / 13 tests passed. `tsc -p tsconfig.build.json --noEmit` passed. ESLint on the touched files passed.
+
+**Developer ops (manual) — confirm each:**
+- [x] Run one local tick with `RECONCILIATION_MIN_AGE_MINUTES=0` and confirm the sweep summary in the logs.
+- [x] Do one dashboard refund in Razorpay test mode.
+- [x] Check that health shows the webhook block.
+- [x] Restore the defaults.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above and this phase may be marked done.  
+Date: 2026-10-11
+
+**DoD:** met
+
+**Deviations:** Pending capture stays HTTP 200 with `confirmation: 'PENDING_CAPTURE'` from 14B. `other_instance` still writes a webhook event row and does not read orders, payments, or the provider. `webhookSilentWhilePaid` is derived from a paid order in the last 6 hours and no `PROCESSED` webhook in that window. System and provider refund audits omit `actorUserId`. A partial dashboard refund is stored and does not revoke. Repair backoff stays at 60 minutes and does not stop. Intentional harness updates: a provider refund transport error stays `INITIATED` with `outcomeUnknownAt`; invoice notification failure still sets `provisionedAt`; `issuedAt` is `paidAt`.
+
+**GOLIVE_TODOS touched:** none
+
+**Next:** phase 14D

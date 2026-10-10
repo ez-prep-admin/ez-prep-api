@@ -113,7 +113,10 @@ export class InvoiceService {
 
     const identity = await this.readCommerceIdentity();
     await this.assertSellerStateMatches(order, identity.seller.stateCode);
-    const issuedAt = new Date();
+    if (!order.paidAt) {
+      throw new BadRequestException('Order has no payment date');
+    }
+    const issuedAt = order.paidAt;
     const invoice = await this.insertInvoice(order, identity, issuedAt);
     await this.ensurePdf(invoice);
     await this.commerceAuditService.log({
@@ -146,9 +149,61 @@ export class InvoiceService {
     return rows.map(row => this.toSummary(row));
   }
 
-  async listForAdmin(): Promise<InvoiceSummary[]> {
-    const rows = await this.invoiceModel.find().sort({ issuedAt: -1 }).exec();
-    return rows.map(row => this.toSummary(row));
+  async listForAdmin(options?: { page?: number; limit?: number }): Promise<{
+    data: InvoiceSummary[];
+    meta: { page: number; limit: number; total: number };
+  }> {
+    const page = positivePage(options?.page, 1);
+    const limit = Math.min(positivePage(options?.limit, 50), 100);
+    const filter = {};
+    const [rows, total] = await Promise.all([
+      this.invoiceModel
+        .find(filter)
+        .sort({ issuedAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .exec(),
+      this.invoiceModel.countDocuments(filter).exec(),
+    ]);
+    return {
+      data: rows.map(row => this.toSummary(row)),
+      meta: { page, limit, total },
+    };
+  }
+
+  async distinctOrderIds(): Promise<Types.ObjectId[]> {
+    return this.invoiceModel.distinct('orderId').exec();
+  }
+
+  async repairState(
+    orderId: string,
+  ): Promise<'missing' | 'needs-pdf' | 'ready'> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      return 'missing';
+    }
+    const invoice = await this.invoiceModel
+      .findOne({ orderId: new Types.ObjectId(orderId) })
+      .exec();
+    if (!invoice) {
+      return 'missing';
+    }
+    if (!invoice.pdfStorageKey) {
+      return 'needs-pdf';
+    }
+    return 'ready';
+  }
+
+  async ensureStoredPdf(orderId: string): Promise<void> {
+    if (!Types.ObjectId.isValid(orderId)) {
+      return;
+    }
+    const invoice = await this.invoiceModel
+      .findOne({ orderId: new Types.ObjectId(orderId) })
+      .exec();
+    if (!invoice) {
+      return;
+    }
+    await this.ensurePdf(invoice);
   }
 
   async findByOrderId(orderId: string): Promise<InvoiceSummary | null> {
@@ -430,6 +485,13 @@ type CommerceIdentity = {
   sacDescription: string;
   invoiceSeriesPrefix: string;
 };
+
+function positivePage(value: number | undefined, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    return fallback;
+  }
+  return value;
+}
 
 function toPdfModel(invoice: TaxInvoice): TaxInvoicePdfModel {
   return {

@@ -36,10 +36,14 @@ describe('AdminInvoicesController', () => {
   });
 
   it('lists invoices', async () => {
-    invoices.listForAdmin.mockResolvedValue([]);
+    invoices.listForAdmin.mockResolvedValue({
+      data: [],
+      meta: { page: 1, limit: 50, total: 0 },
+    });
     await expect(controller.list()).resolves.toEqual({
       message: 'Invoices retrieved successfully',
       data: [],
+      meta: { page: 1, limit: 50, total: 0 },
     });
   });
 

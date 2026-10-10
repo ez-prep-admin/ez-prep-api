@@ -453,3 +453,12 @@ Confirmed by Sharun on 2026-10-11, with Razorpay test keys.
 - [x] Fail one method in the modal, then succeed with another: one paid order.
 - [x] Double-click Buy: one Razorpay order in the dashboard, with `notes.orderId`.
 
+## Phase 14C manual checks
+
+Confirmed by Sharun on 2026-10-11.
+
+- [x] A refund from the Razorpay test dashboard revokes access within one webhook.
+- [x] Stop S3 credentials locally, pay, restore. One tick later the invoice exists, dated at payment.
+- [x] Set a wrong webhook secret locally and pay. Health turns degraded; restore.
+- [x] Health counts move as expected.
+

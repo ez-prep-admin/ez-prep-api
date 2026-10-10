@@ -17,6 +17,8 @@ export class RefundReconciliationScheduler
 {
   private readonly logger = new Logger(RefundReconciliationScheduler.name);
   private timer?: ReturnType<typeof setInterval>;
+  private running = false;
+  private interval = 0;
 
   constructor(
     private readonly configService: ConfigService,
@@ -27,28 +29,44 @@ export class RefundReconciliationScheduler
   onModuleInit(): void {
     const settings = this.commerceConfig.settings;
     if (!settings.commerceEnabled || !settings.reconciliationEnabled) {
-      this.logger.log('Refund reconciliation is disabled');
       return;
     }
 
     const intervalMs = this.intervalMs();
+    this.interval = intervalMs;
     this.timer = setInterval(() => {
-      void this.refundsService.reconcileInitiatedRefunds().catch(error => {
-        this.logger.warn(
-          `Refund reconciliation pass failed: ${
-            error instanceof Error ? error.message : 'unexpected error'
-          }`,
-        );
-      });
+      void this.runOnce();
     }, intervalMs);
     this.timer.unref?.();
-    this.logger.log(`Refund reconciliation every ${intervalMs}ms`);
   }
 
   onModuleDestroy(): void {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
+    }
+  }
+
+  private async runOnce(): Promise<void> {
+    if (this.running) {
+      return;
+    }
+    this.running = true;
+    const started = Date.now();
+    try {
+      await this.refundsService.reconcileInitiatedRefunds();
+    } catch (error) {
+      this.logger.warn(
+        `Refund reconciliation pass failed: ${
+          error instanceof Error ? error.message : 'unexpected error'
+        }`,
+      );
+    } finally {
+      const elapsed = Date.now() - started;
+      if (this.interval > 0 && elapsed > this.interval / 2) {
+        this.logger.warn(`Refund reconciliation pass took ${elapsed}ms`);
+      }
+      this.running = false;
     }
   }
 

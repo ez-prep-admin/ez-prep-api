@@ -39,5 +39,6 @@ export function createRazorpayStub(): RazorpayOrdersClient & {
       currency: 'INR',
       status: 'pending',
     })),
+    listPaymentRefunds: jest.fn(async () => []),
   };
 }

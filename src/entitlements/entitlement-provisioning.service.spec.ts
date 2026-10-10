@@ -449,7 +449,7 @@ describe('EntitlementProvisioningService', () => {
     expect(notifier.onOrderProvisioned).not.toHaveBeenCalled();
   });
 
-  it('leaves provisionedAt unset when invoice notification fails', async () => {
+  it('sets provisionedAt when invoice notification fails', async () => {
     notifier.onOrderProvisioned.mockRejectedValueOnce(
       new Error('invoice failed'),
     );
@@ -462,13 +462,10 @@ describe('EntitlementProvisioningService', () => {
       ]),
     ]);
 
-    await expect(
-      service.provisionForPaidOrder(String(current._id)),
-    ).rejects.toThrow('invoice failed');
+    await service.provisionForPaidOrder(String(current._id));
 
-    expect(current.provisionedAt).toBeUndefined();
-    expect(current.save).not.toHaveBeenCalled();
-    expect(audit.log).not.toHaveBeenCalled();
+    expect(current.provisionedAt).toBeInstanceOf(Date);
+    expect(current.save).toHaveBeenCalled();
     expect(notifier.onOrderProvisioned).toHaveBeenCalledTimes(1);
   });
 

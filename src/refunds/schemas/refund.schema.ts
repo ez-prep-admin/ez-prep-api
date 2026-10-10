@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { RefundStatus } from '../../common/enums/refund-status.enum';
+import { RefundInitiatedBySource } from '../domain/refund-initiated-by-source.enum';
 import { RefundKind } from '../domain/refund-kind.enum';
 
 export type RefundDocument = Refund & Document;
@@ -17,7 +18,7 @@ export class Refund {
   @Prop({ type: Types.ObjectId, ref: 'Payment', required: true })
   paymentId: Types.ObjectId;
 
-  /** ORDER refunds the purchase. DUPLICATE_CAPTURE is reserved for phase 14C. */
+  /** ORDER refunds the purchase. DUPLICATE_CAPTURE refunds a second capture only. */
   @Prop({
     type: String,
     enum: Object.values(RefundKind),
@@ -49,8 +50,25 @@ export class Refund {
   @Prop({ required: true, trim: true })
   reason: string;
 
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  initiatedBy: Types.ObjectId;
+  @Prop({
+    type: String,
+    enum: Object.values(RefundInitiatedBySource),
+    required: true,
+    default: RefundInitiatedBySource.ADMIN,
+  })
+  initiatedBySource: RefundInitiatedBySource;
+
+  /** Required for ADMIN refunds. Omitted for system and provider refunds. */
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  initiatedBy?: Types.ObjectId;
+
+  /** Set when the provider create timed out or returned 5xx. */
+  @Prop({ type: Date })
+  outcomeUnknownAt?: Date;
+
+  /** Dashboard refund for less than the captured amount. Does not revoke access. */
+  @Prop({ type: Boolean })
+  partial?: boolean;
 
   createdAt?: Date;
   updatedAt?: Date;

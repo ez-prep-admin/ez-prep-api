@@ -20,6 +20,7 @@ import { PaymentRole } from '../payments/domain/payment-role.enum';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { CaptureProof } from './domain/capture-proof';
+import { initialLateWatch } from './late-capture-watch';
 import { compareAndSet } from './domain/compare-and-set';
 import { generateOrderNumber } from './domain/generate-order-number';
 import {
@@ -425,6 +426,145 @@ export class OrdersService {
     throw new IllegalOrderTransitionError(order.status, OrderStatus.REFUNDED);
   }
 
+  async findDuePending(
+    olderThan: Date,
+    now: Date,
+    limit: number,
+  ): Promise<OrderDocument[]> {
+    return this.orderModel
+      .find({
+        status: OrderStatus.PENDING_PAYMENT,
+        createdAt: { $lt: olderThan },
+        needsReview: { $ne: true },
+        $or: [
+          { nextReconAt: { $lte: now } },
+          { nextReconAt: null },
+          { nextReconAt: { $exists: false } },
+        ],
+      })
+      .sort({ nextReconAt: 1, createdAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  async findCreatedPastExpiry(
+    now: Date,
+    limit: number,
+  ): Promise<OrderDocument[]> {
+    return this.orderModel
+      .find({
+        status: OrderStatus.CREATED,
+        expiresAt: { $lte: now },
+      })
+      .sort({ expiresAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  async findLateWatchDue(now: Date, limit: number): Promise<OrderDocument[]> {
+    return this.orderModel
+      .find({
+        status: OrderStatus.EXPIRED,
+        lateWatchUntil: { $gte: now },
+        nextReconAt: { $lte: now },
+      })
+      .sort({ nextReconAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  async backfillPendingRecon(olderThan: Date, now: Date): Promise<void> {
+    const missing = await this.orderModel
+      .find({
+        status: OrderStatus.PENDING_PAYMENT,
+        createdAt: { $lt: olderThan },
+        $or: [{ nextReconAt: null }, { nextReconAt: { $exists: false } }],
+      })
+      .limit(200)
+      .exec();
+    for (const order of missing) {
+      await this.orderModel
+        .findOneAndUpdate(
+          {
+            _id: order._id,
+            status: OrderStatus.PENDING_PAYMENT,
+            $or: [{ nextReconAt: null }, { nextReconAt: { $exists: false } }],
+          },
+          {
+            $set: { nextReconAt: now, reconAttempts: order.reconAttempts ?? 0 },
+          },
+        )
+        .exec();
+    }
+  }
+
+  async postponePending(
+    orderId: string,
+    now: Date,
+    intervalMs: number,
+    maxAttempts: number,
+  ): Promise<void> {
+    const order = await this.findById(orderId);
+    if (!order || order.status !== OrderStatus.PENDING_PAYMENT) {
+      return;
+    }
+    const attempts = (order.reconAttempts ?? 0) + 1;
+    if (attempts >= maxAttempts) {
+      await this.orderModel
+        .findOneAndUpdate(
+          { _id: order._id, status: OrderStatus.PENDING_PAYMENT },
+          {
+            $set: { reconAttempts: attempts, needsReview: true },
+            $unset: { nextReconAt: '' },
+          },
+        )
+        .exec();
+      return;
+    }
+    await this.orderModel
+      .findOneAndUpdate(
+        { _id: order._id, status: OrderStatus.PENDING_PAYMENT },
+        {
+          $set: {
+            reconAttempts: attempts,
+            nextReconAt: new Date(now.getTime() + intervalMs),
+          },
+        },
+      )
+      .exec();
+  }
+
+  async scheduleLateWatch(
+    orderId: string,
+    nextReconAt: Date | null,
+    checksCompleted: number,
+  ): Promise<void> {
+    const order = await this.findById(orderId);
+    if (!order || order.status !== OrderStatus.EXPIRED) {
+      return;
+    }
+    if (!nextReconAt) {
+      await this.orderModel
+        .findOneAndUpdate(
+          { _id: order._id, status: OrderStatus.EXPIRED },
+          {
+            $set: { reconAttempts: checksCompleted },
+            $unset: { nextReconAt: '' },
+          },
+        )
+        .exec();
+      return;
+    }
+    await this.orderModel
+      .findOneAndUpdate(
+        { _id: order._id, status: OrderStatus.EXPIRED },
+        {
+          $set: { reconAttempts: checksCompleted, nextReconAt },
+        },
+      )
+      .exec();
+  }
+
   async findStalePending(
     olderThan: Date,
     limit: number,
@@ -478,11 +618,25 @@ export class OrdersService {
   }
 
   /**
-   * Checkout abandoned past the reconciliation window.
-   * Payment stays at its current status. No-op unless the order is still pending.
+   * Checkout abandoned past the reconciliation window, or a CREATED order past expiresAt.
+   * Payment stays at its current status. A provider-backed expiry can arm the late watch.
    */
-  async markOrderExpired(orderId: string): Promise<OrderDocument> {
+  async markOrderExpired(
+    orderId: string,
+    options?: { lateWatchHours?: number },
+  ): Promise<OrderDocument> {
     const order = await this.requireOrder(orderId);
+    if (order.status === OrderStatus.CREATED) {
+      const expiredAt = new Date();
+      const result = await compareAndSet(
+        this.orderModel,
+        order._id,
+        [OrderStatus.CREATED],
+        OrderStatus.EXPIRED,
+        { expiredAt },
+      );
+      return result.doc ?? order;
+    }
     if (order.status !== OrderStatus.PENDING_PAYMENT) {
       return order;
     }
@@ -493,12 +647,20 @@ export class OrdersService {
     }
 
     const expiredAt = new Date();
+    const watch =
+      order.providerOrderId?.trim() && (options?.lateWatchHours ?? 0) > 0
+        ? initialLateWatch(expiredAt, options?.lateWatchHours ?? 0)
+        : null;
     const result = await compareAndSet(
       this.orderModel,
       order._id,
       [OrderStatus.PENDING_PAYMENT],
       OrderStatus.EXPIRED,
-      { expiredAt },
+      {
+        expiredAt,
+        reconAttempts: 0,
+        ...(watch ?? {}),
+      },
     );
     return result.doc ?? order;
   }

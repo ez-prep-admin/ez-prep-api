@@ -10,6 +10,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { RefundStatus } from '../common/enums/refund-status.enum';
@@ -18,10 +19,15 @@ import { InvoiceService } from '../invoices/invoice.service';
 import { OrdersService } from '../orders/orders.service';
 import { compareAndSet } from '../orders/domain/compare-and-set';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
-import { ProviderRefund } from '../payments/domain/payment-gateway';
+import {
+  ProviderRefund,
+  ProviderRefundRejectedError,
+} from '../payments/domain/payment-gateway';
+import { PaymentRole } from '../payments/domain/payment-role.enum';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { RefundInitiatedBySource } from './domain/refund-initiated-by-source.enum';
 import { RefundKind } from './domain/refund-kind.enum';
 import { Refund, RefundDocument } from './schemas/refund.schema';
 
@@ -38,6 +44,20 @@ export type RefundSettleOutcome =
   | 'missing'
   | 'mismatch';
 export type RefundFailOutcome = 'failed' | 'left' | 'missing';
+
+export type AdminOrderFlag =
+  | 'needsReview'
+  | 'unprovisioned'
+  | 'uninvoiced'
+  | 'lateCapture'
+  | 'redundantPurchase'
+  | 'duplicate';
+
+export type RefundWebhookRecovery =
+  | { action: 'processed' }
+  | { action: 'retry' }
+  | { action: 'ignore'; reason: string }
+  | { action: 'failed'; error: string };
 
 export type RefundReconcileSummary = {
   examined: number;
@@ -77,7 +97,7 @@ export type AdminRefundView = {
   reason: string;
   provider: string;
   providerRefundId?: string;
-  initiatedBy: string;
+  initiatedBy: string | null;
   createdAt?: Date;
 };
 
@@ -120,6 +140,7 @@ export class RefundsService {
     private readonly invoiceService: InvoiceService,
     private readonly commerceAuditService: CommerceAuditService,
     private readonly paymentGateways: PaymentGatewayRegistry,
+    private readonly commerceConfig: CommerceConfigService,
   ) {}
 
   async list(options: {
@@ -127,6 +148,7 @@ export class RefundsService {
     limit?: number;
     status?: string;
     search?: string;
+    flag?: string;
   }): Promise<{
     data: AdminOrderListItem[];
     pagination: {
@@ -151,6 +173,9 @@ export class RefundsService {
     }
     if (options.search?.trim()) {
       query.orderNumber = new RegExp(escapeRegex(options.search.trim()), 'i');
+    }
+    if (options.flag) {
+      await this.applyOrderFlag(query, options.flag);
     }
 
     const [rows, total] = await Promise.all([
@@ -272,17 +297,29 @@ export class RefundsService {
         currency: 'INR',
       });
     } catch (error) {
-      await compareAndSet(
-        this.refundModel,
-        refund._id,
-        [RefundStatus.INITIATED],
-        RefundStatus.FAILED,
-        {},
-      );
-      if (error instanceof HttpException) {
-        throw error;
+      if (isDefiniteRefundRejection(error)) {
+        await compareAndSet(
+          this.refundModel,
+          refund._id,
+          [RefundStatus.INITIATED],
+          RefundStatus.FAILED,
+          {},
+        );
+        if (error instanceof HttpException) {
+          throw error;
+        }
+        throw new BadRequestException('Payment provider rejected the refund');
       }
-      throw new BadGatewayException('Payment provider request failed');
+      refund.outcomeUnknownAt = new Date();
+      await refund.save();
+      const fresh = await this.requireOrder(this.idOf(order));
+      return {
+        message: REFUND_PENDING_MESSAGE,
+        data: {
+          refund: this.toRefundView(refund),
+          order: await this.toDetail(fresh),
+        },
+      };
     }
 
     const providerStatus = providerRefund.status.trim().toLowerCase();
@@ -387,24 +424,45 @@ export class RefundsService {
         : 'missing';
     }
 
-    const actorUserId = String(refund.initiatedBy);
+    const settled = claimed.doc ?? refund;
+    if (settled.kind === RefundKind.DUPLICATE_CAPTURE || settled.partial) {
+      if (settled.kind === RefundKind.DUPLICATE_CAPTURE) {
+        await this.commerceAuditService.log({
+          action: 'PAYMENT_DUPLICATE_REFUNDED',
+          resourceType: 'refund',
+          resourceId: this.idOf(settled),
+          after: {
+            orderId: this.idOf(order),
+            paymentId: String(settled.paymentId),
+            amount: settled.amount,
+            providerRefundId: settled.providerRefundId,
+          },
+        });
+      }
+      return 'settled';
+    }
+
+    const actorUserId = settled.initiatedBy ? String(settled.initiatedBy) : '';
     await this.entitlementsService.revokePaymentEntitlementsForOrder(
       this.idOf(order),
       actorUserId,
-      refund.reason,
+      settled.reason,
     );
     await this.ordersService.markOrderRefunded(this.idOf(order));
 
+    const external =
+      settled.initiatedBySource === RefundInitiatedBySource.PROVIDER;
     await this.commerceAuditService.log({
-      actorUserId,
-      action: 'REFUND_COMPLETED',
+      ...(actorUserId ? { actorUserId } : {}),
+      action: external ? 'REFUND_EXTERNAL' : 'REFUND_COMPLETED',
       resourceType: 'refund',
-      resourceId: this.idOf(refund),
+      resourceId: this.idOf(settled),
       after: {
         orderId: this.idOf(order),
-        amount: refund.amount,
+        amount: settled.amount,
         status: RefundStatus.COMPLETED,
-        providerRefundId: refund.providerRefundId,
+        providerRefundId: settled.providerRefundId,
+        initiatedBySource: settled.initiatedBySource,
       },
     });
 
@@ -438,7 +496,9 @@ export class RefundsService {
       return 'left';
     }
     await this.commerceAuditService.log({
-      actorUserId: String(refund.initiatedBy),
+      ...(refund.initiatedBy
+        ? { actorUserId: String(refund.initiatedBy) }
+        : {}),
       action: 'REFUND_FAILED',
       resourceType: 'refund',
       resourceId: this.idOf(refund),
@@ -531,7 +591,304 @@ export class RefundsService {
       summary.skipped += 1;
     }
 
+    await this.resolveUnknownRefunds(now, summary);
+    await this.refundDuplicateCaptures(summary);
     return summary;
+  }
+
+  async recoverRefundWebhook(input: {
+    providerRefundId: string;
+    providerPaymentId?: string;
+    amount: number;
+    currency: string;
+    failed: boolean;
+  }): Promise<RefundWebhookRecovery> {
+    const providerPaymentId = input.providerPaymentId?.trim();
+    if (!providerPaymentId) {
+      return { action: 'retry' };
+    }
+    const payment = await this.paymentModel
+      .findOne({ providerPaymentId })
+      .exec();
+    if (!payment) {
+      return { action: 'retry' };
+    }
+    const order = await this.orderModel.findById(payment.orderId).exec();
+    if (!order) {
+      return { action: 'retry' };
+    }
+
+    const existing = await this.refundModel
+      .findOne({ paymentId: payment._id })
+      .exec();
+    if (existing) {
+      if (!existing.providerRefundId) {
+        existing.providerRefundId = input.providerRefundId;
+        await existing.save();
+      }
+      if (input.failed) {
+        const outcome = await this.settleFailed(input.providerRefundId);
+        return outcome === 'missing'
+          ? { action: 'retry' }
+          : { action: 'processed' };
+      }
+      const outcome = await this.settleProcessed(
+        input.providerRefundId,
+        input.amount,
+        input.currency,
+      );
+      if (outcome === 'mismatch') {
+        return {
+          action: 'failed',
+          error: 'Amount or currency does not match the refund',
+        };
+      }
+      return outcome === 'missing'
+        ? { action: 'retry' }
+        : { action: 'processed' };
+    }
+
+    const duplicate = payment.role === PaymentRole.DUPLICATE;
+    const paid =
+      order.status === OrderStatus.PAID ||
+      order.status === OrderStatus.REFUNDED;
+    if (!paid && !duplicate) {
+      return { action: 'ignore', reason: 'refund_on_unpaid_order' };
+    }
+    if (input.failed) {
+      return { action: 'processed' };
+    }
+
+    const full = input.amount === payment.amount && input.currency === 'INR';
+    if (!full) {
+      await this.refundModel.create({
+        orderId: order._id,
+        paymentId: payment._id,
+        kind: duplicate ? RefundKind.DUPLICATE_CAPTURE : RefundKind.ORDER,
+        userId: order.userId,
+        provider: payment.provider,
+        providerRefundId: input.providerRefundId,
+        amount: input.amount,
+        status: RefundStatus.COMPLETED,
+        reason: 'provider_dashboard',
+        initiatedBySource: RefundInitiatedBySource.PROVIDER,
+        partial: true,
+      });
+      return { action: 'processed' };
+    }
+
+    await this.refundModel.create({
+      orderId: order._id,
+      paymentId: payment._id,
+      kind: duplicate ? RefundKind.DUPLICATE_CAPTURE : RefundKind.ORDER,
+      userId: order.userId,
+      provider: payment.provider,
+      providerRefundId: input.providerRefundId,
+      amount: payment.amount,
+      status: RefundStatus.INITIATED,
+      reason: 'provider_dashboard',
+      initiatedBySource: RefundInitiatedBySource.PROVIDER,
+    });
+    const outcome = await this.settleProcessed(
+      input.providerRefundId,
+      payment.amount,
+      'INR',
+    );
+    return outcome === 'missing'
+      ? { action: 'retry' }
+      : { action: 'processed' };
+  }
+
+  private async resolveUnknownRefunds(
+    now: Date,
+    summary: RefundReconcileSummary,
+  ): Promise<void> {
+    const windowMinutes =
+      this.commerceConfig.settings.refundUnknownWindowMinutes ?? 60;
+    const rows = await this.refundModel
+      .find({
+        status: RefundStatus.INITIATED,
+        outcomeUnknownAt: { $ne: null },
+      })
+      .sort({ outcomeUnknownAt: 1 })
+      .limit(REFUND_SETTLE_BATCH)
+      .exec();
+    for (const refund of rows) {
+      summary.examined += 1;
+      const payment = await this.paymentModel.findById(refund.paymentId).exec();
+      const providerPaymentId = payment?.providerPaymentId?.trim();
+      if (!providerPaymentId) {
+        summary.skipped += 1;
+        continue;
+      }
+      let listed: ProviderRefund[] = [];
+      try {
+        listed = await this.paymentGateways
+          .get(refund.provider)
+          .listRefunds(providerPaymentId);
+      } catch (error) {
+        summary.skipped += 1;
+        this.logger.warn(
+          `Unknown refund list failed for ${providerPaymentId}: ${
+            error instanceof Error ? error.message : 'unexpected error'
+          }`,
+        );
+        continue;
+      }
+      const processed = listed.find(
+        row =>
+          row.status.trim().toLowerCase() === 'processed' &&
+          row.amount === refund.amount,
+      );
+      if (processed) {
+        refund.providerRefundId = processed.providerRefundId;
+        refund.outcomeUnknownAt = undefined;
+        await refund.save();
+        const outcome = await this.settleProcessed(
+          processed.providerRefundId,
+          processed.amount,
+          processed.currency ?? 'INR',
+        );
+        if (outcome === 'settled' || outcome === 'already') {
+          summary.settled += 1;
+        } else {
+          summary.skipped += 1;
+        }
+        continue;
+      }
+      const unknownAt = refund.outcomeUnknownAt ?? refund.updatedAt ?? now;
+      if (now.getTime() - unknownAt.getTime() >= windowMinutes * 60 * 1000) {
+        const failed = await compareAndSet(
+          this.refundModel,
+          refund._id,
+          [RefundStatus.INITIATED],
+          RefundStatus.FAILED,
+          {},
+        );
+        if (failed.won) {
+          summary.failed += 1;
+        } else {
+          summary.skipped += 1;
+        }
+        continue;
+      }
+      summary.pending += 1;
+    }
+  }
+
+  private async refundDuplicateCaptures(
+    summary: RefundReconcileSummary,
+  ): Promise<void> {
+    const payments = await this.paymentModel
+      .find({
+        role: PaymentRole.DUPLICATE,
+        status: PaymentStatus.CAPTURED,
+      })
+      .limit(REFUND_SETTLE_BATCH)
+      .exec();
+    for (const payment of payments) {
+      const providerPaymentId = payment.providerPaymentId?.trim();
+      if (!providerPaymentId) {
+        continue;
+      }
+      const existing = await this.refundModel
+        .findOne({ paymentId: payment._id })
+        .exec();
+      if (
+        existing &&
+        (existing.status === RefundStatus.COMPLETED ||
+          existing.status === RefundStatus.INITIATED)
+      ) {
+        continue;
+      }
+      summary.examined += 1;
+      const order = await this.orderModel.findById(payment.orderId).exec();
+      if (!order) {
+        summary.skipped += 1;
+        continue;
+      }
+      let refund = existing;
+      if (!refund || refund.status === RefundStatus.FAILED) {
+        if (refund?.status === RefundStatus.FAILED) {
+          const claimed = await compareAndSet(
+            this.refundModel,
+            refund._id,
+            [RefundStatus.FAILED],
+            RefundStatus.INITIATED,
+            {
+              reason: 'duplicate_capture',
+              amount: payment.amount,
+              initiatedBySource: RefundInitiatedBySource.SYSTEM,
+            },
+          );
+          refund = (claimed.doc ?? refund) as NonNullable<typeof refund>;
+        } else {
+          try {
+            refund = await this.refundModel.create({
+              orderId: order._id,
+              paymentId: payment._id,
+              kind: RefundKind.DUPLICATE_CAPTURE,
+              userId: order.userId,
+              provider: payment.provider,
+              amount: payment.amount,
+              status: RefundStatus.INITIATED,
+              reason: 'duplicate_capture',
+              initiatedBySource: RefundInitiatedBySource.SYSTEM,
+            });
+          } catch (error) {
+            if (isDuplicateKey(error)) {
+              summary.skipped += 1;
+              continue;
+            }
+            throw error;
+          }
+        }
+      }
+      if (!refund) {
+        summary.skipped += 1;
+        continue;
+      }
+      try {
+        const providerRefund = await this.paymentGateways
+          .get(payment.provider)
+          .refund({
+            providerPaymentId,
+            amount: payment.amount,
+            currency: 'INR',
+          });
+        refund.providerRefundId = providerRefund.providerRefundId;
+        await refund.save();
+        if (providerRefund.status.trim().toLowerCase() === 'processed') {
+          const outcome = await this.settleProcessed(
+            providerRefund.providerRefundId,
+            providerRefund.amount,
+            'INR',
+          );
+          if (outcome === 'settled' || outcome === 'already') {
+            summary.settled += 1;
+          } else {
+            summary.skipped += 1;
+          }
+        } else {
+          summary.pending += 1;
+        }
+      } catch (error) {
+        if (isDefiniteRefundRejection(error)) {
+          await compareAndSet(
+            this.refundModel,
+            refund._id,
+            [RefundStatus.INITIATED],
+            RefundStatus.FAILED,
+            {},
+          );
+          summary.failed += 1;
+        } else {
+          refund.outcomeUnknownAt = new Date();
+          await refund.save();
+          summary.pending += 1;
+        }
+      }
+    }
   }
 
   private async findByProviderRefundId(
@@ -572,6 +929,7 @@ export class RefundsService {
         {
           reason,
           initiatedBy: new Types.ObjectId(actorUserId),
+          initiatedBySource: RefundInitiatedBySource.ADMIN,
           amount: payment.amount,
           provider: order.paymentProvider ?? payment.provider,
           paymentId: payment._id,
@@ -599,6 +957,7 @@ export class RefundsService {
         status: RefundStatus.INITIATED,
         reason,
         initiatedBy: new Types.ObjectId(actorUserId),
+        initiatedBySource: RefundInitiatedBySource.ADMIN,
       });
     } catch (error) {
       if (isDuplicateKey(error)) {
@@ -609,6 +968,43 @@ export class RefundsService {
       }
       throw error;
     }
+  }
+
+  private async applyOrderFlag(
+    query: FilterQuery<Order>,
+    flag: string,
+  ): Promise<void> {
+    if (!isOrderFlag(flag)) {
+      throw new BadRequestException('Invalid order flag');
+    }
+    if (flag === 'needsReview') {
+      query.needsReview = true;
+      return;
+    }
+    if (flag === 'unprovisioned') {
+      query.status = OrderStatus.PAID;
+      query.provisionedAt = null;
+      return;
+    }
+    if (flag === 'lateCapture') {
+      query.lateCaptureAt = { $ne: null };
+      return;
+    }
+    if (flag === 'redundantPurchase') {
+      query.redundantPurchase = true;
+      return;
+    }
+    if (flag === 'duplicate') {
+      const ids = await this.paymentModel.distinct('orderId', {
+        role: PaymentRole.DUPLICATE,
+      });
+      query._id = { $in: ids };
+      return;
+    }
+    const invoiced = await this.invoiceService.distinctOrderIds();
+    query.status = { $in: [OrderStatus.PAID, OrderStatus.REFUNDED] };
+    query.provisionedAt = { $ne: null };
+    query._id = { $nin: invoiced };
   }
 
   private async requireOrder(orderId: string): Promise<OrderDocument> {
@@ -711,7 +1107,7 @@ export class RefundsService {
       reason: refund.reason,
       provider: refund.provider,
       providerRefundId: refund.providerRefundId,
-      initiatedBy: String(refund.initiatedBy),
+      initiatedBy: refund.initiatedBy ? String(refund.initiatedBy) : null,
       createdAt: refund.createdAt,
     };
   }
@@ -719,6 +1115,24 @@ export class RefundsService {
   private idOf(doc: { _id: Types.ObjectId; id?: string }): string {
     return doc.id ? String(doc.id) : String(doc._id);
   }
+}
+
+function isOrderFlag(value: string): value is AdminOrderFlag {
+  return (
+    value === 'needsReview' ||
+    value === 'unprovisioned' ||
+    value === 'uninvoiced' ||
+    value === 'lateCapture' ||
+    value === 'redundantPurchase' ||
+    value === 'duplicate'
+  );
+}
+
+function isDefiniteRefundRejection(error: unknown): boolean {
+  return (
+    error instanceof ProviderRefundRejectedError ||
+    error instanceof BadRequestException
+  );
 }
 
 function positiveInt(value: number | undefined, fallback: number): number {

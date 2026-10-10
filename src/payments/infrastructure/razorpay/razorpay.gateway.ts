@@ -10,14 +10,17 @@ import { MIN_ORDER_AMOUNT_PAISE } from '../../../common/commerce/checkout.consta
 import {
   ClientProviderDataInput,
   CreatePaymentOrderInput,
+  FetchedOrderPayment,
   FetchedProviderPayment,
   NormalizedPaymentEvent,
   PaymentGateway,
   PaymentVerificationResult,
   ProviderOrder,
+  ProviderOrderNotes,
+  ProviderRefund,
+  ProviderRefundRejectedError,
   ProviderWebhookInput,
   RefundInput,
-  ProviderRefund,
   VerifyPaymentInput,
 } from '../../domain/payment-gateway';
 import { normalizeRazorpayEvent } from './normalize-razorpay-event';
@@ -256,7 +259,8 @@ export class RazorpayGateway implements PaymentGateway {
     } catch (error) {
       if (
         error instanceof BadGatewayException ||
-        error instanceof BadRequestException
+        error instanceof BadRequestException ||
+        error instanceof ProviderRefundRejectedError
       ) {
         throw error;
       }
@@ -363,6 +367,46 @@ export class RazorpayGateway implements PaymentGateway {
       amount: payment.amount,
       currency: payment.currency,
       notesOrderId: payment.notes?.orderId,
+    };
+  }
+
+  async fetchOrderPayments(
+    providerOrderId: string,
+  ): Promise<FetchedOrderPayment[]> {
+    const id = providerOrderId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider order id');
+    }
+    const payments = await this.orders.fetchPayments(id);
+    return payments.map(payment => ({
+      providerPaymentId: payment.id,
+      status: payment.status,
+      amount: payment.amount,
+      currency: payment.currency,
+    }));
+  }
+
+  async listRefunds(providerPaymentId: string): Promise<ProviderRefund[]> {
+    const rows = await this.orders.listPaymentRefunds(providerPaymentId);
+    return rows.map(row => ({
+      providerRefundId: row.id,
+      status: row.status.trim().toLowerCase(),
+      amount: row.amount,
+      currency: row.currency,
+    }));
+  }
+
+  async fetchProviderOrderNotes(
+    providerOrderId: string,
+  ): Promise<ProviderOrderNotes> {
+    const id = providerOrderId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider order id');
+    }
+    const order = await this.orders.fetchOrder(id);
+    return {
+      notesOrderId: order.notes?.orderId,
+      notesInstanceId: order.notes?.instanceId,
     };
   }
 

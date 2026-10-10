@@ -178,6 +178,7 @@ describe('InvoiceService', () => {
         igst: 0,
         taxRate: 18,
       },
+      paidAt: new Date('2026-04-10T10:00:00.000Z'),
     };
     orders.set(String(_id), order);
     payments.push({ orderId: _id, status: payment });
@@ -213,6 +214,18 @@ describe('InvoiceService', () => {
     expect(invoices[0].pdfStorageBucket).toBe('invoices-bucket');
     expect(render.mock.calls[0][0].seller.gstin).toBe('11PLAINTEXTGSTIN');
     expect(render.mock.calls[0][0].sacCode).toBe('424242');
+  });
+
+  it('dates the invoice at paidAt and uses the IST financial year', async () => {
+    const order = seedOrder();
+    order.paidAt = new Date('2026-03-31T18:20:00.000Z');
+
+    const issued = await service.issueForPaidOrder(String(order._id));
+
+    expect(invoices[0].issuedAt).toEqual(order.paidAt);
+    expect(issued.invoiceNumber).toBe(
+      formatInvoiceNumber('SERIES', '2025-26', 1),
+    );
   });
 
   it.each([OrderStatus.FAILED, OrderStatus.CANCELLED, OrderStatus.EXPIRED])(
@@ -386,6 +399,25 @@ describe('InvoiceService', () => {
         indianFinancialYearLabel(invoices[1].issuedAt),
         2,
       ),
+    );
+  });
+
+  it('keeps one invoice when issue races and gives the next order the next number', async () => {
+    const first = seedOrder();
+    const [left, right] = await Promise.all([
+      service.issueForPaidOrder(String(first._id)),
+      service.issueForPaidOrder(String(first._id)),
+    ]);
+
+    expect(left.invoiceNumber).toBe(right.invoiceNumber);
+    expect(
+      invoices.filter(row => String(row.orderId) === String(first._id)),
+    ).toHaveLength(1);
+
+    const second = seedOrder();
+    const next = await service.issueForPaidOrder(String(second._id));
+    expect(next.invoiceNumber).toBe(
+      formatInvoiceNumber('SERIES', indianFinancialYearLabel(second.paidAt), 2),
     );
   });
 

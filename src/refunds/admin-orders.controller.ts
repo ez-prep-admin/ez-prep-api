@@ -28,6 +28,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UserResponseDto } from '../users/dto/user-response.dto';
+import { RepairSweepsService } from '../orders/repair-sweeps.service';
 import { CreateRefundDto } from './dto/create-refund.dto';
 import { RefundsService } from './refunds.service';
 
@@ -39,7 +40,10 @@ import { RefundsService } from './refunds.service';
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token' })
 @ApiForbiddenResponse({ description: 'Admin role required' })
 export class AdminOrdersController {
-  constructor(private readonly refundsService: RefundsService) {}
+  constructor(
+    private readonly refundsService: RefundsService,
+    private readonly repairSweeps: RepairSweepsService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List orders (Admin)' })
@@ -47,22 +51,38 @@ export class AdminOrdersController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'status', required: false, enum: OrderStatus })
   @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'flag', required: false })
   async list(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('flag') flag?: string,
   ) {
     const result = await this.refundsService.list({
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       status,
       search,
+      flag,
     });
     return {
       message: 'Orders retrieved successfully',
       data: result.data,
       pagination: result.pagination,
+    };
+  }
+
+  @Post(':id/repair')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Repair a paid order (Admin)' })
+  @ApiParam({ name: 'id' })
+  async repair(@Param('id') id: string, @GetUser() user: UserResponseDto) {
+    await this.repairSweeps.repairOrder(id, user.id);
+    const data = await this.refundsService.get(id);
+    return {
+      message: 'Order repaired successfully',
+      data,
     };
   }
 

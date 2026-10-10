@@ -8,7 +8,7 @@ export class IllegalOrderTransitionError extends Error {
 }
 
 const ALLOWED: Record<OrderStatus, OrderStatus[]> = {
-  [OrderStatus.CREATED]: [OrderStatus.PENDING_PAYMENT],
+  [OrderStatus.CREATED]: [OrderStatus.PENDING_PAYMENT, OrderStatus.EXPIRED],
   [OrderStatus.PENDING_PAYMENT]: [
     OrderStatus.PAID,
     OrderStatus.FAILED,

@@ -132,12 +132,17 @@ describe('payment state integrity', () => {
       { findByOrderId: async () => null } as never,
       audit as never,
       registry as never,
+      { settings: { refundUnknownWindowMinutes: 60 } } as never,
     );
     webhook = new RazorpayWebhookService(
       webhookModel,
+      { updateOne: jest.fn().mockResolvedValue({}) } as never,
       registry as never,
       ordersService,
       refunds,
+      {
+        settings: { webhookRetryWindowMinutes: 30, instanceId: 'ezprep' },
+      } as never,
     );
   });
 

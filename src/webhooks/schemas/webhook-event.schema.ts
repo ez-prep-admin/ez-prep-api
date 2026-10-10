@@ -32,6 +32,15 @@ export class WebhookEvent {
   @Prop({ trim: true })
   error?: string;
 
+  @Prop({ type: Number, default: 0 })
+  attempts?: number;
+
+  @Prop({ trim: true })
+  lastError?: string;
+
+  @Prop({ type: Date })
+  lastAttemptAt?: Date;
+
   @Prop({ type: Date, required: true })
   receivedAt: Date;
 

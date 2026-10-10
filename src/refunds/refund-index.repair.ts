@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { PaymentRole } from '../payments/domain/payment-role.enum';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { RefundInitiatedBySource } from './domain/refund-initiated-by-source.enum';
 import { RefundKind } from './domain/refund-kind.enum';
 import { Refund, RefundDocument } from './schemas/refund.schema';
 
@@ -63,6 +64,15 @@ export class RefundIndexRepair implements OnModuleInit {
     await this.refundModel.updateMany(
       { $or: [{ kind: { $exists: false } }, { kind: null }] },
       { $set: { kind: RefundKind.ORDER } },
+    );
+    await this.refundModel.updateMany(
+      {
+        $or: [
+          { initiatedBySource: { $exists: false } },
+          { initiatedBySource: null },
+        ],
+      },
+      { $set: { initiatedBySource: RefundInitiatedBySource.ADMIN } },
     );
     await this.backfillPaymentIds();
 

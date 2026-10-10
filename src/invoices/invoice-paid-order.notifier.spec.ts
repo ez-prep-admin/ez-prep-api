@@ -28,6 +28,7 @@ describe('InvoicePaidOrderNotifier', () => {
     config.get.mockReturnValue('true');
 
     await notifier.onOrderProvisioned('order-1');
+    await new Promise(resolve => setImmediate(resolve));
 
     expect(config.get).toHaveBeenCalledWith('INVOICES_ENABLED');
     expect(invoices.issueForPaidOrder).toHaveBeenCalledWith('order-1');

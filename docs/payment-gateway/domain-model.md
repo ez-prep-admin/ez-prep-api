@@ -338,10 +338,10 @@ All of these fields are optional or backfilled at boot; none is renamed or remov
 | `orders.tax` | `supplyType`, `sellerStateCode`, `buyerStateCode` | 14E |
 | `orders` | `providerOpenClaimAt`, `requestHash`, `expiredAt`, `lateCaptureAt` | 14B |
 | `payments` | `role` (`PRIMARY` \| `DUPLICATE`); partial unique `{ orderId }` where `role = PRIMARY` | 14B |
-| `refunds` | `kind` (`ORDER` \| `DUPLICATE_CAPTURE`), `paymentId`; unique moves from `{ orderId }` to `{ paymentId }`; `outcomeUnknownAt`; `initiatedBySource` (`ADMIN` \| `SYSTEM` \| `PROVIDER`), with `initiatedBy` required only for `ADMIN` | 14B, 14C |
+| `refunds` | `kind` (`ORDER` \| `DUPLICATE_CAPTURE`), `paymentId`; unique moves from `{ orderId }` to `{ paymentId }`; `outcomeUnknownAt`; `initiatedBySource` (`ADMIN` \| `SYSTEM` \| `PROVIDER`), with `initiatedBy` required only for `ADMIN`; additive `partial` | 14B, 14C |
 | Razorpay order `notes` (provider side, not a collection) | `instanceId`, `orderId`, `orderNumber`, `userId` | 14B |
 | `instance_configs` | No schema change. Seller and tax values are written only by the per-instance seed (`scripts/commerce-seed/<instanceId>.json`) | 14E |
-| `orders` | `nextReconAt`, `reconAttempts`, `needsReview`, `lateWatchUntil`, `nextRepairAt`; index `{ status, nextReconAt }` | 14C |
+| `orders` | `nextReconAt`, `reconAttempts`, `needsReview`, `lateWatchUntil`, `nextRepairAt`, `repairAttempts`; index `{ status, nextReconAt }` | 14C |
 | `webhook_events` | `attempts`, `lastError`, `lastAttemptAt` | 14C |
 | `webhook_delivery_stats` (new) | hourly counters, TTL 7 days | 14C |
 

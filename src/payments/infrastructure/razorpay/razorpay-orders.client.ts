@@ -49,4 +49,5 @@ export interface RazorpayOrdersClient {
   fetchPayments(orderId: string): Promise<RazorpayFetchedPayment[]>;
   fetchPayment(paymentId: string): Promise<RazorpayFetchedPayment>;
   fetchRefund(refundId: string): Promise<RazorpayRefundResult>;
+  listPaymentRefunds(paymentId: string): Promise<RazorpayRefundResult[]>;
 }

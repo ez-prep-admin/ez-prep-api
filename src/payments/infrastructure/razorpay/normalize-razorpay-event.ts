@@ -32,6 +32,7 @@ export function normalizeRazorpayEvent(
     (eventType === 'payment.captured'
       ? paymentStatus === 'captured'
       : paymentStatus === 'captured' || orderStatus === 'paid');
+  const notes = readNotes(payment, order);
 
   return {
     providerEventId,
@@ -41,6 +42,8 @@ export function normalizeRazorpayEvent(
     amount,
     currency,
     status: captured ? 'CAPTURED' : 'IGNORED',
+    notesOrderId: notes.orderId,
+    notesInstanceId: notes.instanceId,
   };
 }
 
@@ -59,6 +62,7 @@ function normalizeRefundEvent(
     eventType === 'refund.processed' && refundStatus === 'processed';
   const failed = eventType === 'refund.failed' && refundStatus === 'failed';
 
+  const notes = readNotes(refund, entity(payload, 'payment'));
   return {
     providerEventId,
     eventType,
@@ -71,7 +75,24 @@ function normalizeRefundEvent(
       : failed
         ? 'REFUND_FAILED'
         : 'IGNORED',
+    notesOrderId: notes.orderId,
+    notesInstanceId: notes.instanceId,
   };
+}
+
+function readNotes(...records: Array<Record<string, unknown> | undefined>): {
+  orderId?: string;
+  instanceId?: string;
+} {
+  for (const record of records) {
+    const notes = asRecord(record?.notes);
+    const orderId = stringField(notes, 'orderId');
+    const instanceId = stringField(notes, 'instanceId');
+    if (orderId || instanceId) {
+      return { orderId, instanceId };
+    }
+  }
+  return {};
 }
 
 function entity(

@@ -14,6 +14,12 @@ describe('order transitions', () => {
     ).toBe('apply');
   });
 
+  it('allows CREATED to EXPIRED when checkout never opened a provider order', () => {
+    expect(
+      assertOrderTransition(OrderStatus.CREATED, OrderStatus.EXPIRED),
+    ).toBe('apply');
+  });
+
   it('throws on an illegal status transition', () => {
     expect(() =>
       assertOrderTransition(OrderStatus.CREATED, OrderStatus.PAID),

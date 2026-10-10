@@ -42,6 +42,7 @@ describe('RazorpayGateway', () => {
     fetchPayments: jest.fn(),
     fetchPayment: jest.fn(),
     fetchRefund: jest.fn(),
+    listPaymentRefunds: jest.fn(),
   };
   const gateway = new RazorpayGateway(config(), orders);
 
@@ -52,6 +53,7 @@ describe('RazorpayGateway', () => {
     orders.fetchPayments.mockReset();
     orders.fetchPayment.mockReset();
     orders.fetchRefund.mockReset();
+    orders.listPaymentRefunds.mockReset();
     orders.fetchPayment.mockResolvedValue({
       id: 'pay_1',
       orderId: 'order_1',

@@ -3,6 +3,7 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { RefundStatus } from '../common/enums/refund-status.enum';
@@ -36,7 +37,11 @@ describe('RefundsService', () => {
     id: 'inv1',
     invoiceNumber: 'EZ/1',
   };
-  const gateway = { refund: jest.fn(), fetchRefundStatus: jest.fn() };
+  const gateway = {
+    refund: jest.fn(),
+    fetchRefundStatus: jest.fn(),
+    listRefunds: jest.fn(),
+  };
   const entitlements = { revokePaymentEntitlementsForOrder: jest.fn() };
   const audit = { log: jest.fn() };
   const invoices = { findByOrderId: jest.fn() };
@@ -47,7 +52,12 @@ describe('RefundsService', () => {
     countDocuments: jest.fn(),
     findOneAndUpdate: jest.fn(),
   };
-  const paymentModel = { findOne: jest.fn(), findOneAndUpdate: jest.fn() };
+  const paymentModel = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
   const refundModel = {
     findOne: jest.fn(),
     find: jest.fn(),
@@ -66,7 +76,8 @@ describe('RefundsService', () => {
     users.length = 0;
     invoice.status = TaxInvoiceStatus.ISSUED;
     gateway.refund.mockReset();
-    gateway.fetchRefundStatus.mockReset();
+    gateway.listRefunds.mockReset();
+    gateway.listRefunds.mockResolvedValue([]);
     entitlements.revokePaymentEntitlementsForOrder.mockReset();
     entitlements.revokePaymentEntitlementsForOrder.mockResolvedValue(undefined);
     audit.log.mockReset();
@@ -110,8 +121,22 @@ describe('RefundsService', () => {
           ) ?? null,
       }),
     );
+    paymentModel.find.mockImplementation(() => ({
+      limit() {
+        return this;
+      },
+      exec: async () => [],
+    }));
+    paymentModel.findById.mockImplementation(() => ({
+      exec: async () => null,
+    }));
     refundModel.find.mockImplementation(
-      (filter: { status?: string; updatedAt?: { $lt?: Date } }) => ({
+      (filter: {
+        status?: string;
+        updatedAt?: { $lt?: Date };
+        outcomeUnknownAt?: unknown;
+        providerRefundId?: unknown;
+      }) => ({
         sort() {
           return this;
         },
@@ -122,6 +147,9 @@ describe('RefundsService', () => {
           refunds.filter(row => {
             if (filter.status && row.status !== filter.status) {
               return false;
+            }
+            if (filter.outcomeUnknownAt) {
+              return Boolean(row.outcomeUnknownAt);
             }
             if (
               filter.updatedAt?.$lt &&
@@ -174,6 +202,12 @@ describe('RefundsService', () => {
         { provide: EntitlementsService, useValue: entitlements },
         { provide: InvoiceService, useValue: invoices },
         { provide: CommerceAuditService, useValue: audit },
+        {
+          provide: CommerceConfigService,
+          useValue: {
+            settings: { refundUnknownWindowMinutes: 60, nodeEnv: 'test' },
+          },
+        },
         {
           provide: PaymentGatewayRegistry,
           useValue: { get: () => gateway },
@@ -267,17 +301,18 @@ describe('RefundsService', () => {
     ]);
   });
 
-  it('leaves the order paid when the provider fails', async () => {
+  it('leaves the order paid when the provider outcome is unknown', async () => {
     const order = seedPaid();
     gateway.refund.mockRejectedValue(new BadGatewayException('down'));
 
     await expect(
       service.refund(order.id, adminId, 'customer request'),
-    ).rejects.toBeInstanceOf(BadGatewayException);
+    ).resolves.toMatchObject({ message: REFUND_PENDING_MESSAGE });
 
     expect(order.status).toBe(OrderStatus.PAID);
     expect(payments[0].status).toBe(PaymentStatus.CAPTURED);
-    expect(refunds[0].status).toBe(RefundStatus.FAILED);
+    expect(refunds[0].status).toBe(RefundStatus.INITIATED);
+    expect(refunds[0].outcomeUnknownAt).toBeInstanceOf(Date);
     expect(
       entitlements.revokePaymentEntitlementsForOrder,
     ).not.toHaveBeenCalled();

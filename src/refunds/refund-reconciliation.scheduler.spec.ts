@@ -53,4 +53,28 @@ describe('RefundReconciliationScheduler', () => {
     expect(refunds.reconcileInitiatedRefunds).toHaveBeenCalledTimes(1);
     job.onModuleDestroy();
   });
+
+  it('does not start a second pass while the first is running', async () => {
+    let release: () => void = () => undefined;
+    refunds.reconcileInitiatedRefunds.mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          release = () => resolve();
+        }),
+    );
+    const job = scheduler({
+      COMMERCE_ENABLED: 'true',
+      RECONCILIATION_ENABLED: 'true',
+      RECONCILIATION_INTERVAL_MS: '1000',
+    });
+    job.onModuleInit();
+    jest.advanceTimersByTime(1000);
+    await Promise.resolve();
+    jest.advanceTimersByTime(1000);
+    await Promise.resolve();
+    expect(refunds.reconcileInitiatedRefunds).toHaveBeenCalledTimes(1);
+    release();
+    await Promise.resolve();
+    job.onModuleDestroy();
+  });
 });
