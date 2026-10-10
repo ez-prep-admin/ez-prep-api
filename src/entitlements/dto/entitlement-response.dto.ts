@@ -45,6 +45,16 @@ export class EntitlementResponseDto {
   @Expose()
   productId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Product name at read time. Omitted for support grants.',
+  })
+  @Expose()
+  productName?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  productCode?: string;
+
   @ApiPropertyOptional()
   @Expose()
   productVersion?: number;

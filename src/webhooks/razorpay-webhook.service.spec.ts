@@ -21,6 +21,7 @@ import { FakeGateway } from '../payments/infrastructure/fake/fake.gateway';
 import { RAZORPAY_ORDERS_CLIENT } from '../payments/infrastructure/razorpay/razorpay-orders.client';
 import { RazorpayGateway } from '../payments/infrastructure/razorpay/razorpay.gateway';
 import { Payment } from '../payments/schemas/payment.schema';
+import { RefundsService } from '../refunds/refunds.service';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import { WebhookEvent } from './schemas/webhook-event.schema';
 
@@ -51,6 +52,10 @@ describe('RazorpayWebhookService', () => {
   const events: Array<Record<string, any>> = [];
   const paidHandler = { onOrderPaid: jest.fn() };
   const provisioning = { provisionForPaidOrder: jest.fn() };
+  const refunds = {
+    settleProcessed: jest.fn(),
+    settleFailed: jest.fn(),
+  };
 
   const orderModel = { findOne: jest.fn(), findById: jest.fn() };
   const paymentModel = { findOne: jest.fn(), create: jest.fn() };
@@ -67,6 +72,8 @@ describe('RazorpayWebhookService', () => {
     paidHandler.onOrderPaid.mockResolvedValue(undefined);
     provisioning.provisionForPaidOrder.mockReset();
     provisioning.provisionForPaidOrder.mockResolvedValue(undefined);
+    refunds.settleProcessed.mockReset();
+    refunds.settleFailed.mockReset();
 
     orderModel.findOne.mockImplementation(
       (filter: Record<string, unknown>) => ({
@@ -140,6 +147,7 @@ describe('RazorpayWebhookService', () => {
         },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
         { provide: EntitlementProvisioningService, useValue: provisioning },
+        { provide: RefundsService, useValue: refunds },
       ],
     }).compile();
 
@@ -270,5 +278,58 @@ describe('RazorpayWebhookService', () => {
     expect(result.status).toBe(WebhookEventStatus.PROCESSED);
     expect(order.status).toBe(OrderStatus.PAID);
     expect(paidHandler.onOrderPaid).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a processed refund webhook', async () => {
+    refunds.settleProcessed.mockResolvedValue('settled');
+    const result = await deliver('refund-processed.json', 'evt_refund_ok');
+
+    expect(result.status).toBe(WebhookEventStatus.PROCESSED);
+    expect(refunds.settleProcessed).toHaveBeenCalledWith(
+      'rfnd_test_processed',
+      12900,
+      'INR',
+    );
+    expect(paidHandler.onOrderPaid).not.toHaveBeenCalled();
+  });
+
+  it('ignores a duplicate refund webhook', async () => {
+    refunds.settleProcessed.mockResolvedValue('settled');
+    await deliver('refund-processed.json', 'evt_refund_ok');
+    const second = await deliver('refund-processed.json', 'evt_refund_ok');
+
+    expect(second.status).toBe(WebhookEventStatus.IGNORED);
+    expect(refunds.settleProcessed).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks Razorpay to retry when the refund row is missing', async () => {
+    refunds.settleProcessed.mockResolvedValue('missing');
+    await expect(
+      deliver('refund-processed.json', 'evt_refund_missing'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(events[0].status).toBe(WebhookEventStatus.FAILED);
+    expect(events[0].error).toBe('Refund not found');
+  });
+
+  it('records a refund amount mismatch without settling access', async () => {
+    refunds.settleProcessed.mockResolvedValue('mismatch');
+    const result = await deliver(
+      'refund-processed.json',
+      'evt_refund_mismatch',
+    );
+
+    expect(result.status).toBe(WebhookEventStatus.FAILED);
+    expect(events[0].error).toBe(
+      'Amount or currency does not match the refund',
+    );
+  });
+
+  it('marks the refund failed when the provider reports failure', async () => {
+    refunds.settleFailed.mockResolvedValue('failed');
+    const result = await deliver('refund-failed.json', 'evt_refund_failed');
+
+    expect(result.status).toBe(WebhookEventStatus.PROCESSED);
+    expect(refunds.settleFailed).toHaveBeenCalledWith('rfnd_test_failed');
+    expect(refunds.settleProcessed).not.toHaveBeenCalled();
   });
 });

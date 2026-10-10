@@ -22,6 +22,7 @@ import {
   MockTest,
   MockTestDocument,
 } from '../mock-tests/schemas/mock-test.schema';
+import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { GrantEntitlementDto } from './dto/grant-entitlement.dto';
 import { EntitlementResponseDto } from './dto/entitlement-response.dto';
@@ -49,6 +50,8 @@ export class EntitlementsService {
     private readonly examGroupModel: Model<ExamGroupDocument>,
     @InjectModel(MockTest.name)
     private readonly mockTestModel: Model<MockTestDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
     private readonly commerceAuditService: CommerceAuditService,
   ) {}
 
@@ -196,6 +199,7 @@ export class EntitlementsService {
 
     const now = new Date();
     const mapped = docs.map(doc => this.toResponseDto(doc));
+    await this.attachProductNames(mapped);
 
     if (options.includeInactive) {
       return mapped;
@@ -282,6 +286,45 @@ export class EntitlementsService {
       throw new BadRequestException(
         `${scopeType} with ID "${scopeId}" not found`,
       );
+    }
+  }
+
+  private async attachProductNames(
+    rows: EntitlementResponseDto[],
+  ): Promise<void> {
+    const ids = [
+      ...new Set(
+        rows
+          .map(row => row.productId)
+          .filter((id): id is string =>
+            Boolean(id && Types.ObjectId.isValid(id)),
+          ),
+      ),
+    ];
+    if (ids.length === 0) {
+      return;
+    }
+
+    const products = await this.productModel
+      .find({ _id: { $in: ids.map(id => new Types.ObjectId(id)) } })
+      .select('name code')
+      .exec();
+    const byId = new Map(
+      products.map(product => [
+        String(product._id),
+        { name: product.name, code: product.code },
+      ]),
+    );
+    for (const row of rows) {
+      if (!row.productId) {
+        continue;
+      }
+      const product = byId.get(row.productId);
+      if (!product) {
+        continue;
+      }
+      row.productName = product.name;
+      row.productCode = product.code;
     }
   }
 

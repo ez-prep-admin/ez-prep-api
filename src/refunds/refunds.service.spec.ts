@@ -15,6 +15,7 @@ import { OrdersService } from '../orders/orders.service';
 import { Order } from '../orders/schemas/order.schema';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
 import { Payment } from '../payments/schemas/payment.schema';
+import { User } from '../users/schemas/user.schema';
 import {
   REFUND_COMPLETED_MESSAGE,
   REFUND_PENDING_MESSAGE,
@@ -28,12 +29,13 @@ describe('RefundsService', () => {
   const orders: Row[] = [];
   const payments: Row[] = [];
   const refunds: Row[] = [];
+  const users: Row[] = [];
   const invoice = {
     status: TaxInvoiceStatus.ISSUED,
     id: 'inv1',
     invoiceNumber: 'EZ/1',
   };
-  const gateway = { refund: jest.fn() };
+  const gateway = { refund: jest.fn(), fetchRefundStatus: jest.fn() };
   const entitlements = { revokePaymentEntitlementsForOrder: jest.fn() };
   const audit = { log: jest.fn() };
   const invoices = { findByOrderId: jest.fn() };
@@ -44,7 +46,12 @@ describe('RefundsService', () => {
     countDocuments: jest.fn(),
   };
   const paymentModel = { findOne: jest.fn() };
-  const refundModel = { findOne: jest.fn(), create: jest.fn() };
+  const refundModel = {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    create: jest.fn(),
+  };
+  const userModel = { find: jest.fn() };
 
   let service: RefundsService;
   const adminId = new Types.ObjectId().toHexString();
@@ -53,8 +60,10 @@ describe('RefundsService', () => {
     orders.length = 0;
     payments.length = 0;
     refunds.length = 0;
+    users.length = 0;
     invoice.status = TaxInvoiceStatus.ISSUED;
     gateway.refund.mockReset();
+    gateway.fetchRefundStatus.mockReset();
     entitlements.revokePaymentEntitlementsForOrder.mockReset();
     entitlements.revokePaymentEntitlementsForOrder.mockResolvedValue(undefined);
     audit.log.mockReset();
@@ -88,10 +97,45 @@ describe('RefundsService', () => {
         payments.find(row => String(row.orderId) === String(filter.orderId)) ??
         null,
     }));
-    refundModel.findOne.mockImplementation((filter: { orderId: unknown }) => ({
-      exec: async () =>
-        refunds.find(row => String(row.orderId) === String(filter.orderId)) ??
-        null,
+    refundModel.findOne.mockImplementation(
+      (filter: Record<string, unknown>) => ({
+        exec: async () =>
+          refunds.find(row =>
+            Object.entries(filter).every(
+              ([key, value]) => String(row[key]) === String(value),
+            ),
+          ) ?? null,
+      }),
+    );
+    refundModel.find.mockImplementation(
+      (filter: { status?: string; updatedAt?: { $lt?: Date } }) => ({
+        sort() {
+          return this;
+        },
+        limit() {
+          return this;
+        },
+        exec: async () =>
+          refunds.filter(row => {
+            if (filter.status && row.status !== filter.status) {
+              return false;
+            }
+            if (
+              filter.updatedAt?.$lt &&
+              (!(row.updatedAt instanceof Date) ||
+                !(row.updatedAt < filter.updatedAt.$lt))
+            ) {
+              return false;
+            }
+            return Boolean(row.providerRefundId);
+          }),
+      }),
+    );
+    userModel.find.mockImplementation(() => ({
+      select() {
+        return this;
+      },
+      exec: async () => users,
     }));
     refundModel.create.mockImplementation(async (doc: Row) => {
       const _id = new Types.ObjectId();
@@ -114,6 +158,7 @@ describe('RefundsService', () => {
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: getModelToken(Refund.name), useValue: refundModel },
+        { provide: getModelToken(User.name), useValue: userModel },
         { provide: EntitlementsService, useValue: entitlements },
         { provide: InvoiceService, useValue: invoices },
         { provide: CommerceAuditService, useValue: audit },
@@ -262,6 +307,29 @@ describe('RefundsService', () => {
     expect(gateway.refund).not.toHaveBeenCalled();
   });
 
+  it('includes the buyer name on the order list', async () => {
+    const order = seedPaid();
+    users.push({
+      _id: order.userId,
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      phoneNumber: '+919876543210',
+      username: 'ada',
+    });
+
+    const result = await service.list({});
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].user).toEqual({
+      id: String(order.userId),
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      phoneNumber: '+919876543210',
+      username: 'ada',
+    });
+    expect(result.data[0].userId).toBe(String(order.userId));
+  });
+
   it('keeps the order paid when the provider refund is still pending', async () => {
     const order = seedPaid();
     gateway.refund.mockResolvedValue({
@@ -279,5 +347,152 @@ describe('RefundsService', () => {
       entitlements.revokePaymentEntitlementsForOrder,
     ).not.toHaveBeenCalled();
     expect(invoice.status).toBe(TaxInvoiceStatus.ISSUED);
+  });
+
+  it('settles a processed provider refund once', async () => {
+    const order = seedPaid();
+    const refund = await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      providerRefundId: 'rfnd_later',
+      amount: 99900,
+      status: RefundStatus.INITIATED,
+      reason: 'customer request',
+      initiatedBy: new Types.ObjectId(adminId),
+    });
+    jest
+      .spyOn(
+        (service as unknown as { ordersService: OrdersService }).ordersService,
+        'markOrderRefunded',
+      )
+      .mockImplementation(async () => {
+        order.status = OrderStatus.REFUNDED;
+        return order as never;
+      });
+
+    await expect(
+      service.settleProcessed('rfnd_later', 99900, 'INR'),
+    ).resolves.toBe('settled');
+    await expect(
+      service.settleProcessed('rfnd_later', 99900, 'INR'),
+    ).resolves.toBe('already');
+
+    expect(refund.status).toBe(RefundStatus.COMPLETED);
+    expect(
+      entitlements.revokePaymentEntitlementsForOrder,
+    ).toHaveBeenCalledTimes(1);
+    expect(invoice.status).toBe(TaxInvoiceStatus.ISSUED);
+  });
+
+  it('does not revoke when the provider amount does not match', async () => {
+    const order = seedPaid();
+    await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      providerRefundId: 'rfnd_mismatch',
+      amount: 99900,
+      status: RefundStatus.INITIATED,
+      reason: 'customer request',
+      initiatedBy: new Types.ObjectId(adminId),
+    });
+
+    await expect(
+      service.settleProcessed('rfnd_mismatch', 100, 'INR'),
+    ).resolves.toBe('mismatch');
+    expect(
+      entitlements.revokePaymentEntitlementsForOrder,
+    ).not.toHaveBeenCalled();
+    expect(order.status).toBe(OrderStatus.PAID);
+  });
+
+  it('leaves a completed refund alone when the provider later reports failure', async () => {
+    const order = seedPaid();
+    const refund = await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      providerRefundId: 'rfnd_done',
+      amount: 99900,
+      status: RefundStatus.COMPLETED,
+      reason: 'customer request',
+      initiatedBy: new Types.ObjectId(adminId),
+    });
+
+    await expect(service.settleFailed('rfnd_done')).resolves.toBe('left');
+    expect(refund.status).toBe(RefundStatus.COMPLETED);
+    expect(order.status).toBe(OrderStatus.PAID);
+  });
+
+  it('completes an old initiated refund when the provider has processed it', async () => {
+    const order = seedPaid();
+    const refund = await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      providerRefundId: 'rfnd_old',
+      amount: 99900,
+      status: RefundStatus.INITIATED,
+      reason: 'customer request',
+      initiatedBy: new Types.ObjectId(adminId),
+      updatedAt: new Date(Date.now() - 2 * 60 * 1000),
+    });
+    gateway.fetchRefundStatus.mockResolvedValue({
+      providerRefundId: 'rfnd_old',
+      status: 'processed',
+      amount: 99900,
+      currency: 'INR',
+    });
+    jest
+      .spyOn(
+        (service as unknown as { ordersService: OrdersService }).ordersService,
+        'markOrderRefunded',
+      )
+      .mockImplementation(async () => {
+        order.status = OrderStatus.REFUNDED;
+        return order as never;
+      });
+
+    const summary = await service.reconcileInitiatedRefunds();
+
+    expect(summary.settled).toBe(1);
+    expect(refund.status).toBe(RefundStatus.COMPLETED);
+    expect(order.status).toBe(OrderStatus.REFUNDED);
+  });
+
+  it('leaves an initiated refund pending when the provider is still pending', async () => {
+    const order = seedPaid();
+    const refund = await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      providerRefundId: 'rfnd_wait',
+      amount: 99900,
+      status: RefundStatus.INITIATED,
+      reason: 'customer request',
+      initiatedBy: new Types.ObjectId(adminId),
+      updatedAt: new Date(Date.now() - 2 * 60 * 1000),
+    });
+    gateway.fetchRefundStatus.mockResolvedValue({
+      providerRefundId: 'rfnd_wait',
+      status: 'pending',
+      amount: 99900,
+      currency: 'INR',
+    });
+
+    const summary = await service.reconcileInitiatedRefunds();
+
+    expect(summary.pending).toBe(1);
+    expect(refund.status).toBe(RefundStatus.INITIATED);
+    expect(order.status).toBe(OrderStatus.PAID);
+    expect(
+      entitlements.revokePaymentEntitlementsForOrder,
+    ).not.toHaveBeenCalled();
   });
 });

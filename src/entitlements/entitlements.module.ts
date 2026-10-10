@@ -5,6 +5,7 @@ import { ExamGroupsModule } from '../exam-groups/exam-groups.module';
 import { ExamsModule } from '../exams/exams.module';
 import { MockTestsModule } from '../mock-tests/mock-tests.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { ProductsModule } from '../products/products.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminEntitlementsController } from './admin-entitlements.controller';
@@ -26,6 +27,7 @@ import { Entitlement, EntitlementSchema } from './schemas/entitlement.schema';
     forwardRef(() => MockTestsModule),
     CommerceAuditModule,
     InvoicesModule,
+    ProductsModule,
   ],
   controllers: [
     MeEntitlementsController,

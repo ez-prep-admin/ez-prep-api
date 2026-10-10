@@ -43,7 +43,13 @@ export interface NormalizedPaymentEvent {
   eventType: string;
   providerOrderId?: string;
   providerPaymentId?: string;
-  status: 'CAPTURED' | 'FAILED' | 'IGNORED';
+  providerRefundId?: string;
+  status:
+    | 'CAPTURED'
+    | 'FAILED'
+    | 'IGNORED'
+    | 'REFUND_PROCESSED'
+    | 'REFUND_FAILED';
   amount?: number;
   currency?: string;
 }
@@ -58,6 +64,7 @@ export interface ProviderRefund {
   providerRefundId: string;
   status: string;
   amount: number;
+  currency?: string;
 }
 
 export interface PaymentGateway {
@@ -69,4 +76,5 @@ export interface PaymentGateway {
   /** Public checkout fields for GET and idempotent replay. Never includes secrets. */
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown>;
   fetchOrderStatus(providerOrderId: string): Promise<NormalizedPaymentEvent>;
+  fetchRefundStatus(providerRefundId: string): Promise<ProviderRefund>;
 }

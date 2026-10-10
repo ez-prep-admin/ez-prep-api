@@ -516,11 +516,11 @@ Date: 2026-10-09
 - `POST /api/v1/admin/orders/:id/refunds` with `{ reason }` only. Full amount in paise from the captured payment. Admin JWT. A second refund of a completed or in-progress refund is 409 and does not call the provider again.
 - Provider `processed` moves payment and order to `REFUNDED` and revokes `PAYMENT` entitlements for that `orderId` only. Provider failure marks the refund `FAILED` and leaves the order `PAID`. Provider `pending` leaves the refund `INITIATED`, the order `PAID`, and does not revoke access.
 - `GET /api/v1/admin/orders` and `GET /api/v1/admin/orders/:id` (order number search, status, page). Detail includes payment, refund, and the issued invoice id when one exists. The invoice stays `ISSUED`. No credit note.
-- FakeGateway refunds return `processed`. Razorpay `payments.refund` uses normal speed (not `optimum`) through the existing SDK client. `refund.processed` / `refund.failed` webhooks are not handled here. A pending refund stays `INITIATED` until a later phase finishes it.
+- FakeGateway refunds return `processed`. Razorpay `payments.refund` uses normal speed (not `optimum`) through the existing SDK client. A `pending` create response stays `INITIATED`. `refund.processed` and `refund.failed` webhooks, and the refund tick behind `RECONCILIATION_ENABLED`, finish that row later (2026-10-10).
 - Audit actions `REFUND_INITIATED` and `REFUND_COMPLETED`. `TODO(golive): U-GST-04` on the refund service.
 - Admin `/admin/orders` and `/admin/orders/[id]`. Button label **Refund**. Confirm title `Refund this order?`. Success copy `Order refunded`. Pending copy `Refund is pending at the payment provider. Access was not revoked.` Invoice link `Download invoice` streams the phase 10 admin PDF.
 
-**Razorpay sync vs webhook:** a normal refund API response of `processed` completes in this request. `pending` does not revoke access and does not subscribe to `refund.processed`. Do not treat an in-progress refund as finished.
+**Razorpay sync vs webhook:** a normal refund API response of `processed` completes in this request. `pending` does not revoke access in that request. A later `refund.processed` webhook, or the refund tick when `RECONCILIATION_ENABLED=true`, runs the same completion. `refund.failed` marks the refund `FAILED` and leaves the order `PAID`. Do not treat an in-progress refund as finished until one of those paths settles it.
 
 **Zoho / U-GST-04:** the app does not issue a credit note. Every later filing-relevant (production) refund still needs a credit note in Zoho or the CA workflow for the same invoice, recorded in this log. This local phase does not create a filing-relevant refund.
 
@@ -618,6 +618,8 @@ Date: 2026-10-10
 - [ ] Optional — Razorpay test webhook URL for `payment.captured` and `order.paid`. Verify still completes a payment if this is skipped.
 - [ ] Prefill, required state, success pay, bad verify, modal dismiss, `payment.failed`, double-click, expired copy, subscriptions entitlement, invoice PDF, no refund control, mobile width, locked card → View plans → Buy → unlock. Steps are unchecked in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) Phase 14. Phase 16 runs that board.
 - [ ] After the smoke, record whether `PAYMENT_PROVIDER` goes back to `fake`.
+
+**Local smoke 2026-10-10 (not a close):** test card payment, billing prefill, invoice download, mobile layout, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Refund tick completed `ORD-MV28B89M-P9LA`. ngrok received `POST /api/v1/webhooks/payments/razorpay` with 200. The earlier ₹129 refund (`ORD-MV1I7RS7-RPHP`) was rejected because the test balance was ₹126.42. Phase 14 stays open: bad verify, modal dismiss, UPI failure, double-click, and expired checkout are still unchecked.
 
 **Developer confirmation:** pending. Do not mark this phase done until the list above is confirmed.
 

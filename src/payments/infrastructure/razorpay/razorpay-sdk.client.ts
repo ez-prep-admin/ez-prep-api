@@ -72,8 +72,36 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
       if (error instanceof BadGatewayException) {
         throw error;
       }
+      const description = razorpayErrorDescription(error);
       this.logger.warn(
-        `Razorpay refund failed (status ${statusCodeOf(error)})`,
+        `Razorpay refund failed (status ${statusCodeOf(error)}): ${description ?? 'no description'}`,
+      );
+      const balance = await this.availableBalancePaise();
+      throw new BadGatewayException(
+        refundFailureMessage(description, input.amount, balance),
+      );
+    }
+  }
+
+  async fetchRefund(refundId: string): Promise<RazorpayRefundResult> {
+    try {
+      const refund = await this.sdk().refunds.fetch(refundId);
+      const amount =
+        typeof refund.amount === 'number'
+          ? refund.amount
+          : Number(refund.amount);
+      return {
+        id: refund.id,
+        amount,
+        currency: refund.currency,
+        status: refund.status,
+      };
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay refund fetch failed (status ${statusCodeOf(error)})`,
       );
       throw new BadGatewayException('Payment provider request failed');
     }
@@ -128,6 +156,54 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
     }
     return this.client;
   }
+
+  private async availableBalancePaise(): Promise<number | null> {
+    try {
+      const api = (this.sdk() as unknown as RazorpayBalanceApi).api;
+      const body = await api.get({ url: '/balance' });
+      return typeof body?.balance === 'number' ? body.balance : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+interface RazorpayBalanceApi {
+  api: {
+    get(input: { url: string }): Promise<{ balance?: number }>;
+  };
+}
+
+export function razorpayErrorDescription(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('error' in error)) {
+    return undefined;
+  }
+  const description = (error as { error?: { description?: unknown } }).error
+    ?.description;
+  if (typeof description !== 'string') {
+    return undefined;
+  }
+  const trimmed = description.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function refundFailureMessage(
+  description: string | undefined,
+  refundAmount: number,
+  balancePaise: number | null,
+): string {
+  if (
+    description === 'invalid request sent' &&
+    balancePaise != null &&
+    balancePaise < refundAmount
+  ) {
+    return 'Razorpay could not refund this payment because the account balance is lower than the refund. Capture another test payment, then try again.';
+  }
+  const safe = description?.replace(/\s+/g, ' ').trim().slice(0, 180);
+  if (safe) {
+    return `Razorpay could not refund this payment: ${safe}`;
+  }
+  return 'Payment provider request failed';
 }
 
 function integerAmount(value: number | string): number {

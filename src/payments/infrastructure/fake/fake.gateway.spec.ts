@@ -28,6 +28,25 @@ describe('FakeGateway', () => {
     });
   });
 
+  it('reports a processed refund fetch unless the id says otherwise', async () => {
+    await expect(
+      gateway.fetchRefundStatus('fake_rfnd_pay_1'),
+    ).resolves.toMatchObject({
+      status: 'processed',
+      currency: 'INR',
+    });
+    await expect(
+      gateway.fetchRefundStatus('rfnd_pending'),
+    ).resolves.toMatchObject({
+      status: 'pending',
+    });
+    await expect(
+      gateway.fetchRefundStatus('rfnd_failed'),
+    ).resolves.toMatchObject({
+      status: 'failed',
+    });
+  });
+
   it('maps a staged fetch to captured, failed, or ignored', async () => {
     gateway.stageOrderStatus('fake_paid', {
       status: 'CAPTURED',

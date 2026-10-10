@@ -40,6 +40,7 @@ describe('RazorpayGateway', () => {
     refundPayment: jest.fn(),
     fetchOrder: jest.fn(),
     fetchPayments: jest.fn(),
+    fetchRefund: jest.fn(),
   };
   const gateway = new RazorpayGateway(config(), orders);
 
@@ -48,6 +49,7 @@ describe('RazorpayGateway', () => {
     orders.refundPayment.mockReset();
     orders.fetchOrder.mockReset();
     orders.fetchPayments.mockReset();
+    orders.fetchRefund.mockReset();
   });
 
   it('creates an order with the server amount in paise', async () => {
@@ -231,6 +233,56 @@ describe('RazorpayGateway', () => {
     ).resolves.toMatchObject({
       status: 'IGNORED',
       eventType: 'payment.failed',
+    });
+  });
+
+  it('parses refund.processed and refund.failed', async () => {
+    const processed = fixture('refund-processed.json');
+    await expect(
+      gateway.parseWebhook({
+        rawBody: processed,
+        headers: {
+          'x-razorpay-signature': webhookSignature(processed),
+          'x-razorpay-event-id': 'evt_refund_ok',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'REFUND_PROCESSED',
+      eventType: 'refund.processed',
+      providerRefundId: 'rfnd_test_processed',
+      amount: 12900,
+      currency: 'INR',
+    });
+
+    const failed = fixture('refund-failed.json');
+    await expect(
+      gateway.parseWebhook({
+        rawBody: failed,
+        headers: {
+          'x-razorpay-signature': webhookSignature(failed),
+          'x-razorpay-event-id': 'evt_refund_failed',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'REFUND_FAILED',
+      eventType: 'refund.failed',
+      providerRefundId: 'rfnd_test_failed',
+    });
+  });
+
+  it('fetches a provider refund status', async () => {
+    orders.fetchRefund.mockResolvedValue({
+      id: 'rfnd_1',
+      amount: 12900,
+      currency: 'INR',
+      status: 'processed',
+    });
+
+    await expect(gateway.fetchRefundStatus('rfnd_1')).resolves.toEqual({
+      providerRefundId: 'rfnd_1',
+      status: 'processed',
+      amount: 12900,
+      currency: 'INR',
     });
   });
 

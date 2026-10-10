@@ -120,6 +120,32 @@ export class FakeGateway implements PaymentGateway {
     };
   }
 
+  async fetchRefundStatus(providerRefundId: string): Promise<ProviderRefund> {
+    const id = providerRefundId.trim();
+    if (id.includes('pending')) {
+      return {
+        providerRefundId: id,
+        status: 'pending',
+        amount: 0,
+        currency: 'INR',
+      };
+    }
+    if (id.includes('failed')) {
+      return {
+        providerRefundId: id,
+        status: 'failed',
+        amount: 0,
+        currency: 'INR',
+      };
+    }
+    return {
+      providerRefundId: id,
+      status: 'processed',
+      amount: 0,
+      currency: 'INR',
+    };
+  }
+
   async refund(input: RefundInput): Promise<ProviderRefund> {
     if (
       !Number.isInteger(input.amount) ||

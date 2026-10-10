@@ -9,6 +9,11 @@ export function normalizeRazorpayEvent(
   const root = asRecord(body);
   const eventType = stringField(root, 'event') ?? 'unknown';
   const payload = asRecord(root?.payload);
+  const refundEvent = normalizeRefundEvent(payload, eventType, providerEventId);
+  if (refundEvent) {
+    return refundEvent;
+  }
+
   const payment = entity(payload, 'payment');
   const order = entity(payload, 'order');
 
@@ -36,6 +41,36 @@ export function normalizeRazorpayEvent(
     amount,
     currency,
     status: captured ? 'CAPTURED' : 'IGNORED',
+  };
+}
+
+function normalizeRefundEvent(
+  payload: Record<string, unknown> | undefined,
+  eventType: string,
+  providerEventId: string,
+): NormalizedPaymentEvent | undefined {
+  if (eventType !== 'refund.processed' && eventType !== 'refund.failed') {
+    return undefined;
+  }
+
+  const refund = entity(payload, 'refund');
+  const refundStatus = stringField(refund, 'status')?.toLowerCase();
+  const processed =
+    eventType === 'refund.processed' && refundStatus === 'processed';
+  const failed = eventType === 'refund.failed' && refundStatus === 'failed';
+
+  return {
+    providerEventId,
+    eventType,
+    providerRefundId: stringField(refund, 'id'),
+    providerPaymentId: stringField(refund, 'payment_id'),
+    amount: integerField(refund, 'amount'),
+    currency: stringField(refund, 'currency'),
+    status: processed
+      ? 'REFUND_PROCESSED'
+      : failed
+        ? 'REFUND_FAILED'
+        : 'IGNORED',
   };
 }
 

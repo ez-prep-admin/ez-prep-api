@@ -7,6 +7,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { WebhookEventStatus } from '../common/enums/webhook-event-status.enum';
 import { OrdersService } from '../orders/orders.service';
+import { RefundsService } from '../refunds/refunds.service';
 import {
   NormalizedPaymentEvent,
   ProviderWebhookInput,
@@ -31,6 +32,7 @@ export class RazorpayWebhookService {
     private readonly webhookModel: Model<WebhookEventDocument>,
     private readonly registry: PaymentGatewayRegistry,
     private readonly ordersService: OrdersService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   async handle(input: ProviderWebhookInput): Promise<WebhookHandleResult> {
@@ -96,6 +98,12 @@ export class RazorpayWebhookService {
     retry: boolean;
     error?: string;
   }> {
+    if (
+      event.status === 'REFUND_PROCESSED' ||
+      event.status === 'REFUND_FAILED'
+    ) {
+      return this.applyRefund(event);
+    }
     if (event.status !== 'CAPTURED') {
       return { status: WebhookEventStatus.IGNORED, retry: false };
     }
@@ -138,6 +146,63 @@ export class RazorpayWebhookService {
         error: 'Could not mark order paid',
       };
     }
+  }
+
+  private async applyRefund(event: NormalizedPaymentEvent): Promise<{
+    status: WebhookEventStatus;
+    retry: boolean;
+    error?: string;
+  }> {
+    if (!event.providerRefundId) {
+      return {
+        status: WebhookEventStatus.FAILED,
+        retry: false,
+        error: 'Refund event missing refund id',
+      };
+    }
+
+    if (event.status === 'REFUND_FAILED') {
+      const failed = await this.refundsService.settleFailed(
+        event.providerRefundId,
+      );
+      if (failed === 'missing') {
+        return {
+          status: WebhookEventStatus.FAILED,
+          retry: true,
+          error: 'Refund not found',
+        };
+      }
+      return { status: WebhookEventStatus.PROCESSED, retry: false };
+    }
+
+    if (event.amount == null || event.currency !== 'INR') {
+      return {
+        status: WebhookEventStatus.FAILED,
+        retry: false,
+        error: 'Amount or currency does not match the refund',
+      };
+    }
+
+    const settled = await this.refundsService.settleProcessed(
+      event.providerRefundId,
+      event.amount,
+      event.currency,
+    );
+    if (settled === 'missing') {
+      return {
+        status: WebhookEventStatus.FAILED,
+        retry: true,
+        error: 'Refund not found',
+      };
+    }
+    if (settled === 'mismatch') {
+      return {
+        status: WebhookEventStatus.FAILED,
+        retry: false,
+        error: 'Amount or currency does not match the refund',
+      };
+    }
+    return { status: WebhookEventStatus.PROCESSED, retry: false };
   }
 
   private async finish(

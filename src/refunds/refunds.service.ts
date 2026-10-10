@@ -4,6 +4,7 @@ import {
   ConflictException,
   HttpException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
@@ -16,18 +17,47 @@ import { EntitlementsService } from '../entitlements/entitlements.service';
 import { InvoiceService } from '../invoices/invoice.service';
 import { OrdersService } from '../orders/orders.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { ProviderRefund } from '../payments/domain/payment-gateway';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 import { Refund, RefundDocument } from './schemas/refund.schema';
 
 export const REFUND_COMPLETED_MESSAGE = 'Order refunded';
 export const REFUND_PENDING_MESSAGE =
   'Refund is pending at the payment provider. Access was not revoked.';
 
+const REFUND_SETTLE_MIN_AGE_MS = 60_000;
+const REFUND_SETTLE_BATCH = 50;
+
+export type RefundSettleOutcome =
+  | 'settled'
+  | 'already'
+  | 'missing'
+  | 'mismatch';
+export type RefundFailOutcome = 'failed' | 'left' | 'missing';
+
+export type RefundReconcileSummary = {
+  examined: number;
+  settled: number;
+  failed: number;
+  pending: number;
+  skipped: number;
+};
+
+export type AdminOrderUser = {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber?: string;
+  username?: string;
+};
+
 export type AdminOrderListItem = {
   id: string;
   orderNumber: string;
   userId: string;
+  user: AdminOrderUser | null;
   status: OrderStatus;
   amount: number;
   currency: string;
@@ -72,6 +102,8 @@ export type AdminOrderDetail = AdminOrderListItem & {
 
 @Injectable()
 export class RefundsService {
+  private readonly logger = new Logger(RefundsService.name);
+
   constructor(
     @InjectModel(Order.name)
     private readonly orderModel: Model<OrderDocument>,
@@ -79,6 +111,8 @@ export class RefundsService {
     private readonly paymentModel: Model<PaymentDocument>,
     @InjectModel(Refund.name)
     private readonly refundModel: Model<RefundDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
     private readonly ordersService: OrdersService,
     private readonly entitlementsService: EntitlementsService,
     private readonly invoiceService: InvoiceService,
@@ -128,8 +162,11 @@ export class RefundsService {
     ]);
 
     const totalPages = Math.ceil(total / limit) || 1;
+    const users = await this.usersById(rows.map(row => String(row.userId)));
     return {
-      data: rows.map(row => this.toListItem(row)),
+      data: rows.map(row =>
+        this.toListItem(row, users.get(String(row.userId)) ?? null),
+      ),
       pagination: {
         total,
         page,
@@ -264,10 +301,65 @@ export class RefundsService {
       };
     }
 
+    const outcome = await this.settleProcessed(
+      providerRefund.providerRefundId,
+      providerRefund.amount,
+      'INR',
+    );
+    if (outcome !== 'settled' && outcome !== 'already') {
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    const fresh = await this.requireOrder(this.idOf(order));
+    const settled =
+      (await this.refundModel
+        .findOne({ providerRefundId: providerRefund.providerRefundId })
+        .exec()) ?? refund;
+    return {
+      message: REFUND_COMPLETED_MESSAGE,
+      data: {
+        refund: this.toRefundView(settled),
+        order: await this.toDetail(fresh),
+      },
+    };
+  }
+
+  /**
+   * Completes a provider refund that is already processed.
+   * A second call does not revoke again. The invoice stays ISSUED.
+   * TODO(golive): U-GST-04 — filing-relevant refunds still need a Zoho/CA credit note.
+   */
+  async settleProcessed(
+    providerRefundId: string,
+    amount: number,
+    currency: string,
+  ): Promise<RefundSettleOutcome> {
+    const refund = await this.findByProviderRefundId(providerRefundId);
+    if (!refund) {
+      return 'missing';
+    }
+    if (refund.status === RefundStatus.COMPLETED) {
+      return 'already';
+    }
+
+    const order = await this.orderModel.findById(refund.orderId).exec();
+    if (!order) {
+      return 'missing';
+    }
+    if (order.status === OrderStatus.REFUNDED) {
+      refund.status = RefundStatus.COMPLETED;
+      await refund.save();
+      return 'already';
+    }
+    if (amount !== refund.amount || currency !== 'INR') {
+      return 'mismatch';
+    }
+
+    const actorUserId = String(refund.initiatedBy);
     await this.entitlementsService.revokePaymentEntitlementsForOrder(
       this.idOf(order),
       actorUserId,
-      trimmedReason,
+      refund.reason,
     );
     await this.ordersService.markOrderRefunded(this.idOf(order));
 
@@ -287,14 +379,132 @@ export class RefundsService {
       },
     });
 
-    const fresh = await this.requireOrder(this.idOf(order));
-    return {
-      message: REFUND_COMPLETED_MESSAGE,
-      data: {
-        refund: this.toRefundView(refund),
-        order: await this.toDetail(fresh),
+    return 'settled';
+  }
+
+  /**
+   * Marks an in-progress refund failed. A completed refund is left alone.
+   * The order stays PAID so admin can retry.
+   */
+  async settleFailed(providerRefundId: string): Promise<RefundFailOutcome> {
+    const refund = await this.findByProviderRefundId(providerRefundId);
+    if (!refund) {
+      return 'missing';
+    }
+    if (
+      refund.status === RefundStatus.COMPLETED ||
+      refund.status === RefundStatus.FAILED
+    ) {
+      return 'left';
+    }
+
+    refund.status = RefundStatus.FAILED;
+    await refund.save();
+    await this.commerceAuditService.log({
+      actorUserId: String(refund.initiatedBy),
+      action: 'REFUND_FAILED',
+      resourceType: 'refund',
+      resourceId: this.idOf(refund),
+      after: {
+        orderId: String(refund.orderId),
+        amount: refund.amount,
+        status: RefundStatus.FAILED,
+        providerRefundId: refund.providerRefundId,
       },
+    });
+    return 'failed';
+  }
+
+  /**
+   * Backup for a missed refund.processed or refund.failed webhook.
+   * Rows newer than one minute stay put so this does not race the POST.
+   */
+  async reconcileInitiatedRefunds(
+    now: Date = new Date(),
+  ): Promise<RefundReconcileSummary> {
+    const olderThan = new Date(now.getTime() - REFUND_SETTLE_MIN_AGE_MS);
+    const rows = await this.refundModel
+      .find({
+        status: RefundStatus.INITIATED,
+        providerRefundId: { $gt: '' },
+        updatedAt: { $lt: olderThan },
+      })
+      .sort({ updatedAt: 1 })
+      .limit(REFUND_SETTLE_BATCH)
+      .exec();
+
+    const summary: RefundReconcileSummary = {
+      examined: rows.length,
+      settled: 0,
+      failed: 0,
+      pending: 0,
+      skipped: 0,
     };
+
+    for (const refund of rows) {
+      const providerRefundId = refund.providerRefundId?.trim();
+      if (!providerRefundId) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      let fetched: ProviderRefund;
+      try {
+        fetched = await this.paymentGateways
+          .get(refund.provider)
+          .fetchRefundStatus(providerRefundId);
+      } catch (error) {
+        summary.skipped += 1;
+        this.logger.warn(
+          `Refund reconciliation skipped ${providerRefundId}: ${
+            error instanceof Error ? error.message : 'unexpected error'
+          }`,
+        );
+        continue;
+      }
+
+      const status = fetched.status.trim().toLowerCase();
+      if (status === 'pending') {
+        summary.pending += 1;
+        continue;
+      }
+      if (status === 'processed') {
+        const outcome = await this.settleProcessed(
+          providerRefundId,
+          fetched.amount,
+          fetched.currency ?? 'INR',
+        );
+        if (outcome === 'settled' || outcome === 'already') {
+          summary.settled += 1;
+        } else {
+          summary.skipped += 1;
+        }
+        continue;
+      }
+      if (status === 'failed') {
+        const outcome = await this.settleFailed(providerRefundId);
+        if (outcome === 'failed' || outcome === 'left') {
+          summary.failed += 1;
+        } else {
+          summary.skipped += 1;
+        }
+        continue;
+      }
+
+      summary.skipped += 1;
+    }
+
+    return summary;
+  }
+
+  private async findByProviderRefundId(
+    providerRefundId: string,
+  ): Promise<RefundDocument | null> {
+    const id = providerRefundId.trim();
+    if (!id) {
+      return null;
+    }
+    return this.refundModel.findOne({ providerRefundId: id }).exec();
   }
 
   private async beginRefund(
@@ -355,8 +565,9 @@ export class RefundsService {
       this.refundModel.findOne({ orderId: order._id }).exec(),
     ]);
 
+    const users = await this.usersById([String(order.userId)]);
     return {
-      ...this.toListItem(order),
+      ...this.toListItem(order, users.get(String(order.userId)) ?? null),
       items: order.items,
       tax: order.tax,
       billing: order.billing,
@@ -382,11 +593,41 @@ export class RefundsService {
     };
   }
 
-  private toListItem(order: OrderDocument): AdminOrderListItem {
+  private async usersById(ids: string[]): Promise<Map<string, AdminOrderUser>> {
+    const objectIds = [...new Set(ids)]
+      .filter(id => Types.ObjectId.isValid(id))
+      .map(id => new Types.ObjectId(id));
+    if (objectIds.length === 0) {
+      return new Map();
+    }
+
+    const users = await this.userModel
+      .find({ _id: { $in: objectIds } })
+      .select('name email phoneNumber username')
+      .exec();
+    return new Map(
+      users.map(user => [
+        String(user._id),
+        {
+          id: String(user._id),
+          name: user.name,
+          email: user.email,
+          phoneNumber: user.phoneNumber,
+          username: user.username,
+        },
+      ]),
+    );
+  }
+
+  private toListItem(
+    order: OrderDocument,
+    user: AdminOrderUser | null,
+  ): AdminOrderListItem {
     return {
       id: this.idOf(order),
       orderNumber: order.orderNumber,
       userId: String(order.userId),
+      user,
       status: order.status,
       amount: order.amount,
       currency: order.currency,

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { RefundsModule } from '../refunds/refunds.module';
 import { RazorpayWebhookController } from './razorpay-webhook.controller';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import {
@@ -16,6 +17,7 @@ import {
     ]),
     PaymentsModule,
     OrdersModule,
+    RefundsModule,
   ],
   controllers: [RazorpayWebhookController],
   providers: [RazorpayWebhookService],

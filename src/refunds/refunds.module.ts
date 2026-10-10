@@ -6,7 +6,9 @@ import { InvoicesModule } from '../invoices/invoices.module';
 import { OrdersModule } from '../orders/orders.module';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { PaymentsModule } from '../payments/payments.module';
+import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminOrdersController } from './admin-orders.controller';
+import { RefundReconciliationScheduler } from './refund-reconciliation.scheduler';
 import { RefundsService } from './refunds.service';
 import { Refund, RefundSchema } from './schemas/refund.schema';
 
@@ -15,6 +17,7 @@ import { Refund, RefundSchema } from './schemas/refund.schema';
     MongooseModule.forFeature([
       { name: Refund.name, schema: RefundSchema },
       { name: Order.name, schema: OrderSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     OrdersModule,
     PaymentsModule,
@@ -23,6 +26,7 @@ import { Refund, RefundSchema } from './schemas/refund.schema';
     CommerceAuditModule,
   ],
   controllers: [AdminOrdersController],
-  providers: [RefundsService],
+  providers: [RefundsService, RefundReconciliationScheduler],
+  exports: [RefundsService],
 })
 export class RefundsModule {}

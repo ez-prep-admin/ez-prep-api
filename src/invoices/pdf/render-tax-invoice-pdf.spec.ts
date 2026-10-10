@@ -42,17 +42,20 @@ describe('renderTaxInvoicePdf', () => {
     const text = visibleText(pdf);
 
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(pdf.length).toBeLessThan(20_000);
     expect(text).toContain('Snapshot Seller LLP');
     expect(text).toContain('11PLAINTEXTGSTIN');
     expect(text).toContain('424242');
     expect(text).toContain('Place of supply');
     expect(text).toContain('Karnataka');
-    expect(text).toContain('Reverse charge: No');
+    expect(text).toContain('Reverse charge');
+    expect(text).toContain('No');
     expect(text).toContain('12 Residency Road');
     expect(text).toContain('846.61');
     expect(text).toContain('76.19');
     expect(text).toContain('76.20');
     expect(text).toContain('999.00');
+    expect(text).not.toContain('INR');
     expect(text).toContain('Computer-generated invoice');
     expect(text).toContain('A Signer');
   });

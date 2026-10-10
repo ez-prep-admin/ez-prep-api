@@ -14,6 +14,7 @@ import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { ExamGroup } from '../exam-groups/schemas/exam-group.schema';
 import { Exam } from '../exams/schemas/exam.schema';
 import { MockTest } from '../mock-tests/schemas/mock-test.schema';
+import { Product } from '../products/schemas/product.schema';
 import { User } from '../users/schemas/user.schema';
 import { EntitlementsService } from './entitlements.service';
 import { Entitlement } from './schemas/entitlement.schema';
@@ -51,6 +52,9 @@ function entitlementDoc(overrides: Record<string, unknown> = {}) {
     expiresAt: doc.expiresAt,
     sourceType: doc.sourceType,
     sourceId: doc.sourceId,
+    productId: doc.productId,
+    productVersion: doc.productVersion,
+    orderId: doc.orderId,
     provisioningKey: doc.provisioningKey,
     revokedAt: doc.revokedAt,
     revokeReason: doc.revokeReason,
@@ -73,6 +77,7 @@ describe('EntitlementsService', () => {
   const examModel: any = { findById: jest.fn() };
   const examGroupModel: any = { findById: jest.fn() };
   const mockTestModel: any = { findById: jest.fn() };
+  const productModel: any = { find: jest.fn() };
   const auditService = { log: jest.fn().mockResolvedValue(undefined) };
 
   beforeEach(async () => {
@@ -87,6 +92,7 @@ describe('EntitlementsService', () => {
         { provide: getModelToken(Exam.name), useValue: examModel },
         { provide: getModelToken(ExamGroup.name), useValue: examGroupModel },
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
+        { provide: getModelToken(Product.name), useValue: productModel },
         { provide: CommerceAuditService, useValue: auditService },
       ],
     }).compile();
@@ -266,6 +272,33 @@ describe('EntitlementsService', () => {
       const list = await service.listByUser(USER_ID);
       expect(list).toHaveLength(1);
       expect(list[0].id).toBe(ENT_ID);
+    });
+
+    it('attaches the product name instead of leaving only the id', async () => {
+      const productId = new Types.ObjectId();
+      const row = entitlementDoc({
+        productId,
+        productVersion: 2,
+        sourceType: EntitlementSourceType.PAYMENT,
+      });
+      entitlementModel.find.mockReturnValue({
+        sort: () => ({ exec: () => Promise.resolve([row]) }),
+      });
+      productModel.find.mockReturnValue({
+        select: () => ({
+          exec: () =>
+            Promise.resolve([
+              { _id: productId, name: 'RRB NTPC P1', code: 'RRB-NTPC-P1' },
+            ]),
+        }),
+      });
+
+      const list = await service.listByUser(USER_ID, { includeInactive: true });
+
+      expect(list[0].productId).toBe(String(productId));
+      expect(list[0].productName).toBe('RRB NTPC P1');
+      expect(list[0].productCode).toBe('RRB-NTPC-P1');
+      expect(list[0].productVersion).toBe(2);
     });
 
     it('findActiveForUser returns only currently active docs', async () => {

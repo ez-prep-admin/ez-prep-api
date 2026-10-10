@@ -302,6 +302,41 @@ export class RazorpayGateway implements PaymentGateway {
     };
   }
 
+  async fetchRefundStatus(providerRefundId: string): Promise<ProviderRefund> {
+    const id = providerRefundId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider refund id');
+    }
+
+    let fetched: {
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+    };
+    try {
+      fetched = await this.orders.fetchRefund(id);
+    } catch (error) {
+      if (
+        error instanceof BadGatewayException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay refund status fetch failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+
+    return {
+      providerRefundId: fetched.id,
+      status: fetched.status.trim().toLowerCase(),
+      amount: fetched.amount,
+      currency: fetched.currency,
+    };
+  }
+
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown> {
     if (!input.providerOrderId) {
       return {};

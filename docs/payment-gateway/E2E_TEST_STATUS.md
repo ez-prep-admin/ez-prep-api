@@ -163,12 +163,12 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 - [ ] Admin: create or reuse an active product that covers one known ENTITLED paper (or one exam). Publish it.
 - [ ] Admin: create an offer at a known paise price (use ₹999 / `99900` so the tax lines are comparable). Publish the offer.
 - [ ] Admin: set that paper `accessMode` to `ENTITLED`. Leave a different paper on the same exam `FREE`.
-- [ ] App, student with no grant: FREE paper still starts. ENTITLED paper shows a lock and **View plans**, not Start.
+- [x] App, student with no grant: FREE paper still starts. ENTITLED paper shows a lock and **View plans**, not Start. Owner 2026-10-10.
 - [ ] View plans lists the covering product and the published offer. Price on screen matches the offer (rupees).
 - [ ] Buy opens checkout. Billing name, state, address line 1, city, and pincode are required. Address line 2 is optional. State list comes from `GET /meta/indian-states`.
 - [ ] Choose Kerala (`32`). Pay with a Razorpay **test** success instrument.
 - [ ] Order becomes paid. Subscriptions shows the entitlement (product, scope, start, end). The ENTITLED paper starts. The FREE paper still starts.
-- [ ] Subscriptions offers one invoice download. The file is a GST tax invoice PDF, not a second receipt.
+- [x] Subscriptions offers one invoice download. The file is a GST tax invoice PDF, not a second receipt. Owner 2026-10-10 (`EZPREP/2026-27/0003`).
 - [ ] PDF shows: Indian FY number `EZPREP/2026-27/####` (FY is 1 Apr–31 Mar, Asia/Kolkata), seller legal name, GSTIN `32BIAPD6927L1ZC`, SAC `999293`, full billing address, place of supply Kerala `32`, taxable ₹846.61, CGST and SGST (not IGST), total ₹999.00, “Computer-generated invoice”.
 - [ ] S3 object is `{userId}/{orderId}.pdf` in `AWS_S3_INVOICES_BUCKET`, private. Downloading the API URL without the owner’s or an admin token does not return the file.
 - [ ] Admin invoice list shows the same invoice. Admin can download it. A different student gets 404 on that invoice’s PDF route.
@@ -181,21 +181,21 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 
 ### J3 — Interstate tax
 
-- [ ] New checkout with buyer state Karnataka (`29`) or any code other than `32`. Pay successfully.
-- [ ] PDF place of supply is that state. Tax line is IGST only. CGST and SGST are absent. Totals still match the inclusive snapshot. Seller block is unchanged.
+- [x] New checkout with buyer state Karnataka (`29`) or any code other than `32`. Pay successfully. Owner 2026-10-10, Haryana `06`.
+- [x] PDF place of supply is that state. Tax line is IGST only. CGST and SGST are absent. Totals still match the inclusive snapshot. Seller block is unchanged. Owner 2026-10-10, invoice `0003`, ₹129.
 
 ### J4 — Admin grant and revoke without payment
 
 - [ ] Student with no purchase sees the ENTITLED paper locked.
-- [ ] Admin grants a covering entitlement. Student can start the paper without a new order and without a new invoice.
-- [ ] Admin revokes that grant. Under `ENFORCED`, start is denied again and the card returns to the lock / View plans state.
+- [x] Admin grants a covering entitlement. Student can start the paper without a new order and without a new invoice. Owner 2026-10-10.
+- [x] Admin revokes that grant. Under `ENFORCED`, start is denied again and the card returns to the lock / View plans state. Owner 2026-10-10.
 
 ### J5 — Refund
 
-- [ ] Admin opens the paid order from J1 and refunds the full amount with a reason. Confirm modal. Success.
-- [ ] Order/payment show refunded. Entitlements that came from that order are revoked. Under `ENFORCED` the paper locks again.
+- [x] Admin opens the paid order from J1 and refunds the full amount with a reason. Confirm modal. Success. Owner 2026-10-10. A `pending` Razorpay refund finished on the refund tick (`ORD-MV28B89M-P9LA`).
+- [x] Order/payment show refunded. Entitlements that came from that order are revoked. Under `ENFORCED` the paper locks again. Owner 2026-10-10, refund completed. Paper lock after that revoke was not separately written down.
 - [ ] Grants that did not come from that order are still active.
-- [ ] The original invoice stays issued. The app does not offer a credit note and does not show a refund button to the student.
+- [x] The original invoice stays issued. The app does not offer a credit note and does not show a refund button to the student. Owner 2026-10-10, no refund control on the student dashboard.
 - [ ] Second refund of the same order fails with a clear admin error.
 - [ ] Record the Zoho Books credit-note step for this refund (`U-GST-04`) in the phase 16 session log. The app does not generate that note.
 
@@ -216,11 +216,11 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 - [ ] Archived product or unpublished offer cannot be bought. The plans sheet does not sell it.
 - [ ] Student who already has access sees no lock and no “buy this exam” CTA on overview.
 - [ ] Direct launch that the API rejects with entitlement-required shows a banner and View plans. It does not fail silently.
-- [ ] Narrow mobile width: lock card, plans sheet, checkout form, and subscriptions remain usable.
+- [x] Narrow mobile width: lock card, plans sheet, checkout form, and subscriptions remain usable. Owner 2026-10-10.
 
 ### J8 — Go-live soak (only after J1–J7)
 
-- [ ] `ACCESS_ENFORCEMENT_MODE=ENFORCED` locally. Repeat J1’s lock, purchase, and FREE-paper checks.
+- [x] `ACCESS_ENFORCEMENT_MODE=ENFORCED` locally. Repeat J1’s lock, purchase, and FREE-paper checks. Owner 2026-10-10: free papers start, entitled papers deny without payment, paid papers unlock.
 - [ ] Rollback drill: set the mode back to `LEGACY` and confirm the previously locked paper starts again. Document the switch in the session log, then decide whether production stays ENFORCED.
 - [ ] Production seller/tax seed (`U-OPS-01`) and live Razorpay keys plus webhook (`U-OPS-02`) are either done or explicitly still open in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md). This local pass does not by itself flip production.
 - [ ] Client bundle does not contain the Razorpay key secret or webhook secret.
@@ -280,7 +280,7 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 
 - [ ] Partial refund is not offered.
 - [ ] Refund of an unpaid or already refunded order is rejected.
-- [ ] Student UI has no refund control.
+- [x] Student UI has no refund control. Owner 2026-10-10.
 - [ ] Reconciliation of a captured-but-still-pending Razorpay order marks it paid, provisions once, and invoices once. See the J6 capture row for how to produce that order.
 - [ ] Reconciliation of an unpaid dismissed checkout expires it (`EXPIRED`, payment still `INITIATED`) and does not invoice.
 - [ ] Reconciliation of a provider-failed order sets the order and payment to `FAILED` and does not invoice.
@@ -360,7 +360,7 @@ Routes and copy phase 16 must match:
 
 ### Phase 14 — Checkout and subscriptions
 
-Do not check these boxes in this phase. Phase 16 runs them with J1–J3 and J6. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
+Checked rows below are the owner pass on 2026-10-10. Unchecked rows stay open. This does not close phase 14 or phase 16. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
 
 Local smoke before the pass: API `PAYMENT_PROVIDER=razorpay` with test key id and secret, `INVOICES_ENABLED=true`, and the invoice bucket set. App `.env` has `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) and not the secret. Restart both. A webhook tunnel for `payment.captured` and `order.paid` is optional. Verify still completes a payment if the tunnel is skipped.
 
@@ -369,9 +369,9 @@ Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or U
 - [ ] `/dashboard/checkout` with no `offerId`. Heading `Checkout`. Body `Choose a plan from View plans to continue.` No Pay button.
 - [ ] **Buy** opens `/dashboard/checkout?offerId=<offer id>`. The page shows the product name, duration (`3 months` and the other presets), and rupees from `effectiveAmount`.
 - [ ] An unknown or inactive offer shows `This plan is not available.` Razorpay does not open.
-- [ ] Billing name is prefilled from `GET /me/billing-profile` when one is saved, otherwise from the account name. State, address line 1, city, and a 6-digit pincode are required. Address line 2 is optional. The state list is `GET /meta/indian-states`.
+- [x] Billing name is prefilled from `GET /me/billing-profile` when one is saved, otherwise from the account name. State, address line 1, city, and a 6-digit pincode are required. Address line 2 is optional. The state list is `GET /meta/indian-states`. Owner 2026-10-10.
 - [ ] **Pay securely** creates the order, then `PATCH /me/billing-profile`. A second visit prefills the saved address.
-- [ ] Success card or UPI. Copy: heading `Payment received`, body `Payment received. Your access is active.` **View subscriptions** opens `/dashboard/subscriptions`. Returning to the exam shows the paper unlocked without a full browser reload.
+- [x] Success card or UPI. Copy: heading `Payment received`, body `Payment received. Your access is active.` **View subscriptions** opens `/dashboard/subscriptions`. Returning to the exam shows the paper unlocked without a full browser reload. Owner 2026-10-10, test card payment and unlock. Exact success heading was not quoted.
 - [ ] A bad or tampered verify shows the API error and does not unlock the paper.
 - [ ] Closing the Razorpay modal shows `Payment was not completed. You can try again.` No entitlement and no invoice. The order stays pending.
 - [ ] UPI `failure@razorpay` shows an error. No entitlement and no invoice.
@@ -379,14 +379,27 @@ Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or U
 - [ ] An expired order shows `This checkout has expired. Start again.`
 - [ ] With `PAYMENT_PROVIDER=fake`, Pay shows `This environment is not set up for card checkout.` and does not open Razorpay.
 - [ ] Subscriptions heading `My Subscriptions`. A new student sees `You do not have active access yet.` Paid access shows the product name, scope, start, and end (`Lifetime` when there is no end). Admin grants show the scope name and no product. Orders include pending rows labeled `Pending`, not `Paid`.
-- [ ] **Download invoice** saves the GST PDF. There is no refund control.
-- [ ] Narrow mobile width: checkout form and subscriptions remain usable.
+- [x] **Download invoice** saves the GST PDF. There is no refund control. Owner 2026-10-10.
+- [x] Narrow mobile width: checkout form and subscriptions remain usable. Owner 2026-10-10.
 
 ### Phase 15 — Rollout hardening
 
 Planned proof is J8. When phase 15 finishes, add the go-live runbook link and the production checklist. Do not mark the program live in `STATUS.md` until the close-out below is signed.
 
 ---
+
+## Local session log
+
+These notes are from owner testing on 2026-10-10. They do not check the phase 16 boxes and they do not close phase 14.
+
+- A Razorpay test payment for `ORD-MV1I7RS7-RPHP` (₹129, Haryana, IGST) reached `PAID`. The payment is `CAPTURED`. The admin order shows the invoice. Student access was granted.
+- Checkout create previously failed for two local setup issues, both fixed in code: Razorpay rejected the key id/secret (`401`), and a payments unique index treated every unpaid checkout as the same record (`409` on `providerPaymentId`). A later pay with the current test key opened Checkout.js and completed.
+- Admin **Refund** on that paid order called Razorpay and Razorpay returned `400` `invalid request sent`. The order stayed `PAID`. The refund row is `FAILED`. Access was not revoked. The invoice stayed issued. A failed refund can be tried again from the same button.
+- The captured payment is ₹129.00. The Razorpay test balance at the time was ₹126.42, which is short of a full refund because Razorpay has already taken its fee. Capture another test payment so the balance covers ₹129, then refund this order again.
+- The admin error for that `400` was the generic `Payment provider request failed`. The API now returns the balance explanation when Razorpay's description is `invalid request sent` and the balance is below the refund.
+- Admin **Refund** on `ORD-MV28B89M-P9LA` returned 200 with refund `INITIATED` (`rfnd_TmAYE2JW0SAI1e`). Razorpay later moved that refund to `processed`. With `RECONCILIATION_ENABLED=true`, the refund tick marked it completed. Owner confirmed 2026-10-10.
+- Owner local pass the same day: payment, billing prefill, invoice download, mobile checkout and subscriptions, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Webhook URL is registered through ngrok. Razorpay asks you to choose the webhook secret. Two `POST /api/v1/webhooks/payments/razorpay` calls returned 200. Phase 14 and phase 16 stay open.
+- Invoice `EZPREP/2026-27/0003` showed a hand-drawn currency mark that did not read as ₹. New invoices use the Noto Sans Bold rupee outline. Already stored PDFs are not regenerated.
 
 ## Close-out (phase 16 only)
 
