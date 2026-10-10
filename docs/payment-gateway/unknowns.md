@@ -2,8 +2,8 @@
 
 Open questions that block design, compliance, or go-live. Resolved items stay at the bottom for traceability.
 
-**Architecture unknowns (U-GST-01…03, U-GST-05, U-RZ-*, U-BILL-01, U-MIG-01, U-LEG-01, U-GST-06 address): RESOLVED.**  
-**Remaining CA/ops items are go-live TODOs** — they do **not** block phases 01–14. Track in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md); clear before production live (phase 15).
+**Architecture unknowns (U-GST-01…03, U-GST-05, U-GST-06, U-GST-08, U-GST-09, U-RZ-*, U-BILL-01, U-MIG-01, U-LEG-01, U-OPS-01, U-OPS-02): RESOLVED as decisions.**  
+**What remains are go-live execution steps** in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md), not open design questions. Phase 14 is closed. Production is not live.
 
 This pack is an engineering plan, **not legal advice**. Confirm with a Chartered Accountant before production invoicing.
 
@@ -11,59 +11,41 @@ Canonical ops tracker: [`STATUS.md`](STATUS.md).
 
 ---
 
-## Open — operations
+## Still to confirm at go-live
 
-### U-OPS-01 — Seed production seller/tax config values
-- **Values (owner, 2026-10-09):** legal name `EzPrep - Powered by Clustream`; GSTIN `32BIAPD6927L1ZC`; address `Kochi, Kerala`; state Kerala / `32`. Tax: 18%, SAC `999293`.
-- **Remaining:** Run `npm run commerce:seed-local-tax-config` against **production** Mongo at phase 15. Local Mongo is seeded from the same script. Do not hardcode these strings in checkout or tax services.
-- **Blocks:** Production invoice issuance until the prod database has the row.
+These are checklist steps. The code already behaves as described. Details are in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md).
 
-### U-OPS-02 — Production Razorpay live credentials
-- **Known:** Owner has both Razorpay test keys and live keys. Local `.env` uses **test** keys. Production env uses **live** keys. Names are in `.env.example`: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`. Do not commit the values.
-- **Remaining:** Owner places the keys in each environment. Production webhook URL still has to be registered in the Razorpay dashboard (phase 15).
-- **Blocks:** Production payments until live keys and the webhook URL are in place.
+### U-GST-07 — E-invoicing / IRN
+- v1 does not integrate IRN. The CA verified the invoice that was issued without one.
+- Revisit only if turnover later makes e-invoicing mandatory.
 
----
+### U-GST-10 — Place of supply
+- The PDF prints the buyer state collected at checkout.
+- Owner will confirm that this is correct for SAC `999293`. No code change unless that confirmation amends it.
 
-## Open — GST / accounting compliance (CA required)
+### U-GST-04 — Credit notes
+- Refunds revoke access and leave the invoice issued. Credit notes are deferred to Zoho or a later phase.
 
-### U-GST-04 — Credit notes on refund (high priority for filing)
-- **Question:** Until in-app credit notes exist, what is the mandatory Zoho Books / GST portal process when an admin refunds a paid order?
-- **Why it matters:** Refunding money and revoking access **without** a credit note (CGST §34) can leave outward tax liability overstated. App v1 explicitly defers credit notes.
-- **Interim rule (engineering):** On every admin refund, `STATUS.md` must record that a **credit note was issued in Zoho** (or CA workflow) for the same invoice/order. Do not treat app refund alone as GST-complete.
-- **Options:** A) Manual Zoho credit note per refund (v1). B) Build in-app credit notes (later phase).
-- **Blocks:** Clean GSTR adjustment after first production refund — not phase 01 coding.
+### U-OPS-01 — Production seller and tax seed
+- Values are confirmed. Run the existing seed against production Mongo when going live.
 
-### U-GST-06 — Recipient address on tax invoice — RESOLVED (product)
-- **Decision:** Always collect billing **address** (line1, optional line2, city, pincode) + name + state at checkout (D-10).
-- Implement in order billing snapshot (phase 07) and checkout UI (phase 14); print on PDF (phase 10).
-- Remaining: verify live PDF in go-live checklist (`GOLIVE_TODOS.md`).
-
-### U-GST-07 — E-invoicing / IRN applicability
-- **Question:** Is EZ Prep (by aggregate turnover) required to report B2B e-invoices or any B2C e-invoice scheme? v1 is B2C-only and does not integrate IRN/e-invoice portal.
-- **Why it matters:** If turnover crosses notified thresholds, additional systems may be required.
-- **Blocks:** Only if CA says you are in e-invoice mandate for these supplies.
-
-### U-GST-08 — Signature / digital signature on PDF
-- **Question:** Rule 46 includes signature or digital signature of supplier, with relaxation for documents issued in accordance with the IT Act, 2000.
-- **Options:** A) CA accepts system-generated PDF without wet signature. B) Add digital signature. C) Add authorized signatory name/designation block as practice.
-- **Blocks:** PDF template finalization (phase 10) — low code risk if CA accepts electronic invoice under IT Act.
-
-### U-GST-09 — Invoice series: financial year vs calendar year
-- **Question:** Owner earlier preferred `EZPREP/2026/0001` (calendar year). CGST Rule 46 / GST Council materials describe consecutive serial numbers **unique for a financial year**.
-- **Engineering decision after compliance review:** Default series to **Indian financial year** `EZPREP/YYYY-YY/####` (e.g. `EZPREP/2025-26/0001`), reset sequence each FY (Asia/Kolkata). See `decisions.md` D-11 and `gst-invoicing.md`.
-- **Still confirm with CA** that this format is acceptable for your books/Zoho import.
-- **Blocks:** Phase 10 numbering implementation detail (FY is the planned default).
-
-### U-GST-10 — Place of supply wording for online coaching / mock tests
-- **Question:** For GSTR-1, place of supply for these services should be recipient’s state (based on state collected at checkout) for typical B2C online supplies — confirm with CA that treating buyer state as POS is correct for your SAC.
-- **Blocks:** Correct GSTR-1; invoice must print Place of supply (especially interstate).
+### U-OPS-02 — Production Razorpay
+- Live keys are ready. When going live, put them in the production API env and register `https://api.ezpre.in/api/v1/webhooks/payments/razorpay`. Do not register that URL on `ezprep.in`.
 
 ---
 
 ## Resolved
 
-### U-GST-05 — SAC and 18% — RESOLVED (owner, 2026-10-09)
+### U-GST-08 — Invoice template — RESOLVED (CA, 2026-10-10)
+- The CA verified the invoice that was issued. Seller and tax values can still be changed in the database. The computer-generated line stays.
+
+### U-GST-09 — Invoice series — RESOLVED (owner, 2026-10-10)
+- `EZPREP/YYYY-YY/####` is the series. It is not changing for go-live.
+
+### U-OPS-01 and U-OPS-02 — RESOLVED as decisions (2026-10-10)
+- Seller, tax, live keys, and the webhook host are known. Putting them into production is a go-live step, not an open question.
+
+### U-GST-05 — SAC and 18% — RESOLVED (owner, 2026-10-09; reconfirmed 2026-10-10)
 - Sharun confirmed GST **18%** and SAC **`999293`**. Stored in instance `taxConfig` via the seed script. Change later by editing that config and re-seeding, not by hardcoding. No separate CA letter is on file.
 
 ### U-GST-01 — GST rate and central tax config — RESOLVED

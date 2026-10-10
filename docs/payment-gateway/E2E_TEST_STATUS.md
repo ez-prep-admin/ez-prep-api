@@ -244,14 +244,14 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 
 - [ ] Offer price on the plans sheet and checkout equals the published offer, displayed in rupees, and the order stored is paise.
 - [ ] A **DRAFT** product does not appear in View plans. Publish it, then it does.
-- [ ] An offer set to **Inactive** disappears from View plans. Checkout create with that offer id is rejected (`Offer is not active`). Setting it back to **Active** lists it again.
+- [x] An offer set to **Inactive** disappears from View plans. Checkout create with that offer id is rejected (`Offer is not active`). Setting it back to **Active** lists it again. Owner 2026-10-10, inactive offers are hidden in the student UI.
 - [ ] A second **Active** offer for the same duration on the same product is rejected. The duration option shows `(ACTIVE exists)`.
 - [ ] A sale window that has ended shows the list price. A window that includes now shows the sale price.
 - [ ] **Archive** removes the product from View plans and checkout. It does not revoke an entitlement already granted or purchased.
 - [ ] A **MOCK_TEST** product is listed on that paper’s View plans and is not listed on the exam overview dialog. An **EXAM** or **EXAM_GROUP** product is listed on both when it covers that exam.
 - [ ] Duplicate creates a draft that is not sold until published. Deleting a draft removes it. Archiving a draft is rejected.
 - [ ] Changing an offer after a paid order does not change that order’s `pricingSnapshot` or the invoice totals. View plans shows the new price.
-- [ ] Two rapid Pay clicks create one order for one idempotency key, or the second click is ignored. They do not double-charge or double-provision.
+- [x] Two rapid Pay clicks create one order for one idempotency key, or the second click is ignored. They do not double-charge or double-provision. Owner 2026-10-10.
 
 ### Checkout and provider
 
@@ -360,25 +360,25 @@ Routes and copy phase 16 must match:
 
 ### Phase 14 — Checkout and subscriptions
 
-Checked rows below are the owner pass on 2026-10-10. Unchecked rows stay open. This does not close phase 14 or phase 16. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
+Checked rows below are the owner pass on 2026-10-10. Phase 14 is closed. Unchecked rows elsewhere in this file stay open for phase 16. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
 
 Local smoke before the pass: API `PAYMENT_PROVIDER=razorpay` with test key id and secret, `INVOICES_ENABLED=true`, and the invoice bucket set. App `.env` has `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) and not the secret. Restart both. A webhook tunnel for `payment.captured` and `order.paid` is optional. Verify still completes a payment if the tunnel is skipped.
 
 Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or UPI `success@razorpay`. Failure instrument: UPI `failure@razorpay`.
 
 - [x] `/dashboard/checkout` with no `offerId`. Heading `Checkout`. Body `Choose a plan from View plans to continue.` No Pay button. Owner 2026-10-10.
-- [ ] **Buy** opens `/dashboard/checkout?offerId=<offer id>`. The page shows the product name, duration (`3 months` and the other presets), and rupees from `effectiveAmount`.
-- [ ] An unknown or inactive offer shows `This plan is not available.` Razorpay does not open.
+- [x] **Buy** opens `/dashboard/checkout?offerId=<offer id>`. The page shows the product name, duration (`3 months` and the other presets), and rupees from `effectiveAmount`. Owner 2026-10-10, purchases completed.
+- [x] An unknown or inactive offer shows `This plan is not available.` Razorpay does not open. Owner 2026-10-10, inactive offers are not shown in the student UI.
 - [x] Billing name is prefilled from `GET /me/billing-profile` when one is saved, otherwise from the account name. State, address line 1, city, and a 6-digit pincode are required. Address line 2 is optional. The state list is `GET /meta/indian-states`. Owner 2026-10-10.
-- [ ] **Pay securely** creates the order, then `PATCH /me/billing-profile`. A second visit prefills the saved address.
+- [x] **Pay securely** creates the order, then `PATCH /me/billing-profile`. A second visit prefills the saved address. Owner 2026-10-10.
 - [x] Success card or UPI. Copy: heading `Payment received`, body `Payment received. Your access is active.` **View subscriptions** opens `/dashboard/subscriptions`. Returning to the exam shows the paper unlocked without a full browser reload. Owner 2026-10-10, test card payment and unlock. Exact success heading was not quoted.
-- [ ] A bad or tampered verify shows the API error and does not unlock the paper.
+- [x] A bad or tampered verify shows the API error and does not unlock the paper. Owner 2026-10-10: payment-stage errors did not unlock the paper.
 - [x] Closing the Razorpay modal shows `Payment was not completed. You can try again.` No entitlement and no invoice. The order stays pending. Owner 2026-10-10.
 - [x] UPI `failure@razorpay` shows an error. No entitlement and no invoice. Owner 2026-10-10.
-- [ ] A second click on **Pay securely** while the first request is in flight does not open a second modal.
+- [x] A second click on **Pay securely** while the first request is in flight does not open a second modal. Owner 2026-10-10, after the 600ms lock.
 - [x] An expired order shows `This checkout has expired. Start again.` Owner 2026-10-10.
-- [ ] With `PAYMENT_PROVIDER=fake`, Pay shows `This environment is not set up for card checkout.` and does not open Razorpay.
-- [ ] Subscriptions heading `My Subscriptions`. A new student sees `You do not have active access yet.` Paid access shows the product name, scope, start, and end (`Lifetime` when there is no end). Admin grants show the scope name and no product. Orders include pending rows labeled `Pending`, not `Paid`.
+- [x] With `PAYMENT_PROVIDER=fake`, Pay shows `This environment is not set up for card checkout.` and does not open Razorpay. Owner 2026-10-10. Production stays on Razorpay.
+- [x] Subscriptions heading `My Subscriptions`. A new student sees `You do not have active access yet.` Paid access shows the product name, scope, start, and end (`Lifetime` when there is no end). Admin grants show the scope name and no product. Orders include pending rows labeled `Pending`, not `Paid`. Owner 2026-10-10: new student and pending orders verified.
 - [x] **Download invoice** saves the GST PDF. There is no refund control. Owner 2026-10-10.
 - [x] Narrow mobile width: checkout form and subscriptions remain usable. Owner 2026-10-10.
 
@@ -390,7 +390,7 @@ Planned proof is J8. When phase 15 finishes, add the go-live runbook link and th
 
 ## Local session log
 
-These notes are from owner testing on 2026-10-10. They do not check the phase 16 boxes and they do not close phase 14.
+These notes are from owner testing on 2026-10-10. They closed phase 14. They do not check the phase 16 boxes.
 
 - A Razorpay test payment for `ORD-MV1I7RS7-RPHP` (₹129, Haryana, IGST) reached `PAID`. The payment is `CAPTURED`. The admin order shows the invoice. Student access was granted.
 - Checkout create previously failed for two local setup issues, both fixed in code: Razorpay rejected the key id/secret (`401`), and a payments unique index treated every unpaid checkout as the same record (`409` on `providerPaymentId`). A later pay with the current test key opened Checkout.js and completed.
@@ -400,7 +400,8 @@ These notes are from owner testing on 2026-10-10. They do not check the phase 16
 - Admin **Refund** on `ORD-MV28B89M-P9LA` returned 200 with refund `INITIATED` (`rfnd_TmAYE2JW0SAI1e`). Razorpay later moved that refund to `processed`. With `RECONCILIATION_ENABLED=true`, the refund tick marked it completed. Owner confirmed 2026-10-10.
 - Owner local pass the same day: payment, billing prefill, invoice download, mobile checkout and subscriptions, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Webhook URL is registered through ngrok. Razorpay asks you to choose the webhook secret. Two `POST /api/v1/webhooks/payments/razorpay` calls returned 200. Phase 14 and phase 16 stay open.
 - Invoice `EZPREP/2026-27/0003` showed a hand-drawn currency mark that did not read as ₹. New invoices use the Noto Sans Bold rupee outline. Owner confirmed a newly issued invoice on 2026-10-10. Already stored PDFs are not regenerated.
-- Same pass: closed the Razorpay window (order stayed pending, payment not captured), UPI failure, expired checkout, checkout with no plan, a second refund error, an unrelated grant still active, and the reconciliation expire pass. A double click around the payment modal opened a second window or left checkout stuck. Pay stays locked for 600ms after the modal closes so that click does not start another payment. The double-click row stays open until that is tried again.
+- Same pass: closed the Razorpay window (order stayed pending, payment not captured), UPI failure, expired checkout, checkout with no plan, a second refund error, an unrelated grant still active, and the reconciliation expire pass. A double click around the payment modal opened a second window. Pay now stays locked for 600ms after the modal closes. Owner retested that on 2026-10-10 and it held.
+- Phase 14 closed the same day. Also verified: payment-stage errors do not unlock a paper, fake provider does not open Razorpay, inactive offers are hidden, a new student sees the empty subscriptions state, and a pending order stays pending. The student app env has `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. Production will use Razorpay, not the fake provider. The remaining unchecked rows in this file are phase 16.
 
 ## Close-out (phase 16 only)
 

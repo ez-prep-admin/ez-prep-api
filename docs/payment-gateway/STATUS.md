@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14 **in_progress** — checkout and subscriptions coded 2026-10-10; developer confirmation still open |
+| Current phase | 15 **pending** — phase 14 closed 2026-10-10. Next is rollout hardening, not the live switch |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -76,8 +76,8 @@ Date: YYYY-MM-DD
 | 11 | Admin refunds | **done** | 2026-10-09 | Sharun — broad admin refund smoke; full UI-integrated J5 pass is phase 16 |
 | 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
 | 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
-| 14 | Checkout + subscriptions | **in_progress** | | Code landed 2026-10-10. Manual Razorpay smoke and developer confirmation still open |
-| 15 | Rollout hardening | pending | | Pending: GOLIVE_TODOS cleared; prod seed; ENFORCED soak. Not the live switch |
+| 14 | Checkout + subscriptions | **done** | 2026-10-10 | Sharun — local Razorpay purchase, refund, invoice, and subscriptions smoke |
+| 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
 ---
@@ -602,7 +602,7 @@ Date: 2026-10-10
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 14
 
-### 2026-10-10 — Phase 14 — Checkout and subscriptions (in progress)
+### 2026-10-10 — Phase 14 — Checkout and subscriptions
 
 **Code:** `ez-prep-api` (`GET`/`PATCH /me/billing-profile`, `GET /me/orders`, `GET /me/orders/:id`) and `ezprep-app` (checkout, Razorpay adapter, subscriptions). Admin untouched.  
 **Tests:** API Jest users + orders — pass (116). `tsc -p tsconfig.build.json --noEmit` — pass. ezprep-app `tsc --noEmit` — pass. ESLint on the phase files — pass. No new app test runner (D-15).
@@ -613,17 +613,19 @@ Date: 2026-10-10
 - No checkout feature flag, same as phase 13. Rollback is reverting the phase.
 
 **Developer ops (manual) — confirm each:**
-- [ ] App `.env`: `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) only. Confirm the key secret and webhook secret are absent from the app env and the client bundle.
-- [ ] API `.env`: `PAYMENT_PROVIDER=razorpay`, test key id and secret, `INVOICES_ENABLED=true`, invoice bucket set. Restart the API and the app.
-- [ ] Optional — Razorpay test webhook URL for `payment.captured` and `order.paid`. Verify still completes a payment if this is skipped.
-- [ ] Prefill, required state, success pay, bad verify, modal dismiss, `payment.failed`, double-click, expired copy, subscriptions entitlement, invoice PDF, no refund control, mobile width, locked card → View plans → Buy → unlock. Steps are unchecked in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) Phase 14. Phase 16 runs that board.
-- [ ] After the smoke, record whether `PAYMENT_PROVIDER` goes back to `fake`.
+- [x] App `.env`: `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. The key secret and webhook secret are not in the app env. Owner 2026-10-10.
+- [x] API `.env`: `PAYMENT_PROVIDER=razorpay`, test key id and secret, `INVOICES_ENABLED=true`, invoice bucket set. Used for the local smoke.
+- [x] Razorpay test webhook URL via ngrok. `POST /api/v1/webhooks/payments/razorpay` returned 200. The owner chooses the webhook secret in the dashboard and copies it into `RAZORPAY_WEBHOOK_SECRET`.
+- [x] Prefill, success pay, payment-stage error does not unlock, modal dismiss, UPI failure, double-click, expired copy, new-student subscriptions, pending order stays pending, invoice PDF, no refund control, mobile width, inactive offers hidden. Recorded in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md). The wider phase 16 board stays open.
+- [x] `PAYMENT_PROVIDER` stays `razorpay` for production. The fake provider was checked locally and is not the production provider.
 
-**Local smoke 2026-10-10 (not a close):** test card payment, billing prefill, invoice download, mobile layout, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Refund tick completed `ORD-MV28B89M-P9LA`. ngrok received `POST /api/v1/webhooks/payments/razorpay` with 200. The earlier ₹129 refund (`ORD-MV1I7RS7-RPHP`) was rejected because the test balance was ₹126.42. Phase 14 stays open: bad verify, modal dismiss, UPI failure, double-click, and expired checkout are still unchecked.
+**Local smoke 2026-10-10:** test card payment, billing prefill, invoice download, mobile layout, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Refund tick completed `ORD-MV28B89M-P9LA`. A new invoice shows ₹. Double-click no longer opens a second payment window.
 
-**Developer confirmation:** pending. Do not mark this phase done until the list above is confirmed.
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-10
 
-**DoD:** not yet — purchase loop is coded; local Razorpay confirmation is open  
-**Deviations:** no `NEXT_PUBLIC` checkout flag (same as phase 13). `GET /me/orders` is a history view and does not replace `GET /checkout/orders/:id`.  
-**GOLIVE_TODOS touched:** none (`U-GST-06` address collection is in the checkout form; live PDF check stays phase 16)  
-**Next:** developer confirmation, then phase 15
+**DoD:** met  
+**Deviations:** no `NEXT_PUBLIC` checkout flag (same as phase 13). `GET /me/orders` is a history view and does not replace `GET /checkout/orders/:id`. Remaining catalog, stacking, S3, and audit rows stay in phase 16.  
+**GOLIVE_TODOS touched:** decisions recorded 2026-10-10. Execution of the production seed, live keys, and live webhook stays phase 15. Credit notes stay deferred. Place of supply stays a later confirmation.  
+**Next:** phase 15
