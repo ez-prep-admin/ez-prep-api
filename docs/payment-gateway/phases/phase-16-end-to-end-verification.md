@@ -7,8 +7,8 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 ## Prerequisites
 
 - Phases 00–15 implemented. Phase 10 PDF smoke, phase 11 refund UI (J5), phase 12 recon (J6), and phase 13’s detailed access UI stay on this pass. Phase 13’s broad smoke is already signed (owner, 2026-10-10). The ordered script, including product and offer setup and invalidation, is the **Full pass** section of `E2E_TEST_STATUS.md`.
-- Each of phases 11–15 has appended its real UI steps to `E2E_TEST_STATUS.md`.
-- Local API, ezprep-app, and mock-app-admin running. Razorpay **test** mode. `INVOICES_ENABLED=true` and `AWS_S3_INVOICES_BUCKET` set.
+- Each of phases 11–15, including the ad-hoc phases 14A–14E, has appended its real UI steps to `E2E_TEST_STATUS.md`.
+- Local API, ezprep-app, and mock-app-admin running. Razorpay **test** mode with the production capture settings (automatic; late authorizations captured). Local env: `COMMERCE_ENABLED=true`, `PAYMENT_PROVIDER=razorpay`, `INVOICES_ENABLED=true`, `RECONCILIATION_ENABLED=true`, `AWS_S3_INVOICES_BUCKET` set, and a webhook tunnel.
 
 ## Source documents
 
@@ -16,7 +16,14 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 ## Target behavior
 
-1. Execute every journey and negative case in `E2E_TEST_STATUS.md`.
+1. Execute every journey and negative case in `E2E_TEST_STATUS.md`. Besides the rows each phase appended, these must be covered:
+   - **Payment flow:** late payment after the 30-minute window; fail then succeed inside one modal; network loss after success (bounded polling); double-click Buy.
+   - **Stacking and refunds:** stacked purchase starts later and re-anchors on refund; lifetime repurchase blocked.
+   - **GST:** intra-state (Kerala) and inter-state invoices.
+   - **Resilience:** S3 down at payment then recovered; wrong webhook secret shows in health.
+   - **Admin:** repair, typed refund confirmation, health page.
+   - **Copy:** Terms and checkout wording.
+   - **Second instance:** API with `INSTANCE_ID=examflex`, `INSTANCE_NAME=ExamFlex`, a separate local database, and a test `examflex.json` seed. Expect ExamFlex seller, GSTIN, and series on the invoice, and "ExamFlex" in the Razorpay modal. A webhook tagged for `ezprep` is ignored.
 2. Fix failures found in this pass and re-run the affected rows.
 3. Sign the close-out in that file and in `STATUS.md`.
 4. Sign phase 16 in `STATUS.md`. Phase 10 is already done. Production go-live stays a separate step.

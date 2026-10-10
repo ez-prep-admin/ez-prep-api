@@ -267,7 +267,7 @@ Collection: `tax_invoices`
 | `sacCode` / `sacDescription` | string | Snapshot from taxConfig (not live re-read for history) |
 | `lineItems` | description, amount | |
 | `tax` | TaxBreakdown | gross, taxable, tax, cgst, sgst, igst, taxRate — from order snapshot |
-| `issuedAt` | date | |
+| `issuedAt` | date | From 14C: always `order.paidAt` (D-25) |
 | `pdfStorageKey` | string? | S3 key or similar |
 | `createdAt` | date | |
 
@@ -317,13 +317,33 @@ Extend existing [`instance-config`](../../src/instance-config/schemas/instance-c
 | --- | --- |
 | `legalName` | `EzPrep - Powered by Clustream` |
 | `gstin` | `32BIAPD6927L1ZC` (prefix matches `stateCode`) |
-| `registeredAddress` | `Kochi, Kerala` |
+| `registeredAddress` | `Kerala` (from 2026-10-10; was `Kochi, Kerala`) |
 | `state` | `Kerala` |
 | `stateCode` | `32` |
 
 ### TaxBreakdown (embedded on Order / Invoice)
 
-`grossAmount`, `taxableAmount`, `taxAmount`, `cgst`, `sgst`, `igst`, `taxRate` — produced by `TaxService.calculateInclusiveTax`. See [`gst-invoicing.md`](gst-invoicing.md).
+`grossAmount`, `taxableAmount`, `taxAmount`, `cgst`, `sgst`, `igst`, `taxRate` — produced by `TaxService.calculateInclusiveTax`. From 14E, new orders also store `supplyType` (`INTRA_STATE` | `INTER_STATE`), `sellerStateCode`, and `buyerStateCode`, and an intra-state split has `cgst === sgst` (D-26). See [`gst-invoicing.md`](gst-invoicing.md).
+
+### Additive fields planned in ad-hoc phases 14A–14E
+
+All of these fields are optional or backfilled at boot; none is renamed or removed. See the compatibility contract in [`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md).
+
+| Collection | Field / index | Phase |
+| --- | --- | --- |
+| `products` | `publishedGrants` | 14A |
+| `entitlements` | `durationPreset`; index `{ userId, status, expiresAt }` | 14A |
+| `entitlement_locks` (new) | `_id = userId:productId`, `holder`, `lockedUntil` (TTL) | 14A |
+| `orders` | `redundantPurchase`; index `{ userId, status, createdAt }` | 14A |
+| `orders.tax` | `supplyType`, `sellerStateCode`, `buyerStateCode` | 14E |
+| `orders` | `providerOpenClaimAt`, `requestHash`, `expiredAt`, `lateCaptureAt` | 14B |
+| `payments` | `role` (`PRIMARY` \| `DUPLICATE`); partial unique `{ orderId }` where `role = PRIMARY` | 14B |
+| `refunds` | `kind` (`ORDER` \| `DUPLICATE_CAPTURE`), `paymentId`; unique moves from `{ orderId }` to `{ paymentId }`; `outcomeUnknownAt`; `initiatedBySource` (`ADMIN` \| `SYSTEM` \| `PROVIDER`), with `initiatedBy` required only for `ADMIN` | 14B, 14C |
+| Razorpay order `notes` (provider side, not a collection) | `instanceId`, `orderId`, `orderNumber`, `userId` | 14B |
+| `instance_configs` | No schema change. Seller and tax values are written only by the per-instance seed (`scripts/commerce-seed/<instanceId>.json`) | 14E |
+| `orders` | `nextReconAt`, `reconAttempts`, `needsReview`, `lateWatchUntil`, `nextRepairAt`; index `{ status, nextReconAt }` | 14C |
+| `webhook_events` | `attempts`, `lastError`, `lastAttemptAt` | 14C |
+| `webhook_delivery_stats` (new) | hourly counters, TTL 7 days | 14C |
 
 ### Indian states reference
 

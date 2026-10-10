@@ -7,9 +7,10 @@ Operationally enable paid access: keep/confirm papers are `FREE` via backfill un
 ## Prerequisites
 
 - Phases 01–14 done with successful **local** test-mode payments, invoices, refunds, recon + signed webhook fixture tests.
-- [`../GOLIVE_TODOS.md`](../GOLIVE_TODOS.md) board cleared or CA-waived and logged in `STATUS.md`.
-- Ops: `U-OPS-01` (prod seller/tax seed), `U-OPS-02` (live Razorpay + webhook).
-- FREE backfill already applied; admins (not mass user entitlements) control which papers become `ENTITLED` after launch (D-20 / U-MIG-01).
+- Ad-hoc phases 14A–14E done ([`../PRE_RELEASE_REVIEW.md`](../PRE_RELEASE_REVIEW.md)).
+- Production steps for both instances live only in [`../GO_LIVE_GUIDE.md`](../GO_LIVE_GUIDE.md), the single source of truth for go-live. This phase does not write a separate runbook. If the phase changes an operational detail (a key, a check, a command), update the guide in the same change.
+- [`../GOLIVE_TODOS.md`](../GOLIVE_TODOS.md) board cleared, CA-waived, or pointing at a guide step, and logged in `STATUS.md`.
+- Admins, not mass user entitlements, control which papers become `ENTITLED` after launch (D-20 / U-MIG-01; guide Steps 14 and 22).
 
 ## Source documents
 
@@ -25,7 +26,7 @@ Operationally enable paid access: keep/confirm papers are `FREE` via backfill un
 
 ## Target behavior
 
-1. Runbook: seed prod seller/taxConfig → register prod Razorpay webhook → local ENFORCED soak with mixed FREE/ENTITLED → production secrets → ENFORCED prod → admins flip selected papers to ENTITLED over time.
+1. Local ENFORCED soak with mixed FREE/ENTITLED papers. The production order (seed, webhook, switch on, smoke, ENFORCED, flip papers) is `GO_LIVE_GUIDE.md` Stages 3–5.
 2. **No staging deployment** (D-18).
 3. Monitoring: LEGACY_ALLOW count (~0 after ENFORCED), payment/webhook/recon failures.
 4. Gate LEGACY so it cannot stay on in prod unnoticed.
@@ -34,7 +35,7 @@ Operationally enable paid access: keep/confirm papers are `FREE` via backfill un
 
 ## Files to create
 
-- `docs/payment-gateway/runbooks/go-live.md`
+- None for docs. `GO_LIVE_GUIDE.md` already exists; keep it current.
 
 ## Files that may be modified
 
@@ -50,12 +51,10 @@ Operationally enable paid access: keep/confirm papers are `FREE` via backfill un
 
 ## Implementation tasks
 
-1. Write go-live runbook (local vs production).
+1. Launch copy ("Free Early Access" → paid wording) and the LEGACY guard.
 2. Local ENFORCED soak with FREE + some ENTITLED papers.
-3. Production config verification (U-OPS-01, U-OPS-02).
-4. Enable ENFORCED in production.
-5. Post-go-live watch notes; admins manage ENTITLED flips.
-6. Update STATUS.md with the soak result. Leave “Payments live” as No until phase 16 is signed and production ops are actually done.
+3. Re-read `GO_LIVE_GUIDE.md` against the implemented code (key names, commands, log lines, admin labels) and correct any drift.
+4. Update STATUS.md with the soak result. Leave “Payments live” as No until phase 16 is signed and production ops are actually done.
 
 ## Requirements
 
@@ -102,10 +101,9 @@ ACCESS_ENFORCEMENT_MODE=LEGACY
 ## Completion checklist
 
 - [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] Runbook merged
+- [ ] `GO_LIVE_GUIDE.md` checked against the implemented code
 - [ ] Local ENFORCED soak signed off
-- [ ] Prod seller/tax + Razorpay live seeded
-- [ ] Production ENFORCED only after phase 16 is signed
+- [ ] Production steps are run from `GO_LIVE_GUIDE.md` only after phase 16 is signed
 - [ ] STATUS.md records the soak; live switch stays with phase 16 close-out
 
 
@@ -121,4 +119,4 @@ Before marking this phase **complete**:
 
 ## Definition of done
 
-Runbook and local ENFORCED soak are ready, production ops are documented, and rollback is written down. The program is not marked live here. Phase 16 ([`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md)) is the last gate before go-live.
+Launch copy and the LEGACY guard ship, the local ENFORCED soak passes, and `GO_LIVE_GUIDE.md` matches the code. The program is not marked live here. Phase 16 ([`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md)) is the last gate before go-live.

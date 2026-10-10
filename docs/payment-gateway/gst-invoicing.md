@@ -76,7 +76,7 @@ Extend instance-config (singleton) — **not hardcoded**:
 | --- | --- |
 | `legalName` | `EzPrep - Powered by Clustream` (owner, 2026-10-09) |
 | `gstin` | `32BIAPD6927L1ZC` today. Replace this config value if the legal entity changes. Do not block the new GSTIN with a checksum or state-prefix check |
-| `registeredAddress` | `Kochi, Kerala` |
+| `registeredAddress` | `Kerala` (owner, 2026-10-10; was `Kochi, Kerala`. Invoices issued before the change keep their snapshot. CA check `U-GST-11`) |
 | `state` | `Kerala` |
 | `stateCode` | `32` |
 
@@ -96,39 +96,40 @@ calculateInclusiveTax(input): TaxBreakdown
 
 ### Inclusive reverse calculation
 
-For inclusive `P` and rate `r = 0.18`:
+The seller is registered in Kerala (`32`). The supply type comes from the buyer's billing `stateCode` (D-26).
+
+For inclusive `P` in paise and an integer percent rate `R` (18), using integer arithmetic only:
+
+Intra-state (`buyerStateCode === sellerStateCode`): CGST and SGST are each `R/2` (9%) and **equal in paise**.
 
 ```text
-taxableAmount = round_half_up(P / (1 + r))   // lock units (paise) in tests
-taxAmount     = P - taxableAmount
+half          = round_half_up(P × R / (2 × (100 + R)))
+cgst = sgst   = half
+taxableAmount = P − 2 × half
+taxAmount     = 2 × half
+igst          = 0
 ```
 
-Intra-state (`buyerStateCode === sellerStateCode`):
+Inter-state: a single IGST at `R` (18%).
 
 ```text
-cgst + sgst = taxAmount   // remainder rule locked by fixture
-igst = 0
+taxableAmount = round_half_up(P × 100 / (100 + R))
+igst          = P − taxableAmount
+cgst = sgst   = 0
 ```
 
-Interstate:
+Invariants: `taxable + cgst + sgst + igst = P`; `cgst = sgst`; each amount is within one paisa of the exact value. The one-paisa difference in taxable value between the two cases is inherent to rounding an inclusive price into paise (CA check `U-GST-12`).
+
+### Canonical fixture (₹999 inclusive @ 18%), from phase 14E
 
 ```text
-igst = taxAmount
-cgst = sgst = 0
+Same state (Kerala → Kerala):   taxable 846.62, CGST 9% 76.19, SGST 9% 76.19, IGST 0
+Interstate (Kerala → any other): taxable 846.61, IGST 18% 152.39
 ```
 
-### Canonical fixture (₹999 inclusive @ 18%)
+Orders priced before 14E used `taxable = round_half_up(P × 100 / (100 + R))` for both cases, with the odd paisa going to SGST (₹999 → CGST 76.19, SGST 76.20). Those snapshots stay as issued.
 
-```text
-gross     = 999.00
-taxable   = 846.61
-tax       = 152.39
-
-Same state:     CGST = 76.19, SGST = 76.20, IGST = 0
-Interstate:     IGST = 152.39
-```
-
-**Snapshot** onto Order at create and Invoice at issue. Never recalculate old docs from live `taxConfig`.
+**Snapshot** onto the Order at create, including `supplyType`, `sellerStateCode`, and `buyerStateCode` (14E), and onto the Invoice at issue. The invoice copies the supply type from the order. Never recalculate old documents from the live `taxConfig`. The invoice date is the order's `paidAt` (D-25).
 
 ---
 
@@ -136,7 +137,7 @@ Interstate:     IGST = 152.39
 
 - Store amounts in integer **paise** (₹999 → `99900`), tax-inclusive.
 - Order create: resolve effective amount → `TaxService` → snapshot tax + billing (name, state, stateCode, **address if collected**).
-- Invoice issue: copy order tax; snapshot seller + SAC from config at issue time.
+- Invoice issue: copy the order tax, including the supply type; snapshot seller + SAC from config at issue time. Refuse to issue if the config seller state differs from `order.tax.sellerStateCode` (14E).
 
 ---
 
@@ -148,7 +149,7 @@ EZPREP/{FY}/{seq}
 
 Examples: `EZPREP/2025-26/0001`, `EZPREP/2026-27/0001`
 
-- FY = Indian financial year of `issuedAt` in **Asia/Kolkata** (1 Apr–31 Mar).
+- FY = Indian financial year of `issuedAt` in **Asia/Kolkata** (1 Apr–31 Mar). From 14C, `issuedAt = order.paidAt`, even when a repair issues the invoice later (D-25). A repaired invoice can therefore carry a later number than one dated after it (`U-GST-13`).
 - Sequence resets each FY; zero-padded; unique index on `invoiceNumber`.
 - One invoice per order (`orderId` unique).
 

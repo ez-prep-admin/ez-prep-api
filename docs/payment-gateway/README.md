@@ -46,8 +46,11 @@ Do not start Razorpay, checkout UI, or enforcement flips until their phase. Buil
 | [unknowns.md](unknowns.md) | Resolved architecture Qs + remaining ops seeds (U-OPS-*) |
 | [engineering-rules.md](engineering-rules.md) | Rules every implementation session must follow |
 | [STATUS.md](STATUS.md) | Live implementation + developer ops + phase confirmation gate |
-| [GOLIVE_TODOS.md](GOLIVE_TODOS.md) | Must-clear-before-live items; non-blocking during phased coding |
+| [GO_LIVE_GUIDE.md](GO_LIVE_GUIDE.md) | **Single source of truth for go-live.** Step-by-step production guide for EZ Prep (A) and ExamFlex (B), playbooks, rollback |
+| [LEGAL_COPY.md](LEGAL_COPY.md) | Locked Terms, Privacy, and checkout wording; per-deployment legal values |
+| [GOLIVE_TODOS.md](GOLIVE_TODOS.md) | Compliance status log (CA items); production steps point to the guide |
 | [PAYMENT_STATUS.md](PAYMENT_STATUS.md) | Alias → `STATUS.md` |
+| [PRE_RELEASE_REVIEW.md](PRE_RELEASE_REVIEW.md) | 2026-10-10 review of phases 00–14; findings PR-01…PR-40, owner decisions D-22…D-28, ad-hoc phases 14A–14E, compatibility and regression contract |
 
 ### Discovery (three repos)
 

@@ -34,6 +34,11 @@ Each phase is independently executable in a **fresh agent session** and ends in 
 | 12 | [Reconciliation + audit](phase-12-reconciliation-audit.md) | api | Stuck orders worker + commerce audit |
 | 13 | [User access UI](phase-13-user-access-ui.md) | app | Locked cards, overview CTA, error mapping |
 | 14 | [User checkout + subscriptions](phase-14-user-checkout-subscriptions.md) | app | Checkout + billing + ownership page |
+| 14A | [Fail-closed config + catalog integrity](phase-14a-fail-closed-config-and-catalog-integrity.md) | api | Ad-hoc from [`../PRE_RELEASE_REVIEW.md`](../PRE_RELEASE_REVIEW.md): regression harness, production guards, frozen-version checkout, entitlement windows, re-anchor, lifetime block |
+| 14E | [GST, seller identity, per-instance commerce](phase-14e-gst-supply-type-and-seller-address.md) | api + app + admin | Ad-hoc: equal CGST/SGST split, supply-type snapshot, seller address `Kerala`, GST breakdown in UI, per-instance seed (ExamFlex), merchant name |
+| 14B | [Payment state integrity](phase-14b-payment-state-integrity.md) | api | Ad-hoc: atomic transitions, one provider order, capture-proof verify, late-capture edges, duplicate rows |
+| 14C | [Webhook, refund, repair robustness](phase-14c-webhook-refund-repair-robustness.md) | api | Ad-hoc: bounded webhook retry, late-capture watch, duplicate refunds, refund resolution, repair sweeps, async invoice dated at payment, health API |
+| 14D | [Checkout client + admin ops](phase-14d-checkout-client-and-admin-ops.md) | app + admin | Ad-hoc: modal lifecycle, bounded polling, ownership UI, admin health + repair, refund confirmation, Terms/Privacy/checkout wording |
 | 15 | [Rollout hardening](phase-15-rollout-hardening.md) | all | ENFORCED, ENTITLED content, hardening checklists |
 | 16 | [End-to-end verification](phase-16-end-to-end-verification.md) | all | One UI pass of every phase; last gate before go-live |
 
@@ -61,7 +66,12 @@ flowchart TB
   P13 --> P14[14 checkout]
   P09 --> P14
   P10 --> P14
-  P14 --> P15[15 rollout]
+  P14 --> P14A[14A fail-closed config]
+  P14A --> P14E[14E GST supply type]
+  P14E --> P14B[14B state integrity]
+  P14B --> P14C[14C webhook refund repair]
+  P14C --> P14D[14D client + admin ops]
+  P14D --> P15[15 rollout]
   P11 --> P15
   P12 --> P15
   P15 --> P16[16 e2e verification]
@@ -69,7 +79,12 @@ flowchart TB
 
 ## Recommended order
 
-`00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 15 → 16`
+`00 → 01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12 → 13 → 14 → 14A → 14E → 14B → 14C → 14D → 15 → 16`
+
+14A–14E are ad-hoc phases added by the 2026-10-10 pre-release review ([`../PRE_RELEASE_REVIEW.md`](../PRE_RELEASE_REVIEW.md)).
+
+- **Lettering.** 14E was added last but runs second: it is small and changes the order tax snapshot that 14B–14D tests build on.
+- **Gate.** Every ad-hoc phase must pass the review's compatibility and regression contract: the commerce harness from 14A, concurrency specs, the full suites in all touched repos, and a non-commerce smoke test.
 
 Phase 16 is the manual UI pass ([`../E2E_TEST_STATUS.md`](../E2E_TEST_STATUS.md)). Do not mark the program live before it is signed.
 

@@ -2,11 +2,11 @@
 
 These items **do not block phased development**. Implement phases 01–14 with extension points and `TODO(golive): <id>` comments in code where a final CA/ops answer is still pending.
 
-Before phase 15 marks production live, every row below must be `done` or `accepted-with-CA-waiver` and recorded in [`STATUS.md`](STATUS.md).
+Before production goes live, every row below must be `done`, `accepted-with-CA-waiver`, or a step in [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md), and recorded in [`STATUS.md`](STATUS.md). The guide holds every production step; this board only logs compliance status.
 
 **Policy:** Prefer additive, config-driven design. Do not hardcode unverified legal conclusions. Do not stop a phase because the CA has not replied — track it here instead.
 
-Related: [`unknowns.md`](unknowns.md) · [`gst-invoicing.md`](gst-invoicing.md) · [`STATUS.md`](STATUS.md)
+Related: [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) · [`unknowns.md`](unknowns.md) · [`gst-invoicing.md`](gst-invoicing.md) · [`STATUS.md`](STATUS.md)
 
 ---
 
@@ -29,8 +29,14 @@ Related: [`unknowns.md`](unknowns.md) · [`gst-invoicing.md`](gst-invoicing.md) 
 | U-GST-08 | Signature / e-sign on PDF | Computer-generated invoice. CA verified the invoice. Seller values remain editable in the database | No template change required for go-live | CA-verified 2026-10-10 |
 | U-GST-09 | FY invoice series | `EZPREP/YYYY-YY/####` is accepted as the standard series | No series change for go-live | accepted 2026-10-10 |
 | U-GST-10 | Place of supply = buyer state | PDF already prints the buyer state collected at checkout | Owner will confirm this for the SAC before or during go-live. Not a code change unless the CA amends it | go-live confirmation |
-| U-OPS-01 | Prod seller/tax seed | Values confirmed: legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kochi, Kerala `32`, 18%, SAC `999293`. Local DB is seeded | At go-live, run `npm run commerce:seed-local-tax-config` against production Mongo. Do not hardcode the values | go-live step |
-| U-OPS-02 | Prod Razorpay live | Live keys are ready. Local `.env` stays on test keys. Secrets are never committed | At go-live, put the live key id, key secret, and webhook secret in the production API env. Register the webhook on `https://api.ezpre.in/api/v1/webhooks/payments/razorpay` (the API host, not `ezprep.in`). Events: `payment.captured`, `order.paid`, `refund.processed`, `refund.failed` | go-live step |
+| U-GST-11 | Supplier address `Kerala` alone | `registeredAddress` is `Kerala` (owner, 2026-10-10). It is config data; 14E updates the seed file | None | CA-verified 2026-10-10 |
+| U-GST-12 | Equal CGST/SGST rounding | D-26: `cgst = sgst = round_half_up(gross × 9 / 118)`, taxable takes the remainder (₹999 → 846.62 + 76.19 + 76.19). Inter-state stays taxable 846.61 + IGST 152.39 | None | CA-verified 2026-10-10 |
+| U-GST-13 | Invoice dated at payment, numbered at issue | D-25: `issuedAt = paidAt`; numbers are allocated when issued. A rare late repair gives an invoice a higher number than one dated after it, within the same FY series | None | CA-verified 2026-10-10 |
+| U-OPS-01 | EZ Prep prod seller/tax seed | CA-verified values live in `scripts/commerce-seed/ezprep.json` (14E): legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, address `Kerala`, state Kerala `32`, 18%, SAC `999293`, prefix `EZPREP` | [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) Step 15A | go-live step |
+| U-OPS-02 | Prod Razorpay live | Live keys are ready. Local `.env` stays on test keys. Secrets are never committed. Capture automatic, late authorizations captured (owner, 2026-10-10; D-22). Razorpay disables a webhook after 24 hours of failed deliveries (verified) | `GO_LIVE_GUIDE.md` Steps 2A, 3, 7, 13A, 17A, 19A; Playbook P1 | go-live step |
+| U-OPS-03 | nginx in front of the API | nginx is the only proxy, with no Cloudflare (owner, 2026-10-10). 14A reads `TRUST_PROXY_HOPS` (1 in production) | `GO_LIVE_GUIDE.md` Steps 12A/12B and 13 | go-live step |
+| U-OPS-04 | ExamFlex selling | ExamFlex sells on the same code with its own seller identity and GSTIN (owner, 2026-10-10; D-29). No Redis is needed | `GO_LIVE_GUIDE.md` Step 0B, then every B step | go-live step (after EZ Prep) |
+| U-OPS-05 | Website legal and contact details | Seven public per-deployment values (14D §10, `LEGAL_COPY.md`; PR-40). The website legal name must equal the invoice legal name | Owner supplies customer-care phone, grievance officer name, and (optionally) the full address: `GO_LIVE_GUIDE.md` Steps 1 and 4 | go-live input |
 
 ---
 
@@ -66,3 +72,6 @@ Record when each ID is closed (also copy a line into STATUS.md session log):
 
 - 2026-10-09: U-GST-05 owner-confirmed — Sharun: GST 18% and SAC `999293`. Editable later via instance `taxConfig`, not a code change. Not a separate CA letter.
 - 2026-10-10: U-GST-05 reconfirmed. U-GST-08 and the issued invoice CA-verified. U-GST-09 series accepted. U-GST-04 credit notes deferred. U-GST-10 place of supply stays a later confirmation. U-OPS-01 and U-OPS-02 are execution steps at go-live, not open design questions. Live webhook host is `api.ezpre.in`.
+- 2026-10-10 (later): seller address changed to `Kerala` (U-OPS-01; CA check U-GST-11). Intra-state split confirmed as equal CGST 9% + SGST 9%, inter-state IGST 18% (D-26; rounding check U-GST-12). Invoice date = payment date (D-25; U-GST-13). Razorpay 24-hour webhook disable policy verified by the owner (U-OPS-02). nginx in front of `api.ezpre.in` confirmed (U-OPS-03).
+- 2026-10-10 (final): U-GST-11, U-GST-12, U-GST-13 CA-verified. Capture settings set to automatic with late authorizations captured (U-OPS-02). nginx is the only proxy, so hop count 1 (U-OPS-03 becomes an execution step). ExamFlex will sell (U-OPS-04 added). Remaining before EZ Prep go-live are execution steps only (U-OPS-01, 02, 03), plus U-GST-10 confirmation; U-GST-07 applies only if turnover makes IRN mandatory, and U-GST-04 credit notes are handled in Zoho.
+- 2026-10-10 (go-live guide): every production step moved into `GO_LIVE_GUIDE.md`; the U-OPS rows now point there. Legal and checkout wording locked in `LEGAL_COPY.md`. U-OPS-05 added: customer-care phone and grievance officer name are owner inputs before go-live (PR-40).

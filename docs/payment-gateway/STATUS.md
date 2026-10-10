@@ -4,7 +4,7 @@
 
 Update this file at the **end of every phase session**. A phase is not `done` until the developer confirmation block is filled.
 
-Related: [`engineering-rules.md`](engineering-rules.md) · [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) · [`unknowns.md`](unknowns.md) · [`phases/README.md`](phases/README.md) · [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)  
+Related: [`engineering-rules.md`](engineering-rules.md) · [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) · [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md) · [`unknowns.md`](unknowns.md) · [`phases/README.md`](phases/README.md) · [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)  
 Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 
 ---
@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 15 **pending** — phase 14 closed 2026-10-10. Next is rollout hardening, not the live switch |
+| Current phase | 14A **pending** — phase 14 closed 2026-10-10. Pre-release review ([`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md)) added ad-hoc phases, run in order 14A → 14E → 14B → 14C → 14D, before phase 15 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -77,6 +77,11 @@ Date: YYYY-MM-DD
 | 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
 | 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
 | 14 | Checkout + subscriptions | **done** | 2026-10-10 | Sharun — local Razorpay purchase, refund, invoice, and subscriptions smoke |
+| 14A | Fail-closed config + catalog integrity (ad-hoc) | pending | | From [`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md): regression harness first; PR-01, 07, 08 boot, 12, 14 boot, 15, 16, 18, 20, 23, 25, 26, 27; D-23, D-24, D-27 |
+| 14E | GST, seller identity, per-instance commerce (ad-hoc) | pending | | Runs second. PR-29–32, 35, 36; D-26, D-29; seller address `Kerala` |
+| 14B | Payment state integrity (ad-hoc) | pending | | PR-02, 03, 04, 10, 17, 33, 37; D-22, D-28 |
+| 14C | Webhook, refund, repair robustness (ad-hoc) | pending | | PR-02 watch, 05, 06, 08, 09, 13, 14, 19, 21, 22, 33, 34, 37, 38; D-22, D-25, D-28 |
+| 14D | Checkout client + admin ops (ad-hoc) | pending | | PR-08 action, 11, 16 UI, 17 client, 19 page, 24, 28, 39 |
 | 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
@@ -90,14 +95,14 @@ Date: YYYY-MM-DD
 | --- | --- | --- |
 | `npm run commerce:backfill-access-mode-free` | Phase 01 — each DB (local, later prod) | Counts updated (`matchedCount` / `modifiedCount`) |
 | `npm run commerce:report-exam-category-mismatches` | Phase 01 | Zero mismatches or fixes applied |
-| `npm run commerce:seed-local-tax-config` | Phase 07 local; phase 15 prod | `matchedCount` / `modifiedCount`. Same owner-confirmed payload |
+| `npm run commerce:seed-local-tax-config` | Phase 07 local; phase 15 prod | `matchedCount` / `modifiedCount`. Same owner-confirmed payload. From 14E, `npm run commerce:seed-tax-config` reads `scripts/commerce-seed/<INSTANCE_ID>.json`, dry run by default (the old name stays as an alias) |
 | Optional ENTITLED manifest | Phase 15 only if used | Manifest path |
 
 ### B. Instance config (Mongo)
 
 | When | What |
 | --- | --- |
-| Phase 07 local | Seed owner-confirmed seller + taxConfig (`EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kochi, Kerala / `32`, 18%, SAC `999293`) |
+| Phase 07 local | Seed owner-confirmed seller + taxConfig (`EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, address `Kerala`, state Kerala / `32`, 18%, SAC `999293`). The address was `Kochi, Kerala` until 2026-10-10; 14E re-seeds it |
 | Phase 15 prod | Re-run the same seed against production Mongo — `U-OPS-01` |
 
 ### C. Env / Razorpay
@@ -108,6 +113,10 @@ Date: YYYY-MM-DD
 | Phase 12 | `RECONCILIATION_ENABLED` must be the string `true` or the job does not run. Default `false`. `RECONCILIATION_MIN_AGE_MINUTES` (default 60), `RECONCILIATION_INTERVAL_MS` (default 300000). No Redis |
 | Phase 08/14 local | Test Razorpay keys in local `.env` (`rzp_test_...`); optional webhook tunnel. Names in `.env.example` |
 | Phase 15 prod | Live keys in the production env (`rzp_live_...`) + webhook URL — `U-OPS-02`. Do not commit keys |
+| 14A–14C (new API keys) | `COMMERCE_ENABLED` (must be `true` wherever commerce runs, including local; separate from `ACCESS_ENFORCEMENT_MODE`), `TRUST_PROXY_HOPS` (production 1 for nginx, U-OPS-03), `MAX_OPEN_ORDERS_PER_USER`, `WEBHOOK_RETRY_WINDOW_MINUTES`, `LATE_CAPTURE_WATCH_HOURS`, `RECONCILIATION_BATCH`, `RECONCILIATION_MAX_ATTEMPTS`, `REFUND_UNKNOWN_WINDOW_MINUTES`. `INSTANCE_ID` and `INSTANCE_NAME` become required when commerce is on. Names and defaults go in `.env.example` |
+| 14D (new app keys) | `NEXT_PUBLIC_BRAND_NAME`, `NEXT_PUBLIC_SUPPORT_EMAIL` (public, per Vercel project) |
+| PM2 | Stays in fork mode (one process per droplet). Cluster mode would need a distributed scheduler lock first (14C §8) |
+| Razorpay webhook (verified 2026-10-10) | Razorpay retries failed deliveries with exponential backoff and disables the webhook after 24 hours of continuous failure. Re-enable it by hand in Dashboard → Webhooks after fixing the cause. Admin Commerce health (14C/14D) shows when it has gone silent |
 
 ### D. Accounting (Zoho)
 
@@ -119,7 +128,7 @@ Date: YYYY-MM-DD
 
 ## Compliance / go-live gate
 
-Tracked in detail in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md). Phase 15 cannot mark production live while that board has open **must-clear** rows (unless CA waiver logged).
+Every production go-live step, for EZ Prep and ExamFlex, is in [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md), the single source of truth for go-live. Compliance status is tracked in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md). Production cannot go live while that board has open **must-clear** rows (unless a CA waiver is logged).
 
 Development of phases 01–14 **continues** while those rows are open.
 
@@ -628,4 +637,93 @@ Date: 2026-10-10
 **DoD:** met  
 **Deviations:** no `NEXT_PUBLIC` checkout flag (same as phase 13). `GET /me/orders` is a history view and does not replace `GET /checkout/orders/:id`. Remaining catalog, stacking, S3, and audit rows stay in phase 16.  
 **GOLIVE_TODOS touched:** decisions recorded 2026-10-10. Execution of the production seed, live keys, and live webhook stays phase 15. Credit notes stay deferred. Place of supply stays a later confirmation.  
-**Next:** phase 15
+**Next:** phase 15 (superseded the same day: ad-hoc phases 14A–14E come first, see the next entry)
+
+### 2026-10-10 — Pre-release review + owner decisions (docs only)
+
+**Code:** docs only. No runtime change.
+
+- New: [`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md), with 34 findings PR-01…PR-34, a coverage matrix, the late-payment design, and the compatibility and regression contract.
+- New: phase files 14A–14E.
+- Updated: `decisions.md`, `state-machines.md`, `gst-invoicing.md`, `domain-model.md`, `risk-register.md`, `GOLIVE_TODOS.md`, `phases/README.md`, and phase 15 prerequisites.
+
+**Tests:** baseline `npx jest --config jest.config.js` → 53 suites / 323 tests pass. Bare `npx jest` fails on the duplicate Jest config (PR-26).
+
+**Owner decisions → decisions.md:**
+- **D-22** Late payments are accepted with provider proof. Bounded load: webhook first, and a late watch of at most 7 provider calls per abandoned order.
+- **D-23** Refunding an earlier purchase moves later stacked purchases to start now, with their full duration.
+- **D-24** Repurchase while covered for life → 409 `ALREADY_COVERED`.
+- **D-25** Invoice date = payment date, even when a repair issues it late.
+- **D-26** Kerala buyer → CGST 9% + SGST 9% in equal paise; any other state → IGST 18%. Supply type snapshotted.
+- **D-27** Production commerce config fails closed; `COMMERCE_ENABLED` gate.
+- **D-28** Duplicate captures are refunded automatically.
+
+**Owner facts:**
+- `api.ezpre.in` is behind nginx (U-OPS-03; hop count still to confirm).
+- Razorpay webhook auto-disable after 24 hours of failure, then manual re-enable (U-OPS-02).
+- Seller address → `Kerala` (U-OPS-01; CA check U-GST-11).
+
+**GST verification:**
+- Place of supply and the CGST/SGST vs IGST selection were already correct.
+- Gaps: unequal split by one paisa on an odd tax amount; supply type not stored; no breakdown shown to the buyer or admin. These are fixed in 14E.
+
+**Open questions:** review Q1–Q7. None blocks 14A.
+
+**Developer confirmation:** n/a (docs only). The owner reviews the review and phase files before 14A starts.  
+**GOLIVE_TODOS touched:** U-OPS-01, U-OPS-02 updated; U-OPS-03, U-GST-11, U-GST-12, U-GST-13 added.  
+**Next:** phase 14A
+
+### 2026-10-10 — Final pre-implementation pass (docs only)
+
+**Code:** docs only. No runtime change.
+
+**Owner answers:**
+1. **Proxy.** nginx is the only proxy (no Cloudflare), so `TRUST_PROXY_HOPS=1`. The header lines are a go-live step (U-OPS-03).
+2. **Capture.** Razorpay capture automatic, with late authorizations captured.
+3. **Account use.** The account is used only by this app, and nobody acts in the Dashboard.
+4. **ExamFlex sells.** Same code, own seller identity and GSTIN (D-29, U-OPS-04).
+5. **Redis.** On EZ Prep, not on ExamFlex. The money path now uses no Redis anywhere.
+6. **Production data.** Production has no commerce data.
+7. **CA.** Accepted U-GST-11/12/13.
+
+**New findings, each assigned to a phase:**
+- PR-35: merchant name hardcoded → 14E
+- PR-36: seed hardcodes the EZ Prep seller → 14E
+- PR-37: cross-instance webhook events → 14B/14C
+- PR-38: refund on an unpaid order → 14C
+- PR-39: Terms describe auto-renewal and trials → 14D
+
+**Design simplifications:**
+- No BullMQ invoice job and no Redis scheduler lock. An in-process trigger plus the sweep gives identical behavior on both instances.
+- No `COMMERCE_SYSTEM_USER_ID`: refunds record `initiatedBySource` instead.
+- No test-key override in production.
+
+**Traceability:** `PRE_RELEASE_REVIEW.md` § Traceability maps every agreed item to a phase section. § Go-live path lists the remaining non-code steps.
+
+**Developer confirmation:** n/a (docs only).  
+**GOLIVE_TODOS touched:** U-GST-11/12/13 CA-verified; U-OPS-01/02/03 finalized; U-OPS-04 added.  
+**Next:** phase 14A
+
+### 2026-10-10 — Legal copy locked + single go-live guide (docs only)
+
+**Code:** docs only. No runtime change.
+
+**Unknowns check:** no implementation unknowns remain. Phases 14A–14E, 15, and 16 can start. The open items are owner inputs needed only at go-live:
+- customer-care phone and grievance officer name for each site (U-OPS-05)
+- ExamFlex seller values and API host, needed only before the ExamFlex B steps
+
+**Added:**
+- `LEGAL_COPY.md`: locked wording for Terms (General, Plans and payments, Cancellation, Refunds, Contact and grievance redressal, Governing law), the Privacy "Payments and billing" paragraph, checkout lines, and in-app payment messages. Seven public per-deployment values.
+- `GO_LIVE_GUIDE.md`: the single source of truth for go-live. Steps 0–23, with A/B variants where EZ Prep and ExamFlex differ, plus playbooks P1–P7 and rollback R1–R4.
+
+**New finding:** PR-40. The Terms name "EzPrep Technologies Pvt. Ltd., Kochi", which does not match the invoice seller "EzPrep - Powered by Clustream", Kerala. They also lack the grievance officer name and a customer-care phone (E-Commerce Rules 2020, rule 4). Fixed in 14D §10.
+
+**Plan edits:**
+- 14D §10 now implements `LEGAL_COPY.md` word for word, and the app hides Buy when the API has commerce off.
+- 14C §10: admin health answers while commerce is off.
+- Phase 15 no longer writes a separate runbook; it checks the guide against the code.
+- `PRE_RELEASE_REVIEW.md` § Go-live path and the GOLIVE_TODOS U-OPS rows point to the guide.
+
+**Developer confirmation:** n/a (docs only).  
+**GOLIVE_TODOS touched:** U-OPS-01 to U-OPS-04 point to the guide; U-OPS-05 added.  
+**Next:** phase 14A

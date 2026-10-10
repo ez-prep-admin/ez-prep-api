@@ -22,5 +22,17 @@
 | R-18 | Refund without credit note breaks GST books | High | High | U-GST-04 Zoho/CA credit note per refund; log in STATUS.md | 11, 15 |
 | R-19 | Missing buyer address on invoices ≥ ₹50k | High | Medium | U-GST-06; collect address or CA waiver before live | 10, 14 |
 | R-20 | Invoice series not FY-unique | Medium | Medium | Default FY series D-11; CA confirm U-GST-09 | 10 |
+| R-21 | Production commerce misconfigured (fake provider, invoices or reconciliation off, ExamFlex receives commerce on a `main` deploy) | Critical | Medium | D-27: `COMMERCE_ENABLED` gate; boot fails closed; fake gateway absent in production | 14A, 15 |
+| R-22 | Payment captured after the app expired the order | High | Medium | D-22: proof-based late edge; webhook first; bounded late watch; Checkout.js timeout | 14B, 14C, 14D |
+| R-23 | Concurrent paid, expire, and refund signals corrupt state | High | Medium | Compare-and-set transitions; winner-only side effects; memory-Mongo concurrency tests | 14B |
+| R-24 | Razorpay disables the webhook after 24 hours of failures (verified policy) | High | Low after 14C | 30-minute retry window; never 5xx on unresolvable events; health shows silent webhook and signature rejections; runbook re-enable steps | 14C, 15 |
+| R-25 | Refunds made in the Razorpay Dashboard, or refunds with an unknown outcome | High | Low | Lookup through the payment; external refunds recorded and settled; unknown outcome resolved by listing | 14C |
+| R-26 | Duplicate capture on one order | Medium | Low | D-28: `DUPLICATE` payment row + automatic refund | 14B, 14C |
+| R-27 | Provisioning lock contention or a stale lock | Low | Low | Lock per user × product only; 10-second lease with takeover; the sweep repairs a failed provisioning | 14A, 14C |
+| R-28 | `trust proxy` hop count wrong (IP spoofing of rate limits, or every user still shares nginx's IP) | Medium | Low | nginx is the only proxy, so hop count 1 (confirmed); nginx header lines (U-OPS-03); boot warning in production when 0 | 14A, 15 |
+| R-29 | CA rejects the equal-split rounding or the `Kerala`-only address | Low | Closed | CA verified both 2026-10-10 (U-GST-11, U-GST-12) | 14E |
+| R-30 | ExamFlex invoices issued under EZ Prep's seller identity, or the reverse | Critical | Medium before 14E | Per-instance seed file with instance guard, dry run, and `--confirm-db` (D-29, PR-36); second-instance smoke in phase 16 | 14E, 16 |
+| R-31 | Charging under Terms that describe auto-renewal and trials the product does not have | High | High before 14D | Terms, Privacy, and checkout consent rewritten and owner-approved (PR-39) | 14D |
+| R-32 | Cross-instance webhook events if both instances share a Razorpay account | Medium | Low | `notes.instanceId` + immediate ignore (PR-37) | 14B, 14C |
 
 Update this file when a session discovers a new risk; link from `STATUS.md`.
