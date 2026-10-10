@@ -149,7 +149,7 @@ describe('InvoiceService', () => {
   ) {
     const _id = new Types.ObjectId();
     const userId = new Types.ObjectId();
-    const order = {
+    const order: Row = {
       _id,
       userId,
       orderNumber: `ORD-${_id.toHexString().slice(0, 4)}`,
@@ -197,7 +197,10 @@ describe('InvoiceService', () => {
         1,
       ),
     );
-    expect(invoices[0].tax).toEqual(order.tax);
+    expect(invoices[0].tax).toEqual({
+      ...order.tax,
+      supplyType: 'INTRA_STATE',
+    });
     expect(invoices[0].sacCode).toBe('424242');
     expect(invoices[0].seller.gstin).toBe('11PLAINTEXTGSTIN');
     expect(invoices[0].billing.addressLine1).toBe('12 Residency Road');
@@ -260,13 +263,79 @@ describe('InvoiceService', () => {
     );
   });
 
+  it('copies an explicit supply type and falls back from the stored split', async () => {
+    const intra = seedOrder();
+    intra.tax = {
+      ...intra.tax,
+      supplyType: 'INTRA_STATE',
+      sellerStateCode: '32',
+      buyerStateCode: '32',
+    };
+    await service.issueForPaidOrder(String(intra._id));
+    expect(invoices[0].tax.supplyType).toBe('INTRA_STATE');
+    expect(invoices[0].tax.cgst).toBe(7619);
+    expect(invoices[0].tax.sgst).toBe(7620);
+
+    const inter = seedOrder();
+    inter.tax = {
+      ...inter.tax,
+      cgst: 0,
+      sgst: 0,
+      igst: 15239,
+    };
+    delete inter.tax.supplyType;
+    await service.issueForPaidOrder(String(inter._id));
+    expect(invoices[1].tax.supplyType).toBe('INTER_STATE');
+    expect(invoices[1].tax.igst).toBe(15239);
+    expect(invoices[1].tax.taxableAmount).toBe(84661);
+  });
+
+  it('refuses to issue when the live seller state differs from the order', async () => {
+    const order = seedOrder();
+    order.tax = { ...order.tax, sellerStateCode: '29' };
+    invoiceModel.create.mockClear();
+
+    await expect(
+      service.issueForPaidOrder(String(order._id)),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(invoices).toHaveLength(0);
+    expect(invoiceModel.create).not.toHaveBeenCalled();
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'INVOICE_SELLER_STATE_MISMATCH',
+        resourceType: 'order',
+        resourceId: String(order._id),
+        after: {
+          orderSellerStateCode: '29',
+          liveSellerStateCode: '32',
+        },
+      }),
+    );
+  });
+
+  it('issues an old order that has no snapshotted seller state', async () => {
+    const order = seedOrder();
+    expect(order.tax.sellerStateCode).toBeUndefined();
+
+    await service.issueForPaidOrder(String(order._id));
+
+    expect(invoices).toHaveLength(1);
+    expect(audit.log).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'INVOICE_SELLER_STATE_MISMATCH' }),
+    );
+  });
+
   it('copies the order tax snapshot when live config uses another rate', async () => {
     config.taxConfig.taxRate = 5;
     const order = seedOrder();
 
     await service.issueForPaidOrder(String(order._id));
 
-    expect(invoices[0].tax).toEqual(order.tax);
+    expect(invoices[0].tax).toEqual({
+      ...order.tax,
+      supplyType: 'INTRA_STATE',
+    });
     expect(invoices[0].tax.taxRate).toBe(18);
   });
 

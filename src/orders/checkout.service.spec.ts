@@ -252,6 +252,10 @@ describe('CheckoutService', () => {
       pincode: '682001',
     });
     expect(created.tax.grossAmount).toBe(79900);
+    expect(created.tax.supplyType).toBe('INTRA_STATE');
+    expect(created.tax.sellerStateCode).toBe('32');
+    expect(created.tax.buyerStateCode).toBe('32');
+    expect(created.tax.cgst).toBe(created.tax.sgst);
     expect(orders[0].items[0].grants).toEqual([
       { scopeType: EntitlementScopeType.EXAM, scopeId: String(examId) },
     ]);

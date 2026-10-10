@@ -33,6 +33,8 @@ export interface TaxInvoicePdfTax {
   igst: number;
   /** Percent, copied from the order snapshot. */
   taxRate: number;
+  /** Absent on invoices issued before phase 14E. */
+  supplyType?: 'INTRA_STATE' | 'INTER_STATE';
 }
 
 export interface TaxInvoicePdfModel {

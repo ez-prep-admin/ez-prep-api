@@ -41,13 +41,31 @@ describe('TaxService', () => {
 
     await expect(service.calculateForCheckout(99900, '32')).resolves.toEqual({
       grossAmount: 99900,
-      taxableAmount: 84661,
-      taxAmount: 15239,
+      taxableAmount: 84662,
+      taxAmount: 15238,
       cgst: 7619,
-      sgst: 7620,
+      sgst: 7619,
       igst: 0,
       taxRate: 18,
+      supplyType: 'INTRA_STATE',
+      sellerStateCode: '32',
+      buyerStateCode: '32',
     });
+  });
+
+  it('snapshots an inter-state buyer', async () => {
+    model.findById.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(config()),
+    });
+
+    const tax = await service.calculateForCheckout(99900, '33');
+
+    expect(tax.supplyType).toBe('INTER_STATE');
+    expect(tax.sellerStateCode).toBe('32');
+    expect(tax.buyerStateCode).toBe('33');
+    expect(tax.igst).toBe(15239);
+    expect(tax.cgst).toBe(0);
+    expect(tax.sgst).toBe(0);
   });
 
   it('fails when seller or tax rate is missing', async () => {

@@ -60,6 +60,58 @@ describe('renderTaxInvoicePdf', () => {
     expect(text).toContain('A Signer');
   });
 
+  it('prints the supply type from the snapshot, including the old-invoice fallback', async () => {
+    const fallback = await renderTaxInvoicePdf(model);
+    expect(visibleText(fallback)).toContain('Supply type');
+    expect(visibleText(fallback)).toContain('Intra-state');
+    expect(visibleText(fallback)).toContain('76.20');
+
+    const intra = await renderTaxInvoicePdf({
+      ...model,
+      tax: {
+        grossAmount: 99900,
+        taxableAmount: 84662,
+        taxAmount: 15238,
+        cgst: 7619,
+        sgst: 7619,
+        igst: 0,
+        taxRate: 18,
+        supplyType: 'INTRA_STATE',
+      },
+    });
+    const intraText = visibleText(intra);
+    expect(intraText).toContain('Intra-state');
+    expect(intraText).toContain('846.62');
+    expect(intraText).toContain('CGST @ 9%');
+    expect(intraText).toContain('SGST @ 9%');
+    expect(intraText).not.toContain('IGST');
+
+    const inter = await renderTaxInvoicePdf({
+      ...model,
+      tax: {
+        ...model.tax,
+        cgst: 0,
+        sgst: 0,
+        igst: 15239,
+        supplyType: 'INTER_STATE',
+      },
+    });
+    const interText = visibleText(inter);
+    expect(interText).toContain('Inter-state');
+    expect(interText).toContain('IGST @ 18%');
+
+    const derivedInter = await renderTaxInvoicePdf({
+      ...model,
+      tax: {
+        ...model.tax,
+        cgst: 0,
+        sgst: 0,
+        igst: 15239,
+      },
+    });
+    expect(visibleText(derivedInter)).toContain('Inter-state');
+  });
+
   it('prints IGST for an interstate snapshot', async () => {
     const pdf = await renderTaxInvoicePdf({
       ...model,

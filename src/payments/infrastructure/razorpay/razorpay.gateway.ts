@@ -341,11 +341,13 @@ export class RazorpayGateway implements PaymentGateway {
     if (!input.providerOrderId) {
       return {};
     }
+    const merchantName = this.secret('INSTANCE_NAME');
     return {
       razorpayOrderId: input.providerOrderId,
       amount: input.amount,
       currency: input.currency,
       keyId: this.secret('RAZORPAY_KEY_ID'),
+      ...(merchantName ? { merchantName } : {}),
     };
   }
 

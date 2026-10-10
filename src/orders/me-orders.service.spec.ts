@@ -107,6 +107,38 @@ describe('OrdersService user history', () => {
     expect(result.pagination.limit).toBe(100);
   });
 
+  it('includes the tax snapshot on history rows', async () => {
+    const row = {
+      id: ORDER_ID,
+      userId: new Types.ObjectId(USER_ID),
+      orderNumber: 'ORD-2',
+      status: OrderStatus.PAID,
+      amount: 99900,
+      currency: 'INR',
+      items: [],
+      tax: {
+        grossAmount: 99900,
+        taxableAmount: 84662,
+        taxAmount: 15238,
+        cgst: 7619,
+        sgst: 7619,
+        igst: 0,
+        taxRate: 18,
+        supplyType: 'INTRA_STATE',
+        sellerStateCode: '32',
+        buyerStateCode: '32',
+      },
+    };
+    orderModel.find.mockReturnValue(listQuery([row]));
+    orderModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(1),
+    });
+
+    const result = await service.listForUser(USER_ID, { page: 1, limit: 20 });
+
+    expect(result.data[0].tax).toEqual(row.tax);
+  });
+
   it('returns an empty page for an invalid user id', async () => {
     const result = await service.listForUser('not-an-id', {});
 

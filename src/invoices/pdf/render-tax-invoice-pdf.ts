@@ -1,4 +1,8 @@
 import PDFDocument from 'pdfkit';
+import {
+  supplyTypeFromSnapshot,
+  supplyTypeLabel,
+} from '../../common/commerce/calculate-inclusive-tax';
 import { formatIstDateTime, formatPaiseAsRupees } from '../invoice-format';
 import { TaxInvoicePdfModel } from './tax-invoice-pdf.model';
 
@@ -117,6 +121,7 @@ function drawMeta(
   const columns: Array<[string, string]> = [
     ['Order reference', model.orderNumber],
     ['Place of supply', `${model.billing.state} (${model.billing.stateCode})`],
+    ['Supply type', supplyTypeLabel(supplyTypeFromSnapshot(model.tax))],
     ['Reverse charge', 'No'],
   ];
   const colWidth = width / columns.length;
@@ -375,7 +380,7 @@ function taxRows(model: TaxInvoicePdfModel): Array<[string, number]> {
   const rows: Array<[string, number]> = [
     ['Taxable value', model.tax.taxableAmount],
   ];
-  if (model.tax.igst > 0) {
+  if (supplyTypeFromSnapshot(model.tax) === 'INTER_STATE') {
     rows.push([`IGST @ ${model.tax.taxRate}%`, model.tax.igst]);
     return rows;
   }

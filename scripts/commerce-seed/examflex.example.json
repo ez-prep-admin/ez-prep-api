@@ -1,0 +1,20 @@
+{
+  "instanceId": "examflex",
+  "seller": {
+    "legalName": "Replace with the ExamFlex legal name",
+    "gstin": "00EXAMPLEGSTIN1",
+    "registeredAddress": "Replace with the registered address",
+    "state": "Tamil Nadu",
+    "stateCode": "33"
+  },
+  "taxConfig": {
+    "taxEnabled": true,
+    "taxType": "GST",
+    "taxRate": 18,
+    "pricesAreTaxInclusive": true,
+    "currency": "INR",
+    "sacCode": "999293",
+    "sacDescription": "Commercial training and coaching services",
+    "invoiceSeriesPrefix": "EXAMFLEX"
+  }
+}

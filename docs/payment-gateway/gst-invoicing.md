@@ -80,7 +80,7 @@ Extend instance-config (singleton) — **not hardcoded**:
 | `state` | `Kerala` |
 | `stateCode` | `32` |
 
-Local seed writes these values. Production Mongo still needs the same seed at phase 15 (`U-OPS-01`). SAC `999293` and 18% are owner-confirmed (`U-GST-05`) and stay in config so they can change without a code edit.
+`npm run commerce:seed-tax-config` writes these values from `scripts/commerce-seed/<INSTANCE_ID>.json` (dry run unless `--apply`). Production Mongo still needs the same seed at phase 15 (`U-OPS-01`). SAC `999293` and 18% are owner-confirmed (`U-GST-05`) and stay in config so they can change without a code edit.
 
 ---
 

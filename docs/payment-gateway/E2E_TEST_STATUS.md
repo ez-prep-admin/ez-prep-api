@@ -35,7 +35,7 @@ Use **local** only. There is no staging environment.
 | Seller seed (local) | Legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kerala / `32`, SAC `999293`, prefix `EZPREP`, tax 18%. |
 | Client secrets | App may contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. Key secret and webhook secret stay on the API. |
 
-Canonical tax for a ₹999 offer at 18% inclusive: taxable `84661`, tax `15239`. Same state (buyer `32`) splits CGST `7619` + SGST `7620`. Any other state is IGST `15239`.
+Canonical tax for a ₹999 offer at 18% inclusive, for orders created from phase 14E: intra-state (buyer `32`) taxable `84662`, CGST `7619`, SGST `7619`. Inter-state taxable `84661`, IGST `15239`. Orders and invoices issued before 14E keep the older split (taxable `84661`, CGST `7619`, SGST `7620`) and are not recalculated.
 
 ---
 
@@ -431,4 +431,17 @@ Confirmed by Sharun on 2026-10-10.
 - [x] Edit a published product's grants in admin and do not republish. Catalog and a new checkout still use the previous grants.
 - [x] Buy two stacked durations, then refund the earlier one. Subscriptions show the later window moved earlier.
 - [x] Grant a lifetime entitlement, then try to buy the same scope again. Checkout is refused.
+
+## Phase 14E manual checks
+
+Do not check these until phase 16. One intra-state purchase and one inter-state purchase, in Razorpay test mode, after `npm run commerce:seed-tax-config -- --apply`.
+
+- [ ] Kerala buyer (`32`), ₹999. Invoice PDF: CGST @ 9% ₹76.19, SGST @ 9% ₹76.19, taxable ₹846.62, total ₹999.00, supplier address `Kerala`, and `Supply type: Intra-state`.
+- [ ] Tamil Nadu buyer (`33`), ₹999. Invoice PDF: IGST @ 18% ₹152.39, taxable ₹846.61, total ₹999.00, and `Supply type: Inter-state`.
+- [ ] Checkout price line says `Price includes GST` before payment.
+- [ ] Success screen shows the gross and `incl. CGST 9% ₹76.19 + SGST 9% ₹76.19` or `incl. IGST 18% ₹152.39`.
+- [ ] Subscriptions order row shows the same breakdown.
+- [ ] Admin order detail GST block shows taxable, CGST, SGST, IGST, rate, supply type, and buyer state.
+- [ ] An invoice PDF already stored in S3 still downloads unchanged.
+- [ ] `INSTANCE_ID=examflex` does not apply `ezprep.json`. With no `examflex.json`, the seed fails and names the missing file. A dry run writes nothing.
 

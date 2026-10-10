@@ -345,6 +345,13 @@ export class CheckoutService {
         sgst: order.tax.sgst,
         igst: order.tax.igst,
         taxRate: order.tax.taxRate,
+        ...(order.tax.supplyType ? { supplyType: order.tax.supplyType } : {}),
+        ...(order.tax.sellerStateCode
+          ? { sellerStateCode: order.tax.sellerStateCode }
+          : {}),
+        ...(order.tax.buyerStateCode
+          ? { buyerStateCode: order.tax.buyerStateCode }
+          : {}),
       },
       billing: {
         name: order.billing.name,

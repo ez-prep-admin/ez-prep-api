@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { TaxBreakdown } from '../common/commerce/calculate-inclusive-tax';
 import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
@@ -43,6 +44,7 @@ export interface OrderHistoryView {
   paidAt?: Date;
   expiresAt?: Date;
   items: OrderHistoryItemView[];
+  tax?: TaxBreakdown;
 }
 
 export interface InsertCreatedOrderInput {
@@ -370,6 +372,7 @@ export class OrdersService {
         durationPreset: item.durationPreset,
         amount: item.amount,
       })),
+      ...(order.tax ? { tax: toHistoryTax(order.tax) } : {}),
     };
   }
 
@@ -390,6 +393,21 @@ export class OrdersService {
     }
     return payment;
   }
+}
+
+function toHistoryTax(tax: OrderTaxSnapshot): TaxBreakdown {
+  return {
+    grossAmount: tax.grossAmount,
+    taxableAmount: tax.taxableAmount,
+    taxAmount: tax.taxAmount,
+    cgst: tax.cgst,
+    sgst: tax.sgst,
+    igst: tax.igst,
+    taxRate: tax.taxRate,
+    ...(tax.supplyType ? { supplyType: tax.supplyType } : {}),
+    ...(tax.sellerStateCode ? { sellerStateCode: tax.sellerStateCode } : {}),
+    ...(tax.buyerStateCode ? { buyerStateCode: tax.buyerStateCode } : {}),
+  };
 }
 
 function positiveInt(value: number | undefined, fallback: number): number {

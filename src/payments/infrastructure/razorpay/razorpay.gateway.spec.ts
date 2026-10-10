@@ -81,6 +81,31 @@ describe('RazorpayGateway', () => {
         keyId: 'rzp_test_key',
       },
     });
+    expect(created.providerData).not.toHaveProperty('merchantName');
+  });
+
+  it('sends the instance name as the Checkout.js merchant name', async () => {
+    const named = new RazorpayGateway(
+      {
+        get: (key: string) =>
+          key === 'INSTANCE_NAME' ? 'ExamFlex' : config().get(key),
+      } as ConfigService,
+      orders,
+    );
+    orders.createOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+    });
+
+    const created = await named.createOrder({
+      orderId: 'abc',
+      amount: 99900,
+      currency: 'INR',
+      receipt: 'ORD-1',
+    });
+
+    expect(created.providerData.merchantName).toBe('ExamFlex');
   });
 
   it('rejects totals under 100 paise before calling Razorpay', async () => {

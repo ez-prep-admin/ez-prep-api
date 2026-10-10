@@ -136,6 +136,7 @@ Admin action used by 14D: `POST /api/v1/admin/orders/:id/repair` runs the same s
 - the webhook block from §2
 - index-missing warnings from 14B repairs
 - effective flags from 14A
+- orders whose invoice was refused because the live seller state differs from `order.tax.sellerStateCode` (commerce audit action `INVOICE_SELLER_STATE_MISMATCH`, written by 14E)
 
 Cost: one aggregation per class over indexed fields, cached 30 seconds in process.
 

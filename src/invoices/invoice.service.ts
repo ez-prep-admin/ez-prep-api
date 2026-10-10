@@ -10,6 +10,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AwsConfigService } from '../aws/config/aws.config';
 import { S3Service } from '../aws/s3/s3.service';
+import { supplyTypeFromSnapshot } from '../common/commerce/calculate-inclusive-tax';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { TaxInvoiceStatus } from '../common/enums/tax-invoice-status.enum';
@@ -111,6 +112,7 @@ export class InvoiceService {
     }
 
     const identity = await this.readCommerceIdentity();
+    await this.assertSellerStateMatches(order, identity.seller.stateCode);
     const issuedAt = new Date();
     const invoice = await this.insertInvoice(order, identity, issuedAt);
     await this.ensurePdf(invoice);
@@ -230,6 +232,33 @@ export class InvoiceService {
     };
   }
 
+  /**
+   * A GSTIN or seller-state change after payment must not produce an invoice
+   * whose tax split was priced in a different state. Old orders have no
+   * snapshotted seller state and still issue.
+   */
+  private async assertSellerStateMatches(
+    order: OrderDocument,
+    liveStateCode: string,
+  ): Promise<void> {
+    const snapshotted = order.tax.sellerStateCode?.trim();
+    if (!snapshotted || snapshotted === liveStateCode) {
+      return;
+    }
+    await this.commerceAuditService.log({
+      action: 'INVOICE_SELLER_STATE_MISMATCH',
+      resourceType: 'order',
+      resourceId: this.idOf(order),
+      after: {
+        orderSellerStateCode: snapshotted,
+        liveSellerStateCode: liveStateCode,
+      },
+    });
+    throw new BadRequestException(
+      'Invoice cannot be issued because the seller state changed after payment.',
+    );
+  }
+
   private async insertInvoice(
     order: OrderDocument,
     identity: CommerceIdentity,
@@ -270,6 +299,13 @@ export class InvoiceService {
         sgst: order.tax.sgst,
         igst: order.tax.igst,
         taxRate: order.tax.taxRate,
+        supplyType: supplyTypeFromSnapshot(order.tax),
+        ...(order.tax.sellerStateCode
+          ? { sellerStateCode: order.tax.sellerStateCode }
+          : {}),
+        ...(order.tax.buyerStateCode
+          ? { buyerStateCode: order.tax.buyerStateCode }
+          : {}),
       },
       issuedAt,
     };
@@ -432,6 +468,7 @@ function toPdfModel(invoice: TaxInvoice): TaxInvoicePdfModel {
       sgst: invoice.tax.sgst,
       igst: invoice.tax.igst,
       taxRate: invoice.tax.taxRate,
+      ...(invoice.tax.supplyType ? { supplyType: invoice.tax.supplyType } : {}),
     },
   };
 }

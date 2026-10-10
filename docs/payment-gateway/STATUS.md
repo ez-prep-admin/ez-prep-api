@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14E **pending** — phase 14A closed 2026-10-10. Ad-hoc order continues 14E → 14B → 14C → 14D, before phase 15 |
+| Current phase | 14B **pending** — phase 14E closed 2026-10-10. Ad-hoc order continues 14B → 14C → 14D, before phase 15 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -78,7 +78,7 @@ Date: YYYY-MM-DD
 | 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
 | 14 | Checkout + subscriptions | **done** | 2026-10-10 | Sharun — local Razorpay purchase, refund, invoice, and subscriptions smoke |
 | 14A | Fail-closed config + catalog integrity (ad-hoc) | **done** | 2026-10-10 | Sharun — production boot guard, frozen grants, re-anchor, and lifetime block verified locally |
-| 14E | GST, seller identity, per-instance commerce (ad-hoc) | pending | | Runs second. PR-29–32, 35, 36; D-26, D-29; seller address `Kerala` |
+| 14E | GST, seller identity, per-instance commerce (ad-hoc) | **done** | 2026-10-10 | Sharun — local seed applied (`Kerala`); PDF and ExamFlex invoice smoke stay phase 16 |
 | 14B | Payment state integrity (ad-hoc) | pending | | PR-02, 03, 04, 10, 17, 33, 37; D-22, D-28 |
 | 14C | Webhook, refund, repair robustness (ad-hoc) | pending | | PR-02 watch, 05, 06, 08, 09, 13, 14, 19, 21, 22, 33, 34, 37, 38; D-22, D-25, D-28 |
 | 14D | Checkout client + admin ops (ad-hoc) | pending | | PR-08 action, 11, 16 UI, 17 client, 19 page, 24, 28, 39 |
@@ -764,3 +764,39 @@ Date: 2026-10-10
 **Deviations:** the app still shows a generic pay error for a commerce 404. The "not available" string is only for a missing offer until phase 14D.  
 **GOLIVE_TODOS touched:** none  
 **Next:** phase 14E
+
+### 2026-10-10 — Phase 14E — GST supply type, seller identity, per-instance seed
+
+**Code:** `ez-prep-api`, `ezprep-app`, and `mock-app-admin` on branch `payment-gateway`.  
+**Tests:** API Jest 193 suites / 1546 tests pass. Commerce e2e 6 suites / 13 tests pass. `tsc -p tsconfig.build.json --noEmit` pass. ESLint on the phase files pass. Admin order-detail Vitest 5 tests pass and `tsc --noEmit` pass. ezprep-app `npm run typecheck` pass and ESLint on the phase files pass. The legacy `test/auth/auth.e2e-spec.ts` suite still fails on its own (routes under `/auth` return 404); it is not part of this phase.
+
+**Shipped:**
+- Intra-state GST is an equal paise split. ₹999 at 18% is taxable 84662, CGST 7619, SGST 7619. Inter-state stays taxable 84661, IGST 15239.
+- New orders store `supplyType`, `sellerStateCode`, and `buyerStateCode`. `GET /me/orders` returns optional `tax`. Checkout already returned tax and now includes those fields when present.
+- Invoice issue copies the supply type. An old order without one is classified from its own split (`igst > 0` is inter). A present `sellerStateCode` that differs from live config refuses issue, writes `INVOICE_SELLER_STATE_MISMATCH`, and does not allocate a number. Orders with no snapshotted seller state still issue. Health listing of that audit action is 14C.
+- PDF prints `Supply type` beside place of supply and chooses CGST/SGST or IGST from `supplyType`, falling back to the stored split.
+- Seller seed is `scripts/commerce-seed/<INSTANCE_ID>.json`. EZ Prep address is `Kerala`. `npm run commerce:seed-tax-config` is a dry run unless `--apply`. Production also requires `--confirm-db`. The old npm name is an alias.
+- Razorpay `providerData.merchantName` is `INSTANCE_NAME`. The app uses it, or `EzPrep` when it is absent.
+- Checkout says `Price includes GST`. The success screen and each Subscriptions row show the GST line. Admin order detail shows the GST block.
+
+**Fixture changes (intentional, same change set):**
+- `calculate-inclusive-tax.spec.ts` and `tax.service.spec.ts` now expect the equal intra-state split and the snapshot fields.
+- `checkout.service.spec.ts` gained assertions for `supplyType` and equal CGST/SGST. It does not pin a paise table.
+- `invoice.service.spec.ts` still copies the stored 7619/7620 paise. Two `toEqual(order.tax)` assertions now also expect the derived `supplyType: INTRA_STATE`, because issue records the classification. Paise are not recalculated.
+- The existing PDF fixture (7619/7620, no `supplyType`) stays as the fallback case. New cases cover explicit intra, inter, and the `igst > 0` fallback.
+- `invoice-format.spec.ts` was not changed. It checks rupee formatting, not the tax split.
+
+**Developer ops (manual) — confirm each:**
+- [x] Dry run then `--apply` with `INSTANCE_ID=ezprep` against local database `live`. Diff was `registeredAddress` `Kochi, Kerala` → `Kerala`. matchedCount=1 modifiedCount=1. A bare run in this environment resolved `INSTANCE_ID` to `ezprep-api` (the later `.env` line) and stopped before writing, because `ezprep-api.json` does not exist.
+- [x] N/A for this close — one Kerala purchase and one other-state purchase, both PDFs, the success screen, Subscriptions, and admin order detail are phase 16 ([`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md)). Boxes stay unchecked.
+- [x] Script guard: `INSTANCE_ID=examflex` with no `examflex.json` fails and names the missing file. A temporary `examflex.json` whose `instanceId` was `ezprep` was refused before any write, then deleted.
+- [x] N/A for this close — a second-database ExamFlex invoice and modal-name pass is phase 16. Production ExamFlex seed is `GO_LIVE_GUIDE.md` Step 15B, after the owner supplies those seller values.
+
+**Developer confirmation:**  
+I, Sharun, confirm the local seed is applied, the remaining purchase and ExamFlex invoice checks are recorded for phase 16, and this phase may be marked done.  
+Date: 2026-10-10
+
+**DoD:** met  
+**Deviations:** health does not list the mismatch yet; 14C §10 now names `INVOICE_SELLER_STATE_MISMATCH`. A missing `sellerStateCode` does not block issue. PDF and ExamFlex invoice proof are phase 16, not a gate on this phase.  
+**GOLIVE_TODOS touched:** none. Production seed stays `U-OPS-01` (`GO_LIVE_GUIDE.md` Step 15A).  
+**Next:** phase 14B

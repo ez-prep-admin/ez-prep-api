@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import {
+  GST_SUPPLY_TYPES,
+  GstSupplyType,
+} from '../../common/commerce/calculate-inclusive-tax';
 import { DurationPreset } from '../../common/enums/duration-preset.enum';
 import { EntitlementScopeType } from '../../common/enums/entitlement-scope-type.enum';
 import { OrderStatus } from '../../common/enums/order-status.enum';
@@ -80,6 +84,16 @@ export class OrderTaxSnapshot {
 
   @Prop({ type: Number, required: true })
   taxRate: number;
+
+  /** Absent on orders created before phase 14E. */
+  @Prop({ type: String, enum: GST_SUPPLY_TYPES })
+  supplyType?: GstSupplyType;
+
+  @Prop({ trim: true })
+  sellerStateCode?: string;
+
+  @Prop({ trim: true })
+  buyerStateCode?: string;
 }
 
 export const OrderTaxSnapshotSchema =
