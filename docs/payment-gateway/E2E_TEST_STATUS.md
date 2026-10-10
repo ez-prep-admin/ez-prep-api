@@ -194,19 +194,19 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 
 - [x] Admin opens the paid order from J1 and refunds the full amount with a reason. Confirm modal. Success. Owner 2026-10-10. A `pending` Razorpay refund finished on the refund tick (`ORD-MV28B89M-P9LA`).
 - [x] Order/payment show refunded. Entitlements that came from that order are revoked. Under `ENFORCED` the paper locks again. Owner 2026-10-10, refund completed. Paper lock after that revoke was not separately written down.
-- [ ] Grants that did not come from that order are still active.
+- [x] Grants that did not come from that order are still active. Owner 2026-10-10.
 - [x] The original invoice stays issued. The app does not offer a credit note and does not show a refund button to the student. Owner 2026-10-10, no refund control on the student dashboard.
-- [ ] Second refund of the same order fails with a clear admin error.
+- [x] Second refund of the same order fails with a clear admin error. Owner 2026-10-10.
 - [ ] Record the Zoho Books credit-note step for this refund (`U-GST-04`) in the phase 16 session log. The app does not generate that note.
 
 ### J6 — Failed, dismissed, and expired payment
 
 Do this after checkout UI exists (phase 14). Reconciliation steps are spelled out under Phase 12 below. Do not check them early.
 
-- [ ] With `RECONCILIATION_ENABLED` not the string `true`, start checkout and dismiss the Razorpay modal. No entitlement. No invoice. Order stays `PENDING_PAYMENT` even after several minutes. Subscriptions does not show it as paid.
-- [ ] Start checkout and use a Razorpay test failure instrument. Error is visible. No entitlement. No invoice. The order stays pending until the reconciliation tick below; `payment.failed` webhooks do not move it by themselves.
+- [x] With `RECONCILIATION_ENABLED` not the string `true`, start checkout and dismiss the Razorpay modal. No entitlement. No invoice. Order stays `PENDING_PAYMENT` even after several minutes. Subscriptions does not show it as paid. Owner 2026-10-10. Payment row stayed in progress.
+- [x] Start checkout and use a Razorpay test failure instrument. Error is visible. No entitlement. No invoice. The order stays pending until the reconciliation tick below; `payment.failed` webhooks do not move it by themselves. Owner 2026-10-10, UPI failure.
 - [ ] Tampered or missing verify payload does not mark the order paid and does not unlock the paper.
-- [ ] Run the Phase 12 reconciliation pass (flag `true`, age `0`, interval `10000`, restart). The dismissed unpaid order becomes `EXPIRED`. Its payment stays `INITIATED`. Still no entitlement and no invoice. Subscriptions does not show it as paid.
+- [x] Run the Phase 12 reconciliation pass (flag `true`, age `0`, interval `10000`, restart). The dismissed unpaid order becomes `EXPIRED`. Its payment stays `INITIATED`. Still no entitlement and no invoice. Subscriptions does not show it as paid. Owner 2026-10-10.
 - [ ] Same pass: a Razorpay test failure that the provider reports as failed becomes order `FAILED` and payment `FAILED`. No entitlement. No invoice.
 - [ ] Same pass: a payment Razorpay has captured, while the browser never called verify and the webhook did not land, becomes `PAID`, provisions once, and invoices once. The fake provider cannot stage that capture from the UI; use Razorpay test mode for this row. If that setup is skipped, mark the row N/A with the reason and leave the Jest case as the record.
 - [ ] The paid order from J1 stays `PAID` after another tick. Entitlement and invoice are not duplicated.
@@ -282,16 +282,16 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 - [ ] Refund of an unpaid or already refunded order is rejected.
 - [x] Student UI has no refund control. Owner 2026-10-10.
 - [ ] Reconciliation of a captured-but-still-pending Razorpay order marks it paid, provisions once, and invoices once. See the J6 capture row for how to produce that order.
-- [ ] Reconciliation of an unpaid dismissed checkout expires it (`EXPIRED`, payment still `INITIATED`) and does not invoice.
+- [x] Reconciliation of an unpaid dismissed checkout expires it (`EXPIRED`, payment still `INITIATED`) and does not invoice. Owner 2026-10-10.
 - [ ] Reconciliation of a provider-failed order sets the order and payment to `FAILED` and does not invoice.
 - [ ] Reconciliation does not modify an order that is already paid, and does not add a second entitlement or a second invoice.
-- [ ] After the pass, `RECONCILIATION_ENABLED=false` and `RECONCILIATION_MIN_AGE_MINUTES=60` are restored and the API is restarted. Age `0` left on will expire checkouts that are still in progress.
+- [x] After the pass, `RECONCILIATION_ENABLED=false` and `RECONCILIATION_MIN_AGE_MINUTES=60` are restored and the API is restarted. Age `0` left on will expire checkouts that are still in progress. Owner 2026-10-10.
 - [ ] `GET /api/v1/admin/commerce-audit` with an admin JWT lists the grant, revoke, refund, publish or archive, offer change, `INVOICE_ISSUED`, and `ORDER_PROVISIONED` rows from this pass. Admin actions show that admin on `actorUserId`. `INVOICE_ISSUED` has no actor. `ORDER_PROVISIONED` stores the paying student. There is no admin page for this list. Filters: `action`, `resourceType`, `page`, `limit`.
 
 ### UI
 
 - [ ] Empty subscriptions (new student): clear empty state, no broken invoice link.
-- [ ] Checkout with no `offerId`: visible error, no Razorpay modal. Phase 13 shell copy, until phase 14 replaces it: `Choose a plan from View plans to continue.`
+- [x] Checkout with no `offerId`: visible error, no Razorpay modal. Phase 13 shell copy, until phase 14 replaces it: `Choose a plan from View plans to continue.` Owner 2026-10-10.
 - [ ] An in-progress paper still shows **Resume** when `access.allowed` is false. Start and Retake on that denied paper show **View plans**.
 - [ ] A direct start the API rejects with `ENTITLEMENT_REQUIRED` shows the API message and **View plans**. Other start errors stay red text with no plans button.
 - [ ] While one paper is starting, the other cards’ buttons are disabled. **View plans** does not enter that loading state.
@@ -366,17 +366,17 @@ Local smoke before the pass: API `PAYMENT_PROVIDER=razorpay` with test key id an
 
 Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or UPI `success@razorpay`. Failure instrument: UPI `failure@razorpay`.
 
-- [ ] `/dashboard/checkout` with no `offerId`. Heading `Checkout`. Body `Choose a plan from View plans to continue.` No Pay button.
+- [x] `/dashboard/checkout` with no `offerId`. Heading `Checkout`. Body `Choose a plan from View plans to continue.` No Pay button. Owner 2026-10-10.
 - [ ] **Buy** opens `/dashboard/checkout?offerId=<offer id>`. The page shows the product name, duration (`3 months` and the other presets), and rupees from `effectiveAmount`.
 - [ ] An unknown or inactive offer shows `This plan is not available.` Razorpay does not open.
 - [x] Billing name is prefilled from `GET /me/billing-profile` when one is saved, otherwise from the account name. State, address line 1, city, and a 6-digit pincode are required. Address line 2 is optional. The state list is `GET /meta/indian-states`. Owner 2026-10-10.
 - [ ] **Pay securely** creates the order, then `PATCH /me/billing-profile`. A second visit prefills the saved address.
 - [x] Success card or UPI. Copy: heading `Payment received`, body `Payment received. Your access is active.` **View subscriptions** opens `/dashboard/subscriptions`. Returning to the exam shows the paper unlocked without a full browser reload. Owner 2026-10-10, test card payment and unlock. Exact success heading was not quoted.
 - [ ] A bad or tampered verify shows the API error and does not unlock the paper.
-- [ ] Closing the Razorpay modal shows `Payment was not completed. You can try again.` No entitlement and no invoice. The order stays pending.
-- [ ] UPI `failure@razorpay` shows an error. No entitlement and no invoice.
+- [x] Closing the Razorpay modal shows `Payment was not completed. You can try again.` No entitlement and no invoice. The order stays pending. Owner 2026-10-10.
+- [x] UPI `failure@razorpay` shows an error. No entitlement and no invoice. Owner 2026-10-10.
 - [ ] A second click on **Pay securely** while the first request is in flight does not open a second modal.
-- [ ] An expired order shows `This checkout has expired. Start again.`
+- [x] An expired order shows `This checkout has expired. Start again.` Owner 2026-10-10.
 - [ ] With `PAYMENT_PROVIDER=fake`, Pay shows `This environment is not set up for card checkout.` and does not open Razorpay.
 - [ ] Subscriptions heading `My Subscriptions`. A new student sees `You do not have active access yet.` Paid access shows the product name, scope, start, and end (`Lifetime` when there is no end). Admin grants show the scope name and no product. Orders include pending rows labeled `Pending`, not `Paid`.
 - [x] **Download invoice** saves the GST PDF. There is no refund control. Owner 2026-10-10.
@@ -399,7 +399,8 @@ These notes are from owner testing on 2026-10-10. They do not check the phase 16
 - The admin error for that `400` was the generic `Payment provider request failed`. The API now returns the balance explanation when Razorpay's description is `invalid request sent` and the balance is below the refund.
 - Admin **Refund** on `ORD-MV28B89M-P9LA` returned 200 with refund `INITIATED` (`rfnd_TmAYE2JW0SAI1e`). Razorpay later moved that refund to `processed`. With `RECONCILIATION_ENABLED=true`, the refund tick marked it completed. Owner confirmed 2026-10-10.
 - Owner local pass the same day: payment, billing prefill, invoice download, mobile checkout and subscriptions, no student refund control, manual grant and revoke, free papers still start, entitled papers deny without payment. Webhook URL is registered through ngrok. Razorpay asks you to choose the webhook secret. Two `POST /api/v1/webhooks/payments/razorpay` calls returned 200. Phase 14 and phase 16 stay open.
-- Invoice `EZPREP/2026-27/0003` showed a hand-drawn currency mark that did not read as ₹. New invoices use the Noto Sans Bold rupee outline. Already stored PDFs are not regenerated.
+- Invoice `EZPREP/2026-27/0003` showed a hand-drawn currency mark that did not read as ₹. New invoices use the Noto Sans Bold rupee outline. Owner confirmed a newly issued invoice on 2026-10-10. Already stored PDFs are not regenerated.
+- Same pass: closed the Razorpay window (order stayed pending, payment not captured), UPI failure, expired checkout, checkout with no plan, a second refund error, an unrelated grant still active, and the reconciliation expire pass. A double click around the payment modal opened a second window or left checkout stuck. Pay stays locked for 600ms after the modal closes so that click does not start another payment. The double-click row stays open until that is tried again.
 
 ## Close-out (phase 16 only)
 
