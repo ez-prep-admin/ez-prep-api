@@ -22,6 +22,9 @@ import {
   REFUND_PENDING_MESSAGE,
   RefundsService,
 } from './refunds.service';
+import { RefundInitiatedBySource } from './domain/refund-initiated-by-source.enum';
+import { RefundKind } from './domain/refund-kind.enum';
+import { PaymentRole } from '../payments/domain/payment-role.enum';
 import { Refund } from './schemas/refund.schema';
 import { memoryFindOneAndUpdate } from '../orders/testing/memory-documents';
 
@@ -106,11 +109,12 @@ describe('RefundsService', () => {
     orderModel.countDocuments.mockImplementation(() => ({
       exec: async () => orders.length,
     }));
-    paymentModel.findOne.mockImplementation((filter: { orderId: unknown }) => ({
-      exec: async () =>
-        payments.find(row => String(row.orderId) === String(filter.orderId)) ??
-        null,
-    }));
+    paymentModel.findOne.mockImplementation(
+      (filter: Record<string, unknown>) => ({
+        exec: async () =>
+          payments.find(row => matchesFields(row, filter)) ?? null,
+      }),
+    );
     refundModel.findOne.mockImplementation(
       (filter: Record<string, unknown>) => ({
         exec: async () =>
@@ -121,12 +125,14 @@ describe('RefundsService', () => {
           ) ?? null,
       }),
     );
-    paymentModel.find.mockImplementation(() => ({
-      limit() {
-        return this;
-      },
-      exec: async () => [],
-    }));
+    paymentModel.find.mockImplementation(
+      (filter: Record<string, unknown> = {}) => ({
+        limit() {
+          return this;
+        },
+        exec: async () => payments.filter(row => matchesFields(row, filter)),
+      }),
+    );
     paymentModel.findById.mockImplementation(() => ({
       exec: async () => null,
     }));
@@ -542,4 +548,70 @@ describe('RefundsService', () => {
       entitlements.revokePaymentEntitlementsForOrder,
     ).not.toHaveBeenCalled();
   });
+
+  it('returns late-capture markers and the order refund ahead of a duplicate', async () => {
+    const order = seedPaid();
+    order.provisionedAt = undefined;
+    order.lateCaptureAt = new Date('2026-10-11T00:00:00.000Z');
+    order.redundantPurchase = true;
+    payments[0].role = PaymentRole.PRIMARY;
+    const duplicateId = new Types.ObjectId();
+    payments.push({
+      _id: duplicateId,
+      id: duplicateId.toHexString(),
+      orderId: order._id,
+      provider: 'razorpay',
+      providerPaymentId: 'pay_dup',
+      amount: 99900,
+      currency: 'INR',
+      status: PaymentStatus.CAPTURED,
+      role: PaymentRole.DUPLICATE,
+    });
+    await refundModel.create({
+      orderId: order._id,
+      paymentId: duplicateId,
+      userId: order.userId,
+      provider: 'razorpay',
+      amount: 99900,
+      status: RefundStatus.COMPLETED,
+      reason: 'duplicate',
+      kind: RefundKind.DUPLICATE_CAPTURE,
+      initiatedBySource: RefundInitiatedBySource.SYSTEM,
+    });
+    await refundModel.create({
+      orderId: order._id,
+      paymentId: payments[0]._id,
+      userId: order.userId,
+      provider: 'razorpay',
+      amount: 99900,
+      status: RefundStatus.COMPLETED,
+      reason: 'provider_dashboard',
+      kind: RefundKind.ORDER,
+      initiatedBySource: RefundInitiatedBySource.PROVIDER,
+    });
+
+    const detail = await service.get(order.id);
+
+    expect(detail.provisionedAt).toBeNull();
+    expect(detail.lateCaptureAt).toEqual(order.lateCaptureAt);
+    expect(detail.redundantPurchase).toBe(true);
+    expect(detail.payment?.providerPaymentId).toBe('pay_1');
+    expect(detail.refund?.initiatedBySource).toBe(
+      RefundInitiatedBySource.PROVIDER,
+    );
+    expect(detail.refund?.reason).toBe('provider_dashboard');
+    expect(detail.duplicatePayments).toEqual([
+      expect.objectContaining({
+        providerPaymentId: 'pay_dup',
+        status: PaymentStatus.CAPTURED,
+        refundStatus: RefundStatus.COMPLETED,
+      }),
+    ]);
+  });
 });
+
+function matchesFields(row: Row, filter: Record<string, unknown>): boolean {
+  return Object.entries(filter).every(
+    ([key, value]) => String(row[key]) === String(value),
+  );
+}

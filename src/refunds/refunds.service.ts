@@ -98,7 +98,18 @@ export type AdminRefundView = {
   provider: string;
   providerRefundId?: string;
   initiatedBy: string | null;
+  initiatedBySource?: RefundInitiatedBySource;
+  partial?: boolean;
   createdAt?: Date;
+};
+
+export type AdminDuplicatePaymentView = {
+  id: string;
+  providerPaymentId?: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  refundStatus: RefundStatus | null;
 };
 
 export type AdminOrderDetail = AdminOrderListItem & {
@@ -106,6 +117,9 @@ export type AdminOrderDetail = AdminOrderListItem & {
   tax: Order['tax'];
   billing: Order['billing'];
   providerOrderId?: string;
+  provisionedAt?: Date | null;
+  lateCaptureAt?: Date | null;
+  redundantPurchase?: boolean;
   payment: {
     id: string;
     status: PaymentStatus;
@@ -114,6 +128,7 @@ export type AdminOrderDetail = AdminOrderListItem & {
     amount: number;
     currency: string;
   } | null;
+  duplicatePayments: AdminDuplicatePaymentView[];
   invoice: {
     id: string;
     invoiceNumber: string;
@@ -1019,11 +1034,44 @@ export class RefundsService {
   }
 
   private async toDetail(order: OrderDocument): Promise<AdminOrderDetail> {
-    const [payment, invoice, refund] = await Promise.all([
+    const [
+      primaryPayment,
+      anyPayment,
+      invoice,
+      orderRefund,
+      anyRefund,
+      duplicates,
+    ] = await Promise.all([
+      this.paymentModel
+        .findOne({ orderId: order._id, role: PaymentRole.PRIMARY })
+        .exec(),
       this.paymentModel.findOne({ orderId: order._id }).exec(),
       this.invoiceService.findByOrderId(this.idOf(order)),
+      this.refundModel
+        .findOne({ orderId: order._id, kind: RefundKind.ORDER })
+        .exec(),
       this.refundModel.findOne({ orderId: order._id }).exec(),
+      this.paymentModel
+        .find({ orderId: order._id, role: PaymentRole.DUPLICATE })
+        .exec(),
     ]);
+    const payment = primaryPayment ?? anyPayment;
+    const refund = orderRefund ?? anyRefund;
+    const duplicatePayments = await Promise.all(
+      duplicates.map(async row => {
+        const duplicateRefund = await this.refundModel
+          .findOne({ paymentId: row._id })
+          .exec();
+        return {
+          id: this.idOf(row),
+          providerPaymentId: row.providerPaymentId,
+          amount: row.amount,
+          currency: row.currency,
+          status: row.status,
+          refundStatus: duplicateRefund?.status ?? null,
+        };
+      }),
+    );
 
     const users = await this.usersById([String(order.userId)]);
     return {
@@ -1032,16 +1080,11 @@ export class RefundsService {
       tax: order.tax,
       billing: order.billing,
       providerOrderId: order.providerOrderId,
-      payment: payment
-        ? {
-            id: this.idOf(payment),
-            status: payment.status,
-            provider: payment.provider,
-            providerPaymentId: payment.providerPaymentId,
-            amount: payment.amount,
-            currency: payment.currency,
-          }
-        : null,
+      provisionedAt: order.provisionedAt ?? null,
+      lateCaptureAt: order.lateCaptureAt ?? null,
+      redundantPurchase: order.redundantPurchase === true,
+      payment: payment ? this.toPaymentView(payment) : null,
+      duplicatePayments,
       invoice: invoice
         ? {
             id: invoice.id,
@@ -1050,6 +1093,17 @@ export class RefundsService {
           }
         : null,
       refund: refund ? this.toRefundView(refund) : null,
+    };
+  }
+
+  private toPaymentView(payment: PaymentDocument): AdminOrderDetail['payment'] {
+    return {
+      id: this.idOf(payment),
+      status: payment.status,
+      provider: payment.provider,
+      providerPaymentId: payment.providerPaymentId,
+      amount: payment.amount,
+      currency: payment.currency,
     };
   }
 
@@ -1108,6 +1162,8 @@ export class RefundsService {
       provider: refund.provider,
       providerRefundId: refund.providerRefundId,
       initiatedBy: refund.initiatedBy ? String(refund.initiatedBy) : null,
+      initiatedBySource: refund.initiatedBySource,
+      partial: refund.partial === true,
       createdAt: refund.createdAt,
     };
   }

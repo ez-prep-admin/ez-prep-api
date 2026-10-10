@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14D **pending** — phase 14C closed 2026-10-11. Ad-hoc order continues 14D, before phase 15 |
+| Current phase | 15 **pending** — phase 14D closed 2026-10-11 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -81,7 +81,7 @@ Date: YYYY-MM-DD
 | 14E | GST, seller identity, per-instance commerce (ad-hoc) | **done** | 2026-10-10 | Sharun — local seed applied (`Kerala`); PDF and ExamFlex invoice smoke stay phase 16 |
 | 14B | Payment state integrity (ad-hoc) | **done** | 2026-10-11 | Sharun — local indexes, Razorpay notes, automatic capture, late pay, second method, and double-click |
 | 14C | Webhook, refund, repair robustness (ad-hoc) | **done** | 2026-10-11 | Sharun — local tick, dashboard refund, health webhook block, S3 restore, wrong secret, defaults restored |
-| 14D | Checkout client + admin ops (ad-hoc) | pending | | PR-08 action, 11, 16 UI, 17 client, 19 page, 24, 28, 39 |
+| 14D | Checkout client + admin ops (ad-hoc) | **done** | 2026-10-11 | Sharun — local checkout, ownership, legal, and admin ops smoke; line-by-line rows stay on the E2E board for phase 16 |
 | 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
@@ -854,3 +854,30 @@ Date: 2026-10-11
 **GOLIVE_TODOS touched:** none
 
 **Next:** phase 14D
+
+### 2026-10-11 — Phase 14D — Checkout client and admin ops
+
+**Code:** ezprep-app and mock-app-admin working trees, plus an additive read on `GET /api/v1/admin/orders/:id` in ez-prep-api (`refunds.service.ts` `toDetail`). No commit.
+
+Checkout keeps the Razorpay modal open across `payment.failed` and settles from the success handler or dismiss. Checkout.js `timeout` is the seconds left until `expiresAt` minus 60, with a floor of 120. A dismiss at that point shows "This payment window has expired." and **Try again**. After the success callback, verify errors, timeouts, and `confirmation: 'PENDING_CAPTURE'` poll `GET /checkout/orders/:id` at 2s, 4s, 8s, 16s, and 30s. A hidden tab pauses once. Five reads end on "We are confirming your payment. Your access will appear in Subscriptions shortly." The idempotency fingerprint includes `offerId`. Billing-profile save does not block payment. View plans hides Buy for lifetime ownership, shows Extend for a finite `ownedUntil`, and shows "Purchases are not available yet." when `commerceEnabled` is false. Subscriptions shows "Invoice is being prepared" and "Starts {date}". Terms, Privacy, and User Policy use `lib/brand.ts` and the seven `NEXT_PUBLIC_*` values. Checkout shows the one-time and consent lines.
+
+Admin has a Commerce health page, a nav item with a red dot when `status` is `degraded`, an orders flag filter, **Retry provisioning**, late-capture / redundant / external-refund markers, a duplicate-payments table, and a refund control that stays disabled until the typed value equals the order number.
+
+**Tests:** Admin Vitest 100 files / 565 tests passed. Admin `npx tsc --noEmit` passed. ezprep-app `npm run typecheck` passed. ESLint on the touched checkout, catalog, subscriptions, and legal files passed. No new app test runner (D-15). API `refunds.service.spec.ts` 12 passed. API `tsc -p tsconfig.build.json --noEmit` passed. Full API Jest was not re-run; the detail change is confined to `toDetail` and the in-memory payment filters in that spec.
+
+**Developer ops (manual) — confirm each:**
+- [x] Phase 14D manual checks. Sharun confirmed on 2026-10-11 that the local pass looks good. The line-by-line rows in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md) stay unchecked for the phase 16 board.
+- [x] N/A: wording approval. The copy is locked in `LEGAL_COPY.md`.
+- [x] N/A: production values for the seven public brand variables. Those are set at go-live (`GO_LIVE_GUIDE.md` step 4).
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above and this phase may be marked done.  
+Date: 2026-10-11
+
+**DoD:** met
+
+**Deviations:** Admin order detail now returns `provisionedAt`, `lateCaptureAt`, `redundantPurchase`, the primary payment (unscoped fallback when no primary row exists), `duplicatePayments`, and `initiatedBySource` plus `partial` on the order refund. No new route. Pending capture stays HTTP 200 with `confirmation: 'PENDING_CAPTURE'` from 14B. The locked Terms sentences say plans do not renew, there are no free trials that turn into paid plans, and card details are not stored. Those words are on `/terms` because the copy is word for word. "Pvt. Ltd." is gone. Existing admin refund tests type the order number before clicking Refund. A failed in-flight admin GET no longer leaves a second unhandled rejection from the in-flight cleanup promise.
+
+**GOLIVE_TODOS touched:** none
+
+**Next:** phase 15

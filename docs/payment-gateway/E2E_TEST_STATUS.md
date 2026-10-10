@@ -462,3 +462,20 @@ Confirmed by Sharun on 2026-10-11.
 - [x] Set a wrong webhook secret locally and pay. Health turns degraded; restore.
 - [x] Health counts move as expected.
 
+## Phase 14D manual checks
+
+Not confirmed. Run these in Razorpay test mode against the local API, app, and admin. Leave the boxes unchecked until that pass.
+
+- [ ] Fail a card inside the Razorpay modal, then pay with UPI in the same modal. Verify runs, the success screen shows "Payment received. Your access is active.", and there is one paid order.
+- [ ] Block the network after the success callback. The app reads `GET /checkout/orders/:id` at most five times (2s, 4s, 8s, 16s, 30s), then shows "We are confirming your payment. Your access will appear in Subscriptions shortly." Access appears after the webhook settles the order. The screen never says the payment failed.
+- [ ] Leave the modal open until the window is within 60 seconds of `expiresAt`, then dismiss it. The screen says "This payment window has expired." **Try again** starts a new order. An earlier dismiss says "Payment was not completed. You can try again."
+- [ ] On the checkout URL, switch from plan A to plan B. The created order and the Razorpay amount are plan B's.
+- [ ] A lifetime owner sees no Buy button on View plans. Opening checkout for that offer shows "You already have lifetime access." with a Subscriptions link.
+- [ ] A finite `ownedUntil` shows "Active until {date}", an **Extend** button, and "Starts after your current access ends on {date}."
+- [ ] A paid order with no invoice shows "Invoice is being prepared" on Subscriptions. An access row whose `startsAt` is in the future shows "Starts {date}".
+- [ ] Admin Commerce health lists a deliberately unprovisioned order. **Retry provisioning** on that order clears it.
+- [ ] Admin **Refund** stays disabled until the typed value equals the order number and a reason is present.
+- [ ] `/terms` rewritten sections match `LEGAL_COPY.md` word for word. The page has no "Pvt. Ltd.". Checkout, under **Pay securely**, shows "One-time payment. Does not renew. Prices include GST." and links to `/terms#plans` and `/terms#refunds`.
+- [ ] With `NEXT_PUBLIC_BRAND_NAME=ExamFlex` and the other ExamFlex public values set locally, `/terms`, `/privacy-policy`, and `/user-policy` show no "EzPrep" and no `ezprep.in` address.
+- [ ] With the API at `COMMERCE_ENABLED=false`, View plans shows no Buy or Extend and says "Purchases are not available yet." A direct checkout URL shows the same sentence.
+
