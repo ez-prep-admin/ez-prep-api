@@ -11,6 +11,8 @@ import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { Order } from '../orders/schemas/order.schema';
+import { CoverageService } from './coverage.service';
+import { EntitlementLockService } from './entitlement-lock.service';
 import {
   buildProvisioningKey,
   EntitlementProvisioningService,
@@ -66,6 +68,20 @@ describe('EntitlementProvisioningService', () => {
         },
         { provide: CommerceAuditService, useValue: audit },
         { provide: PAID_ORDER_NOTIFIER, useValue: notifier },
+        {
+          provide: EntitlementLockService,
+          useValue: {
+            withLock: (
+              _userId: string,
+              _productId: string,
+              work: () => unknown,
+            ) => work(),
+          },
+        },
+        {
+          provide: CoverageService,
+          useValue: { isCoveredForLife: jest.fn().mockResolvedValue(false) },
+        },
       ],
     }).compile();
 

@@ -6,6 +6,7 @@ import { EntitlementProvisioningService } from '../entitlements/entitlement-prov
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { FakeGateway } from '../payments/infrastructure/fake/fake.gateway';
 import { RazorpayGateway } from '../payments/infrastructure/razorpay/razorpay.gateway';
 import { Payment } from '../payments/schemas/payment.schema';
@@ -83,6 +84,10 @@ describe('ReconciliationService', () => {
         { provide: EntitlementProvisioningService, useValue: provisioning },
         { provide: FakeGateway, useValue: fake },
         { provide: RazorpayGateway, useValue: razorpay },
+        {
+          provide: CommerceConfigService,
+          useValue: { settings: { paymentProvider: 'fake', nodeEnv: 'test' } },
+        },
         PaymentGatewayRegistry,
       ],
     }).compile();

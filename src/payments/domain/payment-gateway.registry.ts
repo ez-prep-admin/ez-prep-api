@@ -1,5 +1,9 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import {
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { CommerceConfigService } from '../../commerce/commerce-config.service';
 import { PaymentGateway } from './payment-gateway';
 import { FakeGateway } from '../infrastructure/fake/fake.gateway';
 import { RazorpayGateway } from '../infrastructure/razorpay/razorpay.gateway';
@@ -7,28 +11,52 @@ import { RazorpayGateway } from '../infrastructure/razorpay/razorpay.gateway';
 @Injectable()
 export class PaymentGatewayRegistry {
   constructor(
-    private readonly configService: ConfigService,
-    private readonly fakeGateway: FakeGateway,
+    private readonly commerceConfig: CommerceConfigService,
     private readonly razorpayGateway: RazorpayGateway,
+    @Optional() private readonly fakeGateway?: FakeGateway,
   ) {}
 
-  get(provider?: string): PaymentGateway {
-    const selected = (
-      provider ??
-      this.configService.get<string>('PAYMENT_PROVIDER') ??
-      'fake'
-    ).trim();
-    const name = selected || 'fake';
+  registeredProviders(): string[] {
+    const names = ['razorpay'];
+    if (this.fakeAvailable()) {
+      names.unshift('fake');
+    }
+    return names;
+  }
 
-    if (name === 'fake') {
+  isRegistered(provider: string): boolean {
+    return this.registeredProviders().includes(provider.trim().toLowerCase());
+  }
+
+  get(provider?: string): PaymentGateway {
+    const selected = (provider ?? this.commerceConfig.settings.paymentProvider)
+      .trim()
+      .toLowerCase();
+    if (!selected) {
+      throw new ServiceUnavailableException(
+        'Payment provider "PAYMENT_PROVIDER" is not available',
+      );
+    }
+    if (selected === 'fake') {
+      if (!this.fakeAvailable() || !this.fakeGateway) {
+        throw new ServiceUnavailableException(
+          'Payment provider "fake" is not available',
+        );
+      }
       return this.fakeGateway;
     }
-    if (name === 'razorpay') {
+    if (selected === 'razorpay') {
       return this.razorpayGateway;
     }
-
     throw new ServiceUnavailableException(
-      `Payment provider "${name}" is not available`,
+      `Payment provider "${selected}" is not available`,
+    );
+  }
+
+  private fakeAvailable(): boolean {
+    return (
+      this.commerceConfig.settings.nodeEnv !== 'production' &&
+      this.fakeGateway != null
     );
   }
 }

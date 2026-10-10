@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
@@ -29,7 +31,9 @@ import {
 } from './schemas/product-version.schema';
 
 @Injectable()
-export class ProductsService {
+export class ProductsService implements OnModuleInit {
+  private readonly logger = new Logger(ProductsService.name);
+
   constructor(
     @InjectModel(Product.name)
     private readonly productModel: Model<ProductDocument>,
@@ -38,6 +42,30 @@ export class ProductsService {
     private readonly grantValidation: GrantValidationService,
     private readonly commerceAuditService: CommerceAuditService,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    const products = await this.productModel
+      .find({
+        status: ProductStatus.PUBLISHED,
+        publishedGrants: { $exists: false },
+      })
+      .exec();
+    let copied = 0;
+    for (const product of products) {
+      const version = await this.productVersionModel
+        .findOne({ productId: product._id, version: product.version })
+        .exec();
+      if (!version) {
+        continue;
+      }
+      product.publishedGrants = version.grants ?? [];
+      await product.save();
+      copied += 1;
+    }
+    if (copied > 0) {
+      this.logger.log(`Backfilled publishedGrants on ${copied} products`);
+    }
+  }
 
   async create(
     dto: CreateProductDto,
@@ -202,6 +230,7 @@ export class ProductsService {
       const nextVersion = (lastVersion?.version ?? 0) + 1;
       product.version = nextVersion;
       product.status = ProductStatus.PUBLISHED;
+      product.publishedGrants = this.toGrantDocs(grantsDto);
       if (actorUserId) {
         product.updatedBy = new Types.ObjectId(actorUserId);
       }
@@ -237,6 +266,7 @@ export class ProductsService {
     } else {
       // Idempotent republish with no material change
       product.status = ProductStatus.PUBLISHED;
+      product.publishedGrants = this.toGrantDocs(grantsDto);
       if (actorUserId) {
         product.updatedBy = new Types.ObjectId(actorUserId);
       }
@@ -377,7 +407,7 @@ export class ProductsService {
       .find({
         status: ProductStatus.PUBLISHED,
         $or: matchers.map(m => ({
-          grants: {
+          publishedGrants: {
             $elemMatch: {
               scopeType: m.scopeType,
               scopeId: m.scopeId,

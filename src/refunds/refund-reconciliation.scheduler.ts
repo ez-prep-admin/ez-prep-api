@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { RefundsService } from './refunds.service';
 
 const DEFAULT_INTERVAL_MS = 300_000;
@@ -19,11 +20,13 @@ export class RefundReconciliationScheduler
 
   constructor(
     private readonly configService: ConfigService,
+    private readonly commerceConfig: CommerceConfigService,
     private readonly refundsService: RefundsService,
   ) {}
 
   onModuleInit(): void {
-    if (this.configService.get<string>('RECONCILIATION_ENABLED') !== 'true') {
+    const settings = this.commerceConfig.settings;
+    if (!settings.commerceEnabled || !settings.reconciliationEnabled) {
       this.logger.log('Refund reconciliation is disabled');
       return;
     }

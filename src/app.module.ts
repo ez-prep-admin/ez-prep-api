@@ -28,6 +28,7 @@ import { InstanceConfigModule } from './instance-config/instance-config.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { RedisModule } from './redis/redis.module';
+import { CommerceModule } from './commerce/commerce.module';
 import { CommerceAuditModule } from './commerce-audit/commerce-audit.module';
 import { EntitlementsModule } from './entitlements/entitlements.module';
 import { AccessModule } from './access/access-control.module';
@@ -97,6 +98,7 @@ const observeRootModule = createObserveRootModule();
     }),
     // Rate limiting configuration
     ThrottlerModule.forRoot([securityConfig.rateLimit]),
+    CommerceModule,
     ...(observeRootModule ? [observeRootModule] : []),
     // AWS services (Global module)
     AwsModule,

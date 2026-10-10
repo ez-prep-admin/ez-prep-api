@@ -1,6 +1,7 @@
 import { NotFoundException, StreamableFile } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CommerceEnabledGuard } from '../commerce/commerce-enabled.guard';
 import { InvoiceService } from './invoice.service';
 import { MeInvoicesController } from './me-invoices.controller';
 
@@ -19,6 +20,8 @@ describe('MeInvoicesController', () => {
       providers: [{ provide: InvoiceService, useValue: invoices }],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(CommerceEnabledGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(MeInvoicesController);

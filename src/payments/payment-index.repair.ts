@@ -32,7 +32,18 @@ export class PaymentIndexRepair implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const indexes = await this.paymentModel.collection.indexes();
+    let indexes: Array<{
+      name?: string;
+      key?: Record<string, unknown>;
+      partialFilterExpression?: unknown;
+    }> = [];
+    try {
+      indexes = await this.paymentModel.collection.indexes();
+    } catch (error) {
+      if (!isMissingNamespace(error)) {
+        throw error;
+      }
+    }
     const legacy = legacyProviderPaymentIndexNames(indexes);
     for (const name of legacy) {
       await this.paymentModel.collection.dropIndex(name);
@@ -42,4 +53,13 @@ export class PaymentIndexRepair implements OnModuleInit {
     }
     await this.paymentModel.createIndexes();
   }
+}
+
+function isMissingNamespace(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: number }).code === 26
+  );
 }

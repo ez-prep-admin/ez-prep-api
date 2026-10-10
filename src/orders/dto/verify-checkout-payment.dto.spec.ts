@@ -1,4 +1,8 @@
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { useContainer } from 'class-validator';
+import { PaymentGatewayRegistry } from '../../payments/domain/payment-gateway.registry';
+import { RegisteredPaymentProviderConstraint } from '../../payments/domain/registered-payment-provider.constraint';
 import { VerifyCheckoutPaymentDto } from './verify-checkout-payment.dto';
 
 const pipe = new ValidationPipe({
@@ -16,6 +20,21 @@ async function parse(body: Record<string, unknown>) {
 }
 
 describe('VerifyCheckoutPaymentDto', () => {
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        RegisteredPaymentProviderConstraint,
+        {
+          provide: PaymentGatewayRegistry,
+          useValue: {
+            isRegistered: (value: string) =>
+              value === 'razorpay' || value === 'fake',
+          },
+        },
+      ],
+    }).compile();
+    useContainer(moduleRef, { fallbackOnErrors: true });
+  });
   it('requires the three Razorpay fields when provider is razorpay', async () => {
     await expect(
       parse({

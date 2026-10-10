@@ -171,6 +171,10 @@ export class Order {
   @Prop({ type: Date })
   provisionedAt?: Date;
 
+  /** Set when a paid order was already covered for life at provisioning. */
+  @Prop({ type: Boolean })
+  redundantPurchase?: boolean;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -180,6 +184,7 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 OrderSchema.index({ orderNumber: 1 }, { unique: true });
 OrderSchema.index({ idempotencyKey: 1 }, { unique: true });
 OrderSchema.index({ userId: 1, createdAt: -1 });
+OrderSchema.index({ userId: 1, status: 1, createdAt: 1 });
 OrderSchema.index({ status: 1, createdAt: 1 });
 OrderSchema.index({ providerOrderId: 1 });
 

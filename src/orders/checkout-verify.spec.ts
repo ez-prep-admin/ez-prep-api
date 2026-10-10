@@ -3,6 +3,9 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { OrderStatus } from '../common/enums/order-status.enum';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
+import { CoverageService } from '../entitlements/coverage.service';
+import { ProductVersion } from '../products/schemas/product-version.schema';
 import { Offer } from '../offers/schemas/offer.schema';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
 import { ProductsService } from '../products/products.service';
@@ -73,9 +76,18 @@ describe('CheckoutService razorpay verify', () => {
         CheckoutService,
         { provide: OrdersService, useValue: ordersService },
         { provide: getModelToken(Offer.name), useValue: {} },
+        { provide: getModelToken(ProductVersion.name), useValue: {} },
         { provide: ProductsService, useValue: {} },
         { provide: TaxService, useValue: {} },
         { provide: PaymentGatewayRegistry, useValue: registry },
+        {
+          provide: CommerceConfigService,
+          useValue: { settings: { maxOpenOrdersPerUser: 3 } },
+        },
+        {
+          provide: CoverageService,
+          useValue: { isCoveredForLife: jest.fn().mockResolvedValue(false) },
+        },
       ],
     }).compile();
     service = module.get(CheckoutService);

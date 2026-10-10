@@ -9,6 +9,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { CommerceEnabledGuard } from '../commerce/commerce-enabled.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserResponseDto } from '../users/dto/user-response.dto';
@@ -16,7 +17,7 @@ import { OrdersService } from './orders.service';
 
 @ApiTags('me-orders')
 @Controller('me/orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(CommerceEnabledGuard, JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token' })
 export class MeOrdersController {

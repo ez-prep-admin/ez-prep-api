@@ -422,3 +422,13 @@ Date: __________
 Enforcement mode left as: __________
 
 Notes / waived rows:
+
+## Phase 14A manual checks
+
+Confirmed by Sharun on 2026-10-10.
+
+- [x] Boot the API with `NODE_ENV=production` and `COMMERCE_ENABLED=true` and a bad provider or test key. The process exits and the message names the bad key. Restore the local env afterward.
+- [x] Edit a published product's grants in admin and do not republish. Catalog and a new checkout still use the previous grants.
+- [x] Buy two stacked durations, then refund the earlier one. Subscriptions show the later window moved earlier.
+- [x] Grant a lifetime entitlement, then try to buy the same scope again. Checkout is refused.
+

@@ -5,6 +5,7 @@ import {
   ProductResponseDto,
 } from '../../products/dto/product-response.dto';
 import { ProductStatus } from '../../common/enums/product-status.enum';
+import { ProductOwnership } from '../../entitlements/coverage.service';
 
 /** User-facing product card; amounts on nested offers are paise. */
 export class CatalogProductDto {
@@ -29,6 +30,16 @@ export class CatalogProductDto {
   @ApiProperty({ type: [ProductGrantResponseDto] })
   grants: ProductGrantResponseDto[];
 
+  @ApiProperty()
+  coveredForLife: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Omitted when the user has no active payment row. Null is lifetime.',
+  })
+  ownedUntil?: string | null;
+
   @ApiPropertyOptional({ type: Object })
   display?: Record<string, unknown>;
 
@@ -43,6 +54,9 @@ export class CatalogProductApiResponseDto {
   @ApiProperty()
   message: string;
 
+  @ApiProperty()
+  commerceEnabled: boolean;
+
   @ApiProperty({ type: CatalogProductDto })
   data: CatalogProductDto;
 }
@@ -51,6 +65,9 @@ export class CatalogProductsListApiResponseDto {
   @ApiProperty()
   message: string;
 
+  @ApiProperty()
+  commerceEnabled: boolean;
+
   @ApiProperty({ type: [CatalogProductDto] })
   data: CatalogProductDto[];
 }
@@ -58,6 +75,7 @@ export class CatalogProductsListApiResponseDto {
 export function toCatalogProduct(
   product: ProductResponseDto,
   offers: OfferResponseDto[],
+  ownership?: ProductOwnership,
 ): CatalogProductDto {
   return {
     id: product.id,
@@ -69,5 +87,9 @@ export function toCatalogProduct(
     grants: product.grants,
     display: product.display,
     offers,
+    coveredForLife: ownership?.coveredForLife ?? false,
+    ...(ownership && 'ownedUntil' in ownership
+      ? { ownedUntil: ownership.ownedUntil }
+      : {}),
   };
 }

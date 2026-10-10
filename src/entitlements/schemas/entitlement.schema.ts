@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { DurationPreset } from '../../common/enums/duration-preset.enum';
 import { EntitlementScopeType } from '../../common/enums/entitlement-scope-type.enum';
 import { EntitlementSourceType } from '../../common/enums/entitlement-source-type.enum';
 import { EntitlementStatus } from '../../common/enums/entitlement-status.enum';
@@ -74,6 +75,10 @@ export class Entitlement {
   @Prop({ type: Types.ObjectId })
   orderId?: Types.ObjectId;
 
+  /** Preset copied from the paid order item. Used to recompute a window. */
+  @Prop({ type: String, enum: Object.values(DurationPreset) })
+  durationPreset?: DurationPreset;
+
   /** Unique idempotency key for provision / admin grant */
   @Prop({ required: true, unique: true, trim: true })
   provisioningKey: string;
@@ -100,6 +105,7 @@ EntitlementSchema.index({
   scopeId: 1,
 });
 EntitlementSchema.index({ userId: 1, productId: 1, status: 1 });
+EntitlementSchema.index({ userId: 1, status: 1, expiresAt: 1 });
 EntitlementSchema.index({ expiresAt: 1 });
 
 EntitlementSchema.virtual('id').get(function () {

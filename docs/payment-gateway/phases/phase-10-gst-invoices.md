@@ -2,7 +2,7 @@
 
 ## Objective
 
-Issue B2C GST tax invoices after payment capture: use order tax snapshots from `TaxService`, CGST/SGST vs IGST already computed at order time, calendar numbering `EZPREP/YYYY/####`, PDF with required seller/SAC/customer fields from **instance config snapshots**, user and admin download APIs. Email/credit notes out of scope.
+Issue B2C GST tax invoices after payment capture: use order tax snapshots from `TaxService`, CGST/SGST vs IGST already computed at order time, Indian FY numbering `EZPREP/YYYY-YY/####`, PDF with required seller/SAC/customer fields from **instance config snapshots**, user and admin download APIs. Email/credit notes out of scope.
 
 ## Prerequisites
 

@@ -36,6 +36,10 @@ export class Product {
   @Prop({ type: [ProductGrantSchema], default: [] })
   grants: ProductGrant[];
 
+  /** Frozen grants from the last publish. Absent until backfill or publish. */
+  @Prop({ type: [ProductGrantSchema] })
+  publishedGrants?: ProductGrant[];
+
   @Prop({ type: Object })
   display?: Record<string, unknown>;
 
@@ -58,6 +62,10 @@ export class Product {
 export const ProductSchema = SchemaFactory.createForClass(Product);
 
 ProductSchema.index({ 'grants.scopeType': 1, 'grants.scopeId': 1 });
+ProductSchema.index({
+  'publishedGrants.scopeType': 1,
+  'publishedGrants.scopeId': 1,
+});
 ProductSchema.index({ status: 1, isDeleted: 1 });
 
 ProductSchema.virtual('id').get(function () {

@@ -1,6 +1,7 @@
 import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { CommerceConfigService } from '../../commerce/commerce-config.service';
 import { FakeGateway } from '../infrastructure/fake/fake.gateway';
 import { RAZORPAY_ORDERS_CLIENT } from '../infrastructure/razorpay/razorpay-orders.client';
 import { RazorpayGateway } from '../infrastructure/razorpay/razorpay.gateway';
@@ -8,16 +9,21 @@ import { PaymentGatewayRegistry } from './payment-gateway.registry';
 
 describe('PaymentGatewayRegistry', () => {
   let registry: PaymentGatewayRegistry;
-  const config = { get: jest.fn() };
+  const settings = { paymentProvider: '', nodeEnv: 'test' };
 
   beforeEach(async () => {
-    config.get.mockReset();
+    settings.paymentProvider = '';
+    settings.nodeEnv = 'test';
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentGatewayRegistry,
         FakeGateway,
         RazorpayGateway,
-        { provide: ConfigService, useValue: config },
+        { provide: ConfigService, useValue: { get: jest.fn() } },
+        {
+          provide: CommerceConfigService,
+          useValue: { settings },
+        },
         {
           provide: RAZORPAY_ORDERS_CLIENT,
           useValue: { createOrder: jest.fn() },
@@ -27,13 +33,12 @@ describe('PaymentGatewayRegistry', () => {
     registry = module.get(PaymentGatewayRegistry);
   });
 
-  it('returns the fake provider by default', () => {
-    config.get.mockReturnValue(undefined);
-    expect(registry.get().provider).toBe('fake');
+  it('rejects a blank provider instead of falling back to fake', () => {
+    expect(() => registry.get()).toThrow(ServiceUnavailableException);
   });
 
   it('returns the fake provider when PAYMENT_PROVIDER=fake', () => {
-    config.get.mockReturnValue('fake');
+    settings.paymentProvider = 'fake';
     expect(registry.get().provider).toBe('fake');
   });
 
@@ -46,7 +51,14 @@ describe('PaymentGatewayRegistry', () => {
   });
 
   it('returns the razorpay provider when PAYMENT_PROVIDER=razorpay', () => {
-    config.get.mockReturnValue('razorpay');
+    settings.paymentProvider = 'razorpay';
     expect(registry.get().provider).toBe('razorpay');
+  });
+
+  it('does not serve fake when NODE_ENV is production', () => {
+    settings.nodeEnv = 'production';
+    settings.paymentProvider = 'fake';
+    expect(() => registry.get()).toThrow(ServiceUnavailableException);
+    expect(() => registry.get('fake')).toThrow(ServiceUnavailableException);
   });
 });

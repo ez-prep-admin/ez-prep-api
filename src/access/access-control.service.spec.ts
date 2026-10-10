@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { AccessControlService } from './access-control.service';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { AccessEnforcementMode } from '../common/enums/access-enforcement-mode.enum';
@@ -27,10 +27,10 @@ describe('AccessControlService', () => {
     findActiveForUser: jest.fn(),
   };
   let enforcementMode = AccessEnforcementMode.ENFORCED;
-  const configService = {
-    get: jest.fn((key: string) =>
-      key === 'ACCESS_ENFORCEMENT_MODE' ? enforcementMode : undefined,
-    ),
+  const commerceConfig = {
+    get settings() {
+      return { accessEnforcementMode: enforcementMode };
+    },
   };
 
   beforeEach(async () => {
@@ -41,15 +41,12 @@ describe('AccessControlService', () => {
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
         { provide: getModelToken(Exam.name), useValue: examModel },
         { provide: EntitlementsService, useValue: entitlementsService },
-        { provide: ConfigService, useValue: configService },
+        { provide: CommerceConfigService, useValue: commerceConfig },
       ],
     }).compile();
 
     service = module.get(AccessControlService);
     jest.clearAllMocks();
-    configService.get.mockImplementation((key: string) =>
-      key === 'ACCESS_ENFORCEMENT_MODE' ? enforcementMode : undefined,
-    );
   });
 
   function mockPaper(accessMode: AccessMode, active = true) {

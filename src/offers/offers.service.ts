@@ -37,6 +37,12 @@ export class OffersService {
       if (dto.saleAmount != null) {
         assertPaise(dto.saleAmount, 'saleAmount');
       }
+      this.assertSaleWindow(
+        dto.listAmount,
+        dto.saleAmount,
+        dto.saleValidFrom ? new Date(dto.saleValidFrom) : undefined,
+        dto.saleValidUntil ? new Date(dto.saleValidUntil) : undefined,
+      );
     } catch (e) {
       throw new BadRequestException(
         e instanceof Error ? e.message : 'Invalid amount',
@@ -142,6 +148,13 @@ export class OffersService {
       offer.saleValidUntil =
         dto.saleValidUntil === null ? undefined : new Date(dto.saleValidUntil);
     }
+
+    this.assertSaleWindow(
+      offer.listAmount,
+      offer.saleAmount,
+      offer.saleValidFrom,
+      offer.saleValidUntil,
+    );
 
     if (dto.status !== undefined && dto.status !== offer.status) {
       if (dto.status === OfferStatus.ACTIVE) {
@@ -290,6 +303,26 @@ export class OffersService {
       base.effectiveAmount = resolveEffectiveAmount(offer, now);
     }
     return base;
+  }
+
+  private assertSaleWindow(
+    listAmount: number,
+    saleAmount: number | null | undefined,
+    saleValidFrom?: Date,
+    saleValidUntil?: Date,
+  ): void {
+    if (saleAmount != null && saleAmount >= listAmount) {
+      throw new BadRequestException('saleAmount must be less than listAmount');
+    }
+    if (
+      saleValidFrom &&
+      saleValidUntil &&
+      saleValidFrom.getTime() >= saleValidUntil.getTime()
+    ) {
+      throw new BadRequestException(
+        'saleValidFrom must be before saleValidUntil',
+      );
+    }
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

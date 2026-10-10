@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsIn,
   IsObject,
   Validate,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
+import { RegisteredPaymentProviderConstraint } from '../../payments/domain/registered-payment-provider.constraint';
 
 const RAZORPAY_FIELDS = [
   'razorpay_order_id',
@@ -38,9 +38,9 @@ export class CheckoutProviderPayloadConstraint
 }
 
 export class VerifyCheckoutPaymentDto {
-  @ApiProperty({ enum: ['razorpay', 'fake'], example: 'razorpay' })
-  @IsIn(['razorpay', 'fake'])
-  provider: 'razorpay' | 'fake';
+  @ApiProperty({ example: 'razorpay' })
+  @Validate(RegisteredPaymentProviderConstraint)
+  provider: string;
 
   @ApiProperty({
     type: Object,

@@ -2,6 +2,7 @@ import { EntitlementStatus } from '../enums/entitlement-status.enum';
 
 export type EntitlementActiveInput = {
   status: EntitlementStatus | string;
+  startsAt?: Date | null;
   expiresAt?: Date | null;
 };
 
@@ -15,6 +16,12 @@ export function isEntitlementCurrentlyActive(
   now: Date = new Date(),
 ): boolean {
   if (entitlement.status !== EntitlementStatus.ACTIVE) {
+    return false;
+  }
+  if (
+    entitlement.startsAt == null ||
+    entitlement.startsAt.getTime() > now.getTime()
+  ) {
     return false;
   }
   if (entitlement.expiresAt == null) {

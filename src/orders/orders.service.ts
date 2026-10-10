@@ -73,6 +73,19 @@ export class OrdersService {
     return this.orderModel.findOne({ idempotencyKey: key }).exec();
   }
 
+  async countOpenCheckoutOrders(userId: string, since: Date): Promise<number> {
+    if (!Types.ObjectId.isValid(userId)) {
+      return 0;
+    }
+    return this.orderModel
+      .countDocuments({
+        userId: new Types.ObjectId(userId),
+        status: { $in: [OrderStatus.CREATED, OrderStatus.PENDING_PAYMENT] },
+        createdAt: { $gte: since },
+      })
+      .exec();
+  }
+
   async listForUser(
     userId: string,
     options: { page?: number; limit?: number },

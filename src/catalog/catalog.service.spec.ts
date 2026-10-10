@@ -10,6 +10,7 @@ import { Exam } from '../exams/schemas/exam.schema';
 import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { OffersService } from '../offers/offers.service';
 import { ProductsService } from '../products/products.service';
+import { CoverageService } from '../entitlements/coverage.service';
 import { CatalogService } from './catalog.service';
 
 const PRODUCT_ID = '507f1f77bcf86cd799439041';
@@ -83,6 +84,12 @@ describe('CatalogService', () => {
         { provide: OffersService, useValue: offersService },
         { provide: getModelToken(Exam.name), useValue: examModel },
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
+        {
+          provide: CoverageService,
+          useValue: {
+            ownershipByProduct: jest.fn().mockResolvedValue(new Map()),
+          },
+        },
       ],
     }).compile();
 

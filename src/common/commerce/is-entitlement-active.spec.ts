@@ -7,7 +7,11 @@ describe('isEntitlementCurrentlyActive', () => {
   it('returns true for ACTIVE with null expiresAt (lifetime)', () => {
     expect(
       isEntitlementCurrentlyActive(
-        { status: EntitlementStatus.ACTIVE, expiresAt: null },
+        {
+          status: EntitlementStatus.ACTIVE,
+          startsAt: new Date('2026-01-01T00:00:00.000Z'),
+          expiresAt: null,
+        },
         now,
       ),
     ).toBe(true);
@@ -18,6 +22,7 @@ describe('isEntitlementCurrentlyActive', () => {
       isEntitlementCurrentlyActive(
         {
           status: EntitlementStatus.ACTIVE,
+          startsAt: now,
           expiresAt: new Date('2026-12-01T00:00:00.000Z'),
         },
         now,

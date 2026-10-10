@@ -3,6 +3,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CheckoutBillingDto } from '../orders/dto/create-checkout-order.dto';
 import { User } from './schemas/user.schema';
+import { Order } from '../orders/schemas/order.schema';
+import { TaxInvoice } from '../invoices/schemas/tax-invoice.schema';
 import { UsersService } from './users.service';
 
 const USER_ID = '507f1f77bcf86cd799439011';
@@ -28,6 +30,14 @@ describe('UsersService billing profile', () => {
       providers: [
         UsersService,
         { provide: getModelToken(User.name), useValue: userModel },
+        {
+          provide: getModelToken(Order.name),
+          useValue: { countDocuments: jest.fn() },
+        },
+        {
+          provide: getModelToken(TaxInvoice.name),
+          useValue: { countDocuments: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(UsersService);

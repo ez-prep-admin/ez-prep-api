@@ -10,15 +10,22 @@ import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminEntitlementsController } from './admin-entitlements.controller';
 import { AdminUserEntitlementsController } from './admin-user-entitlements.controller';
+import { CoverageService } from './coverage.service';
+import { EntitlementLockService } from './entitlement-lock.service';
 import { EntitlementProvisioningService } from './entitlement-provisioning.service';
 import { EntitlementsService } from './entitlements.service';
 import { MeEntitlementsController } from './me-entitlements.controller';
 import { Entitlement, EntitlementSchema } from './schemas/entitlement.schema';
+import {
+  EntitlementLock,
+  EntitlementLockSchema,
+} from './schemas/entitlement-lock.schema';
 
 @Module({
   imports: [
     MongooseModule.forFeature([
       { name: Entitlement.name, schema: EntitlementSchema },
+      { name: EntitlementLock.name, schema: EntitlementLockSchema },
       { name: User.name, schema: UserSchema },
       { name: Order.name, schema: OrderSchema },
     ]),
@@ -34,10 +41,16 @@ import { Entitlement, EntitlementSchema } from './schemas/entitlement.schema';
     AdminEntitlementsController,
     AdminUserEntitlementsController,
   ],
-  providers: [EntitlementsService, EntitlementProvisioningService],
+  providers: [
+    EntitlementsService,
+    EntitlementProvisioningService,
+    EntitlementLockService,
+    CoverageService,
+  ],
   exports: [
     EntitlementsService,
     EntitlementProvisioningService,
+    CoverageService,
     MongooseModule,
   ],
 })

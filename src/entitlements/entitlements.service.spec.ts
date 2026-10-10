@@ -16,6 +16,8 @@ import { Exam } from '../exams/schemas/exam.schema';
 import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { Product } from '../products/schemas/product.schema';
 import { User } from '../users/schemas/user.schema';
+import { Order } from '../orders/schemas/order.schema';
+import { EntitlementLockService } from './entitlement-lock.service';
 import { EntitlementsService } from './entitlements.service';
 import { Entitlement } from './schemas/entitlement.schema';
 
@@ -93,7 +95,18 @@ describe('EntitlementsService', () => {
         { provide: getModelToken(ExamGroup.name), useValue: examGroupModel },
         { provide: getModelToken(MockTest.name), useValue: mockTestModel },
         { provide: getModelToken(Product.name), useValue: productModel },
+        { provide: getModelToken(Order.name), useValue: { find: jest.fn() } },
         { provide: CommerceAuditService, useValue: auditService },
+        {
+          provide: EntitlementLockService,
+          useValue: {
+            withLock: (
+              _userId: string,
+              _productId: string,
+              work: () => unknown,
+            ) => work(),
+          },
+        },
       ],
     }).compile();
 

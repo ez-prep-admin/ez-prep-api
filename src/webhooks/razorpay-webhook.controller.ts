@@ -6,15 +6,18 @@ import {
   Post,
   RawBodyRequest,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Request } from 'express';
+import { CommerceEnabledGuard } from '../commerce/commerce-enabled.guard';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 
 @ApiTags('webhooks')
 @SkipThrottle()
 @Controller('webhooks/payments')
+@UseGuards(CommerceEnabledGuard)
 export class RazorpayWebhookController {
   constructor(private readonly webhooks: RazorpayWebhookService) {}
 

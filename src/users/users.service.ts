@@ -19,6 +19,13 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { OrderStatus } from '../common/enums/order-status.enum';
+import { TaxInvoiceStatus } from '../common/enums/tax-invoice-status.enum';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import {
+  TaxInvoice,
+  TaxInvoiceDocument,
+} from '../invoices/schemas/tax-invoice.schema';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 
 export interface UserWithGoogleLink {
@@ -38,7 +45,12 @@ export interface BillingProfileView {
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(TaxInvoice.name)
+    private invoiceModel: Model<TaxInvoiceDocument>,
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     if (createUserDto.role === UserRole.ADMIN) {
@@ -353,10 +365,28 @@ export class UsersService {
   }
 
   async hardDelete(id: string): Promise<void> {
-    const result = await this.userModel.findByIdAndDelete(id).exec();
-    if (!result) {
+    const user = await this.userModel.findById(id).select('_id').exec();
+    if (!user) {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
+    const userId = new Types.ObjectId(id);
+    const [orders, invoices] = await Promise.all([
+      this.orderModel
+        .countDocuments({
+          userId,
+          status: { $in: [OrderStatus.PAID, OrderStatus.REFUNDED] },
+        })
+        .exec(),
+      this.invoiceModel
+        .countDocuments({ userId, status: TaxInvoiceStatus.ISSUED })
+        .exec(),
+    ]);
+    if (orders > 0 || invoices > 0) {
+      throw new ConflictException(
+        'User has paid orders or issued invoices and cannot be hard-deleted',
+      );
+    }
+    await this.userModel.findByIdAndDelete(id).exec();
   }
 
   // Admin-specific methods

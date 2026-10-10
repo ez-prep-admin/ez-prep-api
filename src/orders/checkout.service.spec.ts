@@ -13,6 +13,9 @@ import { OfferStatus } from '../common/enums/offer-status.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { ProductStatus } from '../common/enums/product-status.enum';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
+import { CoverageService } from '../entitlements/coverage.service';
+import { ProductVersion } from '../products/schemas/product-version.schema';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { Offer } from '../offers/schemas/offer.schema';
 import { FakeGateway } from '../payments/infrastructure/fake/fake.gateway';
@@ -40,12 +43,24 @@ describe('CheckoutService', () => {
     findOne: jest.fn(),
     findById: jest.fn(),
     create: jest.fn(),
+    countDocuments: jest.fn().mockReturnValue({ exec: async () => 0 }),
   };
   const paymentModel = {
     findOne: jest.fn(),
     create: jest.fn(),
   };
   const offerModel = { findById: jest.fn() };
+  const productVersionModel = {
+    findOne: jest.fn().mockReturnValue({
+      exec: async () => ({
+        version: product.version,
+        code: product.code,
+        name: product.name,
+        description: product.description,
+        grants: product.grants,
+      }),
+    }),
+  };
   const productsService = { findDocumentById: jest.fn() };
   const taxService = { calculateForCheckout: jest.fn() };
   const paidHandler = { onOrderPaid: jest.fn() };
@@ -189,11 +204,23 @@ describe('CheckoutService', () => {
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: getModelToken(Offer.name), useValue: offerModel },
+        {
+          provide: getModelToken(ProductVersion.name),
+          useValue: productVersionModel,
+        },
         { provide: ProductsService, useValue: productsService },
         { provide: TaxService, useValue: taxService },
         { provide: PaymentGatewayRegistry, useValue: registry },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
         { provide: EntitlementProvisioningService, useValue: provisioning },
+        {
+          provide: CommerceConfigService,
+          useValue: { settings: { maxOpenOrdersPerUser: 3 } },
+        },
+        {
+          provide: CoverageService,
+          useValue: { isCoveredForLife: jest.fn().mockResolvedValue(false) },
+        },
       ],
     }).compile();
 

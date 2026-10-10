@@ -7,6 +7,7 @@ import {
 } from '../mock-tests/schemas/mock-test.schema';
 import { OffersModule } from '../offers/offers.module';
 import { ProductsModule } from '../products/products.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { CatalogController } from './catalog.controller';
 import { CatalogService } from './catalog.service';
 
@@ -14,6 +15,7 @@ import { CatalogService } from './catalog.service';
   imports: [
     ProductsModule,
     OffersModule,
+    EntitlementsModule,
     MongooseModule.forFeature([
       { name: Exam.name, schema: ExamSchema },
       { name: MockTest.name, schema: MockTestSchema },

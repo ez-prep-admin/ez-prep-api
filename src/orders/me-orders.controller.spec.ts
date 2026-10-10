@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CommerceEnabledGuard } from '../commerce/commerce-enabled.guard';
 import { MeOrdersController } from './me-orders.controller';
 import { OrdersService } from './orders.service';
 
@@ -19,6 +20,8 @@ describe('MeOrdersController', () => {
       providers: [{ provide: OrdersService, useValue: orders }],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .overrideGuard(CommerceEnabledGuard)
       .useValue({ canActivate: () => true })
       .compile();
     controller = module.get(MeOrdersController);

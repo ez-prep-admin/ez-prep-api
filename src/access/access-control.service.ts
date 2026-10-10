@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AccessDecision } from './access-decision';
@@ -8,6 +7,8 @@ import { PaperAccessInput } from './paper-access-input';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { AccessEnforcementMode } from '../common/enums/access-enforcement-mode.enum';
 import { AccessMode } from '../common/enums/access-mode.enum';
+import { EntitlementScopeType } from '../common/enums/entitlement-scope-type.enum';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { Exam, ExamDocument } from '../exams/schemas/exam.schema';
 import {
@@ -31,7 +32,7 @@ export class AccessControlService {
     @InjectModel(Exam.name)
     private readonly examModel: Model<ExamDocument>,
     private readonly entitlementsService: EntitlementsService,
-    private readonly configService: ConfigService,
+    private readonly commerceConfig: CommerceConfigService,
   ) {}
 
   async canAccessMockTest(
@@ -114,12 +115,6 @@ export class AccessControlService {
       // ENTITLED (or unknown treated as entitled path)
       if (paper.examId && Types.ObjectId.isValid(paper.examId)) {
         entitledExamIds.add(paper.examId);
-      } else {
-        result.set(paper.id, {
-          allowed: false,
-          reason: AccessDecisionReason.INACTIVE,
-          accessMode: AccessMode.ENTITLED,
-        });
       }
     }
 
@@ -148,6 +143,28 @@ export class AccessControlService {
     const mode = this.getEnforcementMode();
 
     for (const paper of pending) {
+      const mockMatch = entitlements.some(
+        entitlement =>
+          entitlement.scopeType === EntitlementScopeType.MOCK_TEST &&
+          String(entitlement.scopeId) === paper.id,
+      );
+      if (mockMatch) {
+        if (!hasValidUser) {
+          result.set(paper.id, {
+            allowed: false,
+            reason: AccessDecisionReason.ENTITLEMENT_REQUIRED,
+            accessMode: AccessMode.ENTITLED,
+          });
+          continue;
+        }
+        result.set(paper.id, {
+          allowed: true,
+          reason: AccessDecisionReason.ALLOWED,
+          accessMode: AccessMode.ENTITLED,
+        });
+        continue;
+      }
+
       const examMeta = paper.examId ? examById.get(paper.examId) : undefined;
       if (!examMeta) {
         result.set(paper.id, {
@@ -209,12 +226,8 @@ export class AccessControlService {
   }
 
   private getEnforcementMode(): AccessEnforcementMode {
-    const raw = (
-      this.configService.get<string>('ACCESS_ENFORCEMENT_MODE') ??
-      AccessEnforcementMode.LEGACY
-    ).toUpperCase();
-
-    return raw === AccessEnforcementMode.ENFORCED
+    return this.commerceConfig.settings.accessEnforcementMode ===
+      AccessEnforcementMode.ENFORCED
       ? AccessEnforcementMode.ENFORCED
       : AccessEnforcementMode.LEGACY;
   }

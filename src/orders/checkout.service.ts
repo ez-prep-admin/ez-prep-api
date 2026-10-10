@@ -1,6 +1,8 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -18,6 +20,12 @@ import { OrderStatus } from '../common/enums/order-status.enum';
 import { ProductStatus } from '../common/enums/product-status.enum';
 import { Offer, OfferDocument } from '../offers/schemas/offer.schema';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
+import { CoverageService } from '../entitlements/coverage.service';
+import {
+  ProductVersion,
+  ProductVersionDocument,
+} from '../products/schemas/product-version.schema';
 import { ProductsService } from '../products/products.service';
 import { TaxService } from '../tax/tax.service';
 import { CheckoutBillingDto } from './dto/create-checkout-order.dto';
@@ -33,8 +41,12 @@ export class CheckoutService {
     @InjectModel(Offer.name)
     private readonly offerModel: Model<OfferDocument>,
     private readonly productsService: ProductsService,
+    @InjectModel(ProductVersion.name)
+    private readonly productVersionModel: Model<ProductVersionDocument>,
     private readonly taxService: TaxService,
     private readonly registry: PaymentGatewayRegistry,
+    private readonly commerceConfig: CommerceConfigService,
+    private readonly coverageService: CoverageService,
   ) {}
 
   async createOrder(
@@ -54,6 +66,29 @@ export class CheckoutService {
     }
 
     const priced = await this.priceOffer(dto.offerId);
+    if (
+      await this.coverageService.isCoveredForLife(userId, priced.item.grants)
+    ) {
+      throw new ConflictException({
+        message: 'This product is already covered for life',
+        details: { code: 'ALREADY_COVERED' },
+      });
+    }
+
+    const openOrders = await this.ordersService.countOpenCheckoutOrders(
+      userId,
+      new Date(Date.now() - ORDER_PAYMENT_WINDOW_MS),
+    );
+    if (openOrders >= this.commerceConfig.settings.maxOpenOrdersPerUser) {
+      throw new HttpException(
+        {
+          message: 'Too many open orders',
+          details: { code: 'TOO_MANY_OPEN_ORDERS' },
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
     const tax = await this.taxService.calculateForCheckout(
       priced.amount,
       billing.stateCode,
@@ -227,6 +262,16 @@ export class CheckoutService {
       throw new BadRequestException('Product is not published');
     }
 
+    const version = await this.productVersionModel
+      .findOne({ productId: product._id, version: product.version })
+      .exec();
+    if (!version || (version.grants ?? []).length === 0) {
+      throw new BadRequestException({
+        message: 'Product is not purchasable',
+        details: { code: 'PRODUCT_NOT_PURCHASABLE' },
+      });
+    }
+
     const amount = resolveEffectiveAmount(offer);
     if (!Number.isInteger(amount) || amount < MIN_ORDER_AMOUNT_PAISE) {
       throw new BadRequestException(
@@ -236,11 +281,14 @@ export class CheckoutService {
 
     const snapshot = buildProductVersionSnapshot({
       id: String((product as { id?: string }).id ?? product._id),
-      version: product.version,
-      code: product.code,
-      name: product.name,
-      description: product.description,
-      grants: product.grants ?? [],
+      version: version.version,
+      code: version.code,
+      name: version.name,
+      description: version.description,
+      grants: (version.grants ?? []).map(grant => ({
+        scopeType: grant.scopeType,
+        scopeId: String(grant.scopeId),
+      })),
     });
 
     return {

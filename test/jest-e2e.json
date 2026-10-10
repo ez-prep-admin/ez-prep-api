@@ -2,6 +2,8 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
+  "maxWorkers": 1,
+  "testTimeout": 90000,
   "testRegex": ".e2e-spec.ts$",
   "transform": {
     "^.+\\.(t|j)s$": [
@@ -10,5 +12,12 @@
         "tsconfig": "tsconfig.spec.json"
       }
     ]
-  }
+  },
+  "setupFiles": ["<rootDir>/commerce/support/preload-env.ts"],
+  "moduleNameMapper": {
+    "^@nestjs/observe$": "<rootDir>/commerce/support/observe-mock.ts"
+  },
+  "transformIgnorePatterns": [
+    "node_modules/(?!(@nestjs/observe)/)"
+  ]
 }

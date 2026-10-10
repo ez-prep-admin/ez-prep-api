@@ -13,6 +13,8 @@ import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import { CoverageService } from './coverage.service';
+import { EntitlementLockService } from './entitlement-lock.service';
 import { PAID_ORDER_NOTIFIER, PaidOrderNotifier } from './paid-order-notifier';
 import { Entitlement, EntitlementDocument } from './schemas/entitlement.schema';
 
@@ -51,6 +53,8 @@ export class EntitlementProvisioningService {
     private readonly commerceAuditService: CommerceAuditService,
     @Inject(PAID_ORDER_NOTIFIER)
     private readonly paidOrderNotifier: PaidOrderNotifier,
+    private readonly entitlementLock: EntitlementLockService,
+    private readonly coverageService: CoverageService,
   ) {}
 
   async provisionForPaidOrder(
@@ -79,44 +83,37 @@ export class EntitlementProvisioningService {
 
     this.assertGrantIds(order);
 
+    const grants = order.items.flatMap(item =>
+      (item.grants ?? []).map(grant => ({
+        scopeType: grant.scopeType,
+        scopeId: String(grant.scopeId),
+      })),
+    );
+    const redundant = await this.coverageService.isCoveredForLife(
+      String(order.userId),
+      grants,
+    );
+
     const now = new Date();
-    const plans = [];
+    let created = 0;
     for (const item of order.items) {
-      const overlapping = await this.entitlementModel
-        .find({
-          userId: order.userId,
-          productId: item.productId,
-          status: EntitlementStatus.ACTIVE,
-          $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
-        })
-        .exec();
-      plans.push({
-        item,
-        window: stackEntitlementWindow(
-          item.durationPreset,
-          now,
-          overlapping.map(row => ({ expiresAt: row.expiresAt })),
-        ),
-      });
+      const inserted = await this.entitlementLock.withLock(
+        String(order.userId),
+        String(item.productId),
+        () => this.provisionItem(order, canonicalOrderId, item, now),
+      );
+      created += inserted;
     }
 
-    let created = 0;
-    for (const plan of plans) {
-      for (const grant of plan.item.grants ?? []) {
-        const inserted = await this.insertGrant({
-          order,
-          orderId: canonicalOrderId,
-          productId: plan.item.productId,
-          productVersion: plan.item.productVersion,
-          scopeType: grant.scopeType,
-          scopeId: grant.scopeId,
-          startsAt: plan.window.startsAt,
-          expiresAt: plan.window.expiresAt,
-        });
-        if (inserted) {
-          created += 1;
-        }
-      }
+    if (redundant) {
+      order.redundantPurchase = true;
+      await this.commerceAuditService.log({
+        actorUserId: String(order.userId),
+        action: 'REDUNDANT_PURCHASE',
+        resourceType: 'order',
+        resourceId: canonicalOrderId,
+        after: { redundantPurchase: true },
+      });
     }
 
     await this.paidOrderNotifier.onOrderProvisioned(canonicalOrderId);
@@ -140,6 +137,45 @@ export class EntitlementProvisioningService {
     };
   }
 
+  private async provisionItem(
+    order: OrderDocument,
+    orderId: string,
+    item: OrderDocument['items'][number],
+    now: Date,
+  ): Promise<number> {
+    const overlapping = await this.entitlementModel
+      .find({
+        userId: order.userId,
+        productId: item.productId,
+        status: EntitlementStatus.ACTIVE,
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      })
+      .exec();
+    const window = stackEntitlementWindow(
+      item.durationPreset,
+      now,
+      overlapping.map(row => ({ expiresAt: row.expiresAt })),
+    );
+    let created = 0;
+    for (const grant of item.grants ?? []) {
+      const inserted = await this.insertGrant({
+        order,
+        orderId,
+        productId: item.productId,
+        productVersion: item.productVersion,
+        scopeType: grant.scopeType,
+        scopeId: String(grant.scopeId),
+        startsAt: window.startsAt,
+        expiresAt: window.expiresAt,
+        durationPreset: item.durationPreset,
+      });
+      if (inserted) {
+        created += 1;
+      }
+    }
+    return created;
+  }
+
   private assertGrantIds(order: OrderDocument): void {
     for (const item of order.items) {
       for (const grant of item.grants ?? []) {
@@ -159,6 +195,7 @@ export class EntitlementProvisioningService {
     scopeId: string;
     startsAt: Date;
     expiresAt: Date | null;
+    durationPreset: OrderDocument['items'][number]['durationPreset'];
   }): Promise<boolean> {
     const provisioningKey = buildProvisioningKey({
       orderId: input.orderId,
@@ -175,6 +212,7 @@ export class EntitlementProvisioningService {
         status: EntitlementStatus.ACTIVE,
         startsAt: input.startsAt,
         expiresAt: input.expiresAt,
+        durationPreset: input.durationPreset,
         sourceType: EntitlementSourceType.PAYMENT,
         sourceId: input.orderId,
         productId: input.productId,

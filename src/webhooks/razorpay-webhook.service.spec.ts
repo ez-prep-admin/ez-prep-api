@@ -17,6 +17,7 @@ import { ORDER_PAID_HANDLER } from '../orders/domain/order-paid-handler';
 import { OrdersService } from '../orders/orders.service';
 import { Order } from '../orders/schemas/order.schema';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { FakeGateway } from '../payments/infrastructure/fake/fake.gateway';
 import { RAZORPAY_ORDERS_CLIENT } from '../payments/infrastructure/razorpay/razorpay-orders.client';
 import { RazorpayGateway } from '../payments/infrastructure/razorpay/razorpay.gateway';
@@ -141,6 +142,12 @@ describe('RazorpayWebhookService', () => {
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: ConfigService, useValue: config },
+        {
+          provide: CommerceConfigService,
+          useValue: {
+            settings: { paymentProvider: 'razorpay', nodeEnv: 'test' },
+          },
+        },
         {
           provide: RAZORPAY_ORDERS_CLIENT,
           useValue: { createOrder: jest.fn() },

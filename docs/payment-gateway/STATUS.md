@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14A **pending** — phase 14 closed 2026-10-10. Pre-release review ([`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md)) added ad-hoc phases, run in order 14A → 14E → 14B → 14C → 14D, before phase 15 |
+| Current phase | 14E **pending** — phase 14A closed 2026-10-10. Ad-hoc order continues 14E → 14B → 14C → 14D, before phase 15 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -77,7 +77,7 @@ Date: YYYY-MM-DD
 | 12 | Reconciliation + audit | **done** | 2026-10-10 | Sharun — Jest; UI recon + audit list deferred to phase 16 |
 | 13 | User access UI | **done** | 2026-10-10 | Sharun — broad lock / View plans / checkout shell smoke; detailed pass is phase 16 |
 | 14 | Checkout + subscriptions | **done** | 2026-10-10 | Sharun — local Razorpay purchase, refund, invoice, and subscriptions smoke |
-| 14A | Fail-closed config + catalog integrity (ad-hoc) | pending | | From [`PRE_RELEASE_REVIEW.md`](PRE_RELEASE_REVIEW.md): regression harness first; PR-01, 07, 08 boot, 12, 14 boot, 15, 16, 18, 20, 23, 25, 26, 27; D-23, D-24, D-27 |
+| 14A | Fail-closed config + catalog integrity (ad-hoc) | **done** | 2026-10-10 | Sharun — production boot guard, frozen grants, re-anchor, and lifetime block verified locally |
 | 14E | GST, seller identity, per-instance commerce (ad-hoc) | pending | | Runs second. PR-29–32, 35, 36; D-26, D-29; seller address `Kerala` |
 | 14B | Payment state integrity (ad-hoc) | pending | | PR-02, 03, 04, 10, 17, 33, 37; D-22, D-28 |
 | 14C | Webhook, refund, repair robustness (ad-hoc) | pending | | PR-02 watch, 05, 06, 08, 09, 13, 14, 19, 21, 22, 33, 34, 37, 38; D-22, D-25, D-28 |
@@ -727,3 +727,40 @@ Date: 2026-10-10
 **Developer confirmation:** n/a (docs only).  
 **GOLIVE_TODOS touched:** U-OPS-01 to U-OPS-04 point to the guide; U-OPS-05 added.  
 **Next:** phase 14A
+
+### 2026-10-10 — Phase 14A — Fail-closed config and catalog integrity
+
+**Code:** ez-prep-api only. ezprep-app and mock-app-admin were not changed.
+
+**Tests:** API Jest 191 suites / 1526 tests pass. Commerce e2e 6 suites / 13 tests pass. `tsc -p tsconfig.build.json --noEmit` pass. ESLint on the phase files pass. Admin Vitest and the app typecheck were not run (out of scope).
+
+**What shipped:**
+- `COMMERCE_ENABLED` is the exact string `true`. Checkout, verify, my orders, my invoices, and the Razorpay webhook return 404 `COMMERCE_DISABLED` otherwise. Catalog stays up with `commerceEnabled` on the response envelope.
+- Production boot refuses to start when commerce is on and the provider, live key, secrets, instance id, instance name, invoices, reconciliation, or access mode is wrong. The error names the key.
+- `fake` is not registered in production. A blank `PAYMENT_PROVIDER` no longer falls back to fake.
+- Checkout sells the frozen `product_versions` row. Catalog matching and the grants payload use `publishedGrants`.
+- An entitlement is active only after `startsAt`. Payment rows store `durationPreset`. Revoking a payment row re-anchors later stacks. A lifetime repurchase returns 409 `ALREADY_COVERED`.
+- Trust proxy hops, per-user checkout throttles, and the open-order cap are in place.
+
+**Structural spec edits (engineering rule 6a):**
+- Payment gateway registry spec now expects a blank provider to throw. It injects `CommerceConfigService` instead of reading `ConfigService` per call.
+- Active-entitlement fixtures that expect true now pass an explicit `startsAt`. The assertions are unchanged.
+- Scheduler specs pass commerce settings and set `COMMERCE_ENABLED=true` on the enabled case so the new gate still starts the timer.
+- Checkout, access, entitlements, users, catalog, and controller specs gained providers for the new constructor arguments. Assertions were not rewritten except the blank-provider case above.
+
+**Developer ops (manual) — confirm each:**
+- [x] Local `.env` has `COMMERCE_ENABLED=true` and `TRUST_PROXY_HOPS=0`. Without the first, local checkout returns 404.
+- [x] `GO_LIVE_GUIDE.md` Step 13 key names match what shipped (`COMMERCE_ENABLED`, `TRUST_PROXY_HOPS`, `MAX_OPEN_ORDERS_PER_USER`). Droplet env is still a go-live step, not this phase.
+- [x] One-off `NODE_ENV=production` boot with a bad env fails with a message naming the key, then the env is restored.
+- [x] A published grant edit without republish leaves catalog and checkout on the previous grants.
+- [x] Refunding the earlier of two stacked purchases moves the later window earlier.
+- [x] A lifetime grant blocks buying that same scope again.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above and this phase may be marked done.  
+Date: 2026-10-10
+
+**DoD:** met  
+**Deviations:** the app still shows a generic pay error for a commerce 404. The "not available" string is only for a missing offer until phase 14D.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 14E

@@ -17,17 +17,19 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { CommerceEnabledGuard } from '../commerce/commerce-enabled.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CheckoutService } from './checkout.service';
 import { CreateCheckoutOrderDto } from './dto/create-checkout-order.dto';
 import { CheckoutOrderApiResponseDto } from './dto/checkout-order-response.dto';
+import { CheckoutThrottlerGuard } from './checkout-throttler.guard';
 import { VerifyCheckoutPaymentDto } from './dto/verify-checkout-payment.dto';
 
 @ApiTags('checkout')
 @Controller('checkout/orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(CommerceEnabledGuard, JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT token' })
 export class CheckoutController {
@@ -35,6 +37,7 @@ export class CheckoutController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
+  @UseGuards(CheckoutThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({
     summary: 'Create a checkout order',
@@ -53,6 +56,7 @@ export class CheckoutController {
 
   @Post(':id/verify')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(CheckoutThrottlerGuard)
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({
     summary: 'Verify a checkout payment',
