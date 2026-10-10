@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 14B **pending** — phase 14E closed 2026-10-10. Ad-hoc order continues 14B → 14C → 14D, before phase 15 |
+| Current phase | 14C **pending** — phase 14B closed 2026-10-11. Ad-hoc order continues 14C → 14D, before phase 15 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -79,7 +79,7 @@ Date: YYYY-MM-DD
 | 14 | Checkout + subscriptions | **done** | 2026-10-10 | Sharun — local Razorpay purchase, refund, invoice, and subscriptions smoke |
 | 14A | Fail-closed config + catalog integrity (ad-hoc) | **done** | 2026-10-10 | Sharun — production boot guard, frozen grants, re-anchor, and lifetime block verified locally |
 | 14E | GST, seller identity, per-instance commerce (ad-hoc) | **done** | 2026-10-10 | Sharun — local seed applied (`Kerala`); PDF and ExamFlex invoice smoke stay phase 16 |
-| 14B | Payment state integrity (ad-hoc) | pending | | PR-02, 03, 04, 10, 17, 33, 37; D-22, D-28 |
+| 14B | Payment state integrity (ad-hoc) | **done** | 2026-10-11 | Sharun — local indexes, Razorpay notes, automatic capture, late pay, second method, and double-click |
 | 14C | Webhook, refund, repair robustness (ad-hoc) | pending | | PR-02 watch, 05, 06, 08, 09, 13, 14, 19, 21, 22, 33, 34, 37, 38; D-22, D-25, D-28 |
 | 14D | Checkout client + admin ops (ad-hoc) | pending | | PR-08 action, 11, 16 UI, 17 client, 19 page, 24, 28, 39 |
 | 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
@@ -800,3 +800,33 @@ Date: 2026-10-10
 **Deviations:** health does not list the mismatch yet; 14C §10 now names `INVOICE_SELLER_STATE_MISMATCH`. A missing `sellerStateCode` does not block issue. PDF and ExamFlex invoice proof are phase 16, not a gate on this phase.  
 **GOLIVE_TODOS touched:** none. Production seed stays `U-OPS-01` (`GO_LIVE_GUIDE.md` Step 15A).  
 **Next:** phase 14B
+
+### 2026-10-10 — Phase 14B — Payment state integrity
+
+**Code:** `ez-prep-api` branch `payment-gateway`. No app or admin changes.  
+**Tests:** API Jest 195 suites / 1573 tests passed. Commerce e2e 6 suites / 13 tests passed. `tsc -p tsconfig.build.json --noEmit` passed. ESLint on the touched files passed after formatting.
+
+Compare-and-set now writes every order, payment, and refund status change. The paid handler, revoke, re-anchor, and audit run only for the winner. A second paid signal does not provision when `provisionedAt` is unset (that sweep is 14C). Checkout claims `providerOpenClaimAt` for 30 seconds so one replay opens one Razorpay order. New orders store `requestHash`. Razorpay verify fetches the payment and requires a matching capture. `authorized` after three reads returns HTTP 200 with `confirmation: 'PENDING_CAPTURE'`. Late `EXPIRED` / `FAILED` → `PAID` requires proof. A Razorpay reconciliation failure expires the order. A second captured payment id on a paid or refunded order inserts one `DUPLICATE` row. Refunds claim and settle through the helper. `kind` defaults to `ORDER`. The unique refund index is `{ paymentId }`.
+
+**Fixture changes (intentional, same change set):**
+- Specs that construct `OrdersService` now provide `CommerceAuditService`. In-memory order, payment, and refund models implement `findOneAndUpdate` (and checkout `updateOne`) so compare-and-set mutates the same documents.
+- `mark-order-paid-provision.spec.ts` no longer expects a later `PAID` call to run `provisionForPaidOrder`.
+- `order-transitions.spec.ts` allows `EXPIRED` / `FAILED` → `PAID`. The illegal case is now `CANCELLED` → `PAID`.
+- Razorpay `createOrder` expectations include `notes`. Checkout verify expects `markOrderPaid` to receive `VERIFY_FETCH` proof.
+- The commerce harness stub's `fetchPayment` returns a matching captured payment so existing verify-to-paid flows stay paid.
+- A same-key checkout replay with different billing is `409 IDEMPOTENCY_KEY_REUSED`. A replay with the same billing, and a legacy order with no hash, still returns the original order.
+
+**Developer ops (manual) — confirm each:**
+- [x] Boot the API against local Mongo and confirm `payments.orderId_1_role_primary` (partial, `role = PRIMARY`) and `refunds.paymentId_1` (unique). Boot must not crash if either index cannot be built. Confirmed by Sharun 2026-10-11.
+- [x] Create a test-mode Razorpay order and confirm `notes.orderId` and `notes.instanceId`. Confirmed by Sharun 2026-10-11.
+- [x] In the Razorpay test dashboard, set the same capture settings production will use: automatic capture, and late authorizations captured. Confirmed by Sharun 2026-10-11.
+- [x] Late pay after the 30-minute window unlocks access and shows the late-capture marker. Fail one method, then pay with another: one paid order. Double-click Buy: one Razorpay order. Confirmed by Sharun 2026-10-11.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above and this phase may be marked done.  
+Date: 2026-10-11
+
+**DoD:** met  
+**Deviations:** Pending capture is HTTP 200 with `confirmation: 'PENDING_CAPTURE'`, matching the behavior table. The task list's "202 path" was not implemented. Webhook retry, notes lookup, and other-instance ignore stay in 14C. The capture path passes `proof: WEBHOOK` only. A crash between the order write and provisioning is still repaired in 14C, not by a multi-document transaction.  
+**GOLIVE_TODOS touched:** none  
+**Next:** phase 14C

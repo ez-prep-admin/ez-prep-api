@@ -137,6 +137,12 @@ export class RazorpayWebhookService {
     try {
       await this.ordersService.markOrderPaid(this.ordersService.idOf(order), {
         providerPaymentId: event.providerPaymentId,
+        proof: {
+          source: 'WEBHOOK',
+          providerPaymentId: event.providerPaymentId,
+          amount: event.amount ?? order.amount,
+          currency: event.currency ?? 'INR',
+        },
       });
       return { status: WebhookEventStatus.PROCESSED, retry: false };
     } catch {

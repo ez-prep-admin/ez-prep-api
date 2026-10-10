@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
@@ -14,6 +15,7 @@ import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { ReconciliationService } from './reconciliation.service';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
+import { memoryFindOneAndUpdate } from './testing/memory-documents';
 
 describe('ReconciliationService', () => {
   const orders: Array<Record<string, any>> = [];
@@ -28,8 +30,12 @@ describe('ReconciliationService', () => {
   const config = {
     get: (key: string) => configValues[key],
   };
-  const orderModel = { find: jest.fn(), findById: jest.fn() };
-  const paymentModel = { findOne: jest.fn() };
+  const orderModel = {
+    find: jest.fn(),
+    findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
+  const paymentModel = { findOne: jest.fn(), findOneAndUpdate: jest.fn() };
 
   let fake: FakeGateway;
   let service: ReconciliationService;
@@ -72,6 +78,12 @@ describe('ReconciliationService', () => {
           ) ?? null,
       }),
     );
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -89,6 +101,10 @@ describe('ReconciliationService', () => {
           useValue: { settings: { paymentProvider: 'fake', nodeEnv: 'test' } },
         },
         PaymentGatewayRegistry,
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -116,6 +132,7 @@ describe('ReconciliationService', () => {
     };
     orders.push(order);
     payments.push({
+      _id: new Types.ObjectId(),
       orderId: _id,
       status: PaymentStatus.INITIATED,
       save: jest.fn(async function save(this: Record<string, unknown>) {
@@ -201,6 +218,28 @@ describe('ReconciliationService', () => {
     expect(summary.skipped).toBe(1);
     expect(order.status).toBe(OrderStatus.PENDING_PAYMENT);
     expect(paidHandler.onOrderPaid).not.toHaveBeenCalled();
+  });
+
+  it('expires a Razorpay order when one attempt failed', async () => {
+    const order = seed();
+    order.paymentProvider = 'razorpay';
+    razorpay.fetchOrderStatus.mockResolvedValue({
+      providerEventId: 'recon:1',
+      eventType: 'order.fetch',
+      providerOrderId: order.providerOrderId,
+      status: 'FAILED',
+      amount: order.amount,
+      currency: 'INR',
+    });
+
+    const summary = await service.reconcileOnce(
+      new Date('2026-01-01T00:00:00.000Z'),
+    );
+
+    expect(summary.expired).toBe(1);
+    expect(order.status).toBe(OrderStatus.EXPIRED);
+    expect(order.expiredAt).toBeInstanceOf(Date);
+    expect(payments[0].status).toBe(PaymentStatus.INITIATED);
   });
 
   it('skips an order when the provider status call fails', async () => {

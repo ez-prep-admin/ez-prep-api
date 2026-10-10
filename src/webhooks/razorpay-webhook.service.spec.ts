@@ -12,6 +12,7 @@ import { join } from 'path';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { WebhookEventStatus } from '../common/enums/webhook-event-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { ORDER_PAID_HANDLER } from '../orders/domain/order-paid-handler';
 import { OrdersService } from '../orders/orders.service';
@@ -25,6 +26,7 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { RefundsService } from '../refunds/refunds.service';
 import { RazorpayWebhookService } from './razorpay-webhook.service';
 import { WebhookEvent } from './schemas/webhook-event.schema';
+import { memoryFindOneAndUpdate } from '../orders/testing/memory-documents';
 
 const WEBHOOK_SECRET = 'test_webhook_secret';
 
@@ -42,6 +44,11 @@ function matches(
   row: Record<string, unknown>,
   filter: Record<string, unknown>,
 ): boolean {
+  if ('role' in filter && row.role == null && filter.role !== undefined) {
+    const rest = { ...filter };
+    delete rest.role;
+    return matches(row, rest);
+  }
   return Object.entries(filter).every(
     ([key, value]) => String(row[key]) === String(value),
   );
@@ -58,8 +65,16 @@ describe('RazorpayWebhookService', () => {
     settleFailed: jest.fn(),
   };
 
-  const orderModel = { findOne: jest.fn(), findById: jest.fn() };
-  const paymentModel = { findOne: jest.fn(), create: jest.fn() };
+  const orderModel = {
+    findOne: jest.fn(),
+    findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
+  const paymentModel = {
+    findOne: jest.fn(),
+    create: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  };
   const webhookModel = { create: jest.fn(), findOne: jest.fn() };
 
   let service: RazorpayWebhookService;
@@ -92,6 +107,19 @@ describe('RazorpayWebhookService', () => {
         exec: async () =>
           payments.find(payment => matches(payment, filter)) ?? null,
       }),
+    );
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
+    paymentModel.create.mockImplementation(
+      async (doc: Record<string, unknown>) => {
+        const row = { ...doc, _id: new Types.ObjectId() };
+        payments.push(row);
+        return row;
+      },
     );
     webhookModel.create.mockImplementation(
       async (doc: Record<string, unknown>) => {
@@ -155,6 +183,10 @@ describe('RazorpayWebhookService', () => {
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
         { provide: EntitlementProvisioningService, useValue: provisioning },
         { provide: RefundsService, useValue: refunds },
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -179,6 +211,7 @@ describe('RazorpayWebhookService', () => {
     };
     orders.push(order);
     payments.push({
+      _id: new Types.ObjectId(),
       orderId: _id,
       status: PaymentStatus.INITIATED,
       save: jest.fn(async function save(this: Record<string, unknown>) {

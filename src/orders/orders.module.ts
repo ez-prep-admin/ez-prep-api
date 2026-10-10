@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { CommerceAuditModule } from '../commerce-audit/commerce-audit.module';
 import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { OffersModule } from '../offers/offers.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -20,6 +21,7 @@ import { Order, OrderSchema } from './schemas/order.schema';
   imports: [
     MongooseModule.forFeature([{ name: Order.name, schema: OrderSchema }]),
     PaymentsModule,
+    CommerceAuditModule,
     OffersModule,
     ProductsModule,
     TaxModule,

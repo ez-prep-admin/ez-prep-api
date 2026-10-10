@@ -1,6 +1,8 @@
+import { PaymentRole } from './domain/payment-role.enum';
 import { PaymentSchema } from './schemas/payment.schema';
 import {
   legacyProviderPaymentIndexNames,
+  PRIMARY_PAYMENT_INDEX,
   PROVIDER_PAYMENT_INDEX,
 } from './payment-index.repair';
 
@@ -18,6 +20,18 @@ describe('payment providerPaymentId index', () => {
       },
     });
     expect(index?.[1]).not.toHaveProperty('sparse');
+  });
+
+  it('keeps one PRIMARY payment per order', () => {
+    const index = PaymentSchema.indexes().find(
+      ([, options]) => options.name === PRIMARY_PAYMENT_INDEX,
+    );
+
+    expect(index?.[0]).toEqual({ orderId: 1 });
+    expect(index?.[1]).toMatchObject({
+      unique: true,
+      partialFilterExpression: { role: PaymentRole.PRIMARY },
+    });
   });
 
   it('drops sparse indexes on the same keys and keeps the partial one', () => {

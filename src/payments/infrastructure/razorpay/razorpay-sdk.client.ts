@@ -1,4 +1,9 @@
-import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import Razorpay from 'razorpay';
 import {
   RazorpayCreatedOrder,
@@ -32,6 +37,7 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
         amount: input.amount,
         currency: input.currency,
         receipt: input.receipt,
+        ...(input.notes ? { notes: input.notes } : {}),
       });
       const amount =
         typeof order.amount === 'number' ? order.amount : Number(order.amount);
@@ -115,6 +121,7 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
         amount: integerAmount(order.amount),
         currency: order.currency,
         status: order.status,
+        notes: stringNotes(order.notes),
       };
     } catch (error) {
       if (error instanceof BadGatewayException) {
@@ -135,6 +142,7 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
         amount: integerAmount(payment.amount),
         currency: payment.currency,
         status: payment.status,
+        orderId: payment.order_id,
       }));
     } catch (error) {
       if (error instanceof BadGatewayException) {
@@ -142,6 +150,32 @@ export class RazorpaySdkOrdersClient implements RazorpayOrdersClient {
       }
       this.logger.warn(
         `Razorpay order payments fetch failed (status ${statusCodeOf(error)})`,
+      );
+      throw new BadGatewayException('Payment provider request failed');
+    }
+  }
+
+  async fetchPayment(paymentId: string): Promise<RazorpayFetchedPayment> {
+    const id = paymentId.trim();
+    if (!id) {
+      throw new BadRequestException('Missing provider payment id');
+    }
+    try {
+      const payment = await this.sdk().payments.fetch(id);
+      return {
+        id: payment.id,
+        amount: integerAmount(payment.amount),
+        currency: payment.currency,
+        status: payment.status,
+        orderId: payment.order_id,
+        notes: stringNotes(payment.notes),
+      };
+    } catch (error) {
+      if (error instanceof BadGatewayException) {
+        throw error;
+      }
+      this.logger.warn(
+        `Razorpay payment fetch failed (status ${statusCodeOf(error)})`,
       );
       throw new BadGatewayException('Payment provider request failed');
     }
@@ -208,6 +242,17 @@ export function refundFailureMessage(
 
 function integerAmount(value: number | string): number {
   return typeof value === 'number' ? value : Number(value);
+}
+
+function stringNotes(notes: unknown): Record<string, string> | undefined {
+  if (!notes || typeof notes !== 'object' || Array.isArray(notes)) {
+    return undefined;
+  }
+  const entries = Object.entries(notes as Record<string, unknown>).flatMap(
+    ([key, value]) =>
+      typeof value === 'string' ? [[key, value] as const] : [],
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function statusCodeOf(error: unknown): string {

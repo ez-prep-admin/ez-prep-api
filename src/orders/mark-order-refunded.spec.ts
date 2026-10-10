@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
@@ -8,12 +9,13 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
+import { memoryFindOneAndUpdate } from './testing/memory-documents';
 
 describe('OrdersService markOrderRefunded', () => {
   const orders: Array<Record<string, any>> = [];
   const payments: Array<Record<string, any>> = [];
-  const orderModel = { findById: jest.fn() };
-  const paymentModel = { findOne: jest.fn() };
+  const orderModel = { findById: jest.fn(), findOneAndUpdate: jest.fn() };
+  const paymentModel = { findOne: jest.fn(), findOneAndUpdate: jest.fn() };
   let service: OrdersService;
 
   beforeEach(async () => {
@@ -33,6 +35,12 @@ describe('OrdersService markOrderRefunded', () => {
           ) ?? null,
       }),
     );
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +51,10 @@ describe('OrdersService markOrderRefunded', () => {
         {
           provide: EntitlementProvisioningService,
           useValue: { provisionForPaidOrder: jest.fn() },
+        },
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
@@ -62,6 +74,7 @@ describe('OrdersService markOrderRefunded', () => {
     };
     orders.push(order);
     const payment = {
+      _id: new Types.ObjectId(),
       orderId: _id,
       status: PaymentStatus.CAPTURED,
       save: jest.fn(async function save(this: Record<string, unknown>) {

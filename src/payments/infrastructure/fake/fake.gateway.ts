@@ -3,6 +3,7 @@ import { MIN_ORDER_AMOUNT_PAISE } from '../../../common/commerce/checkout.consta
 import {
   ClientProviderDataInput,
   CreatePaymentOrderInput,
+  FetchedProviderPayment,
   NormalizedPaymentEvent,
   PaymentGateway,
   PaymentVerificationResult,
@@ -103,6 +104,18 @@ export class FakeGateway implements PaymentGateway {
     _input: ProviderWebhookInput,
   ): Promise<NormalizedPaymentEvent> {
     throw new Error('FakeGateway webhooks are not implemented (phase 08)');
+  }
+
+  async fetchPayment(
+    providerPaymentId: string,
+  ): Promise<FetchedProviderPayment> {
+    const id = providerPaymentId.trim();
+    return {
+      providerPaymentId: id,
+      status: id ? 'captured' : 'failed',
+      amount: 0,
+      currency: 'INR',
+    };
   }
 
   async fetchOrderStatus(

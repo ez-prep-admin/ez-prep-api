@@ -33,6 +33,10 @@ export class CheckoutOrderDataDto {
 
   @ApiPropertyOptional()
   paidAt?: Date;
+
+  /** Set when Razorpay has authorized the payment but not captured it yet. */
+  @ApiPropertyOptional({ enum: ['PENDING_CAPTURE'] })
+  confirmation?: 'PENDING_CAPTURE';
 }
 
 export class CheckoutOrderApiResponseDto {

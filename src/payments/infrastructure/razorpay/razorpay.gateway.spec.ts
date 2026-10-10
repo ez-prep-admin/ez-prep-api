@@ -40,6 +40,7 @@ describe('RazorpayGateway', () => {
     refundPayment: jest.fn(),
     fetchOrder: jest.fn(),
     fetchPayments: jest.fn(),
+    fetchPayment: jest.fn(),
     fetchRefund: jest.fn(),
   };
   const gateway = new RazorpayGateway(config(), orders);
@@ -49,7 +50,15 @@ describe('RazorpayGateway', () => {
     orders.refundPayment.mockReset();
     orders.fetchOrder.mockReset();
     orders.fetchPayments.mockReset();
+    orders.fetchPayment.mockReset();
     orders.fetchRefund.mockReset();
+    orders.fetchPayment.mockResolvedValue({
+      id: 'pay_1',
+      orderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'captured',
+    });
   });
 
   it('creates an order with the server amount in paise', async () => {
@@ -70,6 +79,12 @@ describe('RazorpayGateway', () => {
       amount: 99900,
       currency: 'INR',
       receipt: 'ORD-1',
+      notes: {
+        instanceId: '',
+        orderId: 'abc',
+        orderNumber: 'ORD-1',
+        userId: '',
+      },
     });
     expect(created).toMatchObject({
       providerOrderId: 'order_1',
@@ -162,6 +177,193 @@ describe('RazorpayGateway', () => {
         },
       }),
     ).resolves.toEqual({
+      verified: true,
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_1',
+    });
+  });
+
+  it('sends instance and order notes when creating a Razorpay order', async () => {
+    orders.createOrder.mockResolvedValue({
+      id: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+    });
+
+    await gateway.createOrder({
+      orderId: 'abc',
+      amount: 99900,
+      currency: 'INR',
+      receipt: 'ORD-1',
+      instanceId: 'ezprep',
+      userId: 'user_1',
+    });
+
+    expect(orders.createOrder).toHaveBeenCalledWith({
+      amount: 99900,
+      currency: 'INR',
+      receipt: 'ORD-1',
+      notes: {
+        instanceId: 'ezprep',
+        orderId: 'abc',
+        orderNumber: 'ORD-1',
+        userId: 'user_1',
+      },
+    });
+  });
+
+  it('accepts a payment that is captured on the second fetch', async () => {
+    orders.fetchPayment
+      .mockResolvedValueOnce({
+        id: 'pay_1',
+        orderId: 'order_1',
+        amount: 99900,
+        currency: 'INR',
+        status: 'authorized',
+      })
+      .mockResolvedValueOnce({
+        id: 'pay_1',
+        orderId: 'order_1',
+        amount: 99900,
+        currency: 'INR',
+        status: 'captured',
+      });
+
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_1', 'pay_1'),
+      },
+    });
+
+    expect(result).toEqual({
+      verified: true,
+      status: 'CAPTURED',
+      providerPaymentId: 'pay_1',
+    });
+    expect(orders.fetchPayment).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns pending capture when the payment stays authorized', async () => {
+    orders.fetchPayment.mockResolvedValue({
+      id: 'pay_1',
+      orderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      status: 'authorized',
+    });
+
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_1', 'pay_1'),
+      },
+    });
+
+    expect(result).toEqual({
+      verified: true,
+      status: 'PENDING_CAPTURE',
+      providerPaymentId: 'pay_1',
+    });
+    expect(orders.fetchPayment).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects a captured payment whose amount does not match', async () => {
+    orders.fetchPayment.mockResolvedValue({
+      id: 'pay_1',
+      orderId: 'order_1',
+      amount: 1,
+      currency: 'INR',
+      status: 'captured',
+    });
+
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_1', 'pay_1'),
+      },
+    });
+
+    expect(result.verified).toBe(false);
+    expect(result.status).toBe('FAILED');
+  });
+
+  it('rejects a captured payment for a different order', async () => {
+    orders.fetchPayment.mockResolvedValue({
+      id: 'pay_1',
+      orderId: 'order_other',
+      amount: 99900,
+      currency: 'INR',
+      status: 'captured',
+    });
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_other',
+      amount: 99900,
+      currency: 'INR',
+      status: 'paid',
+      notes: { orderId: 'someone-else' },
+    });
+
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_1', 'pay_1'),
+      },
+    });
+
+    expect(result.verified).toBe(false);
+    expect(result.status).toBe('FAILED');
+  });
+
+  it('accepts an orphan capture whose Razorpay order notes match this order', async () => {
+    orders.fetchPayment.mockResolvedValue({
+      id: 'pay_1',
+      orderId: 'order_orphan',
+      amount: 99900,
+      currency: 'INR',
+      status: 'captured',
+    });
+    orders.fetchOrder.mockResolvedValue({
+      id: 'order_orphan',
+      amount: 99900,
+      currency: 'INR',
+      status: 'paid',
+      notes: { orderId: 'abc' },
+    });
+
+    const result = await gateway.verifyPayment({
+      orderId: 'abc',
+      providerOrderId: 'order_1',
+      amount: 99900,
+      currency: 'INR',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: paymentSignature('order_1', 'pay_1'),
+      },
+    });
+
+    expect(result).toEqual({
       verified: true,
       status: 'CAPTURED',
       providerPaymentId: 'pay_1',

@@ -3,6 +3,8 @@ export interface CreatePaymentOrderInput {
   amount: number;
   currency: 'INR';
   receipt: string;
+  userId?: string;
+  instanceId?: string;
 }
 
 export interface ProviderOrder {
@@ -22,9 +24,18 @@ export interface VerifyPaymentInput {
 
 export interface PaymentVerificationResult {
   verified: boolean;
-  status: 'CAPTURED' | 'FAILED';
+  status: 'CAPTURED' | 'FAILED' | 'PENDING_CAPTURE';
   providerPaymentId?: string;
   failureReason?: string;
+}
+
+export interface FetchedProviderPayment {
+  providerPaymentId: string;
+  providerOrderId?: string;
+  status: string;
+  amount: number;
+  currency: string;
+  notesOrderId?: string;
 }
 
 export interface ProviderWebhookInput {
@@ -76,5 +87,6 @@ export interface PaymentGateway {
   /** Public checkout fields for GET and idempotent replay. Never includes secrets. */
   clientProviderData(input: ClientProviderDataInput): Record<string, unknown>;
   fetchOrderStatus(providerOrderId: string): Promise<NormalizedPaymentEvent>;
+  fetchPayment(providerPaymentId: string): Promise<FetchedProviderPayment>;
   fetchRefundStatus(providerRefundId: string): Promise<ProviderRefund>;
 }

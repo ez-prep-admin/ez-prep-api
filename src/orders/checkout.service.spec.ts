@@ -13,6 +13,7 @@ import { OfferStatus } from '../common/enums/offer-status.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { ProductStatus } from '../common/enums/product-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { CoverageService } from '../entitlements/coverage.service';
 import { ProductVersion } from '../products/schemas/product-version.schema';
@@ -27,6 +28,10 @@ import { CheckoutService } from './checkout.service';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
+import {
+  memoryFindOneAndUpdate,
+  memoryUpdateOne,
+} from './testing/memory-documents';
 
 describe('CheckoutService', () => {
   const userId = new Types.ObjectId().toHexString();
@@ -44,10 +49,13 @@ describe('CheckoutService', () => {
     findById: jest.fn(),
     create: jest.fn(),
     countDocuments: jest.fn().mockReturnValue({ exec: async () => 0 }),
+    findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
   };
   const paymentModel = {
     findOne: jest.fn(),
     create: jest.fn(),
+    findOneAndUpdate: jest.fn(),
   };
   const offerModel = { findById: jest.fn() };
   const productVersionModel = {
@@ -177,6 +185,15 @@ describe('CheckoutService', () => {
           ) ?? null,
       }),
     );
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    orderModel.updateOne.mockImplementation((filter, update) => ({
+      exec: async () => memoryUpdateOne(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
 
     offerModel.findById.mockImplementation((id: string) => ({
       exec: async () => (String(id) === String(offerId) ? offer : null),
@@ -221,6 +238,10 @@ describe('CheckoutService', () => {
           provide: CoverageService,
           useValue: { isCoveredForLife: jest.fn().mockResolvedValue(false) },
         },
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -262,6 +283,7 @@ describe('CheckoutService', () => {
     expect(orders[0].orderNumber).toMatch(/^ORD-/);
     expect(payments).toHaveLength(1);
     expect(payments[0].status).toBe(PaymentStatus.INITIATED);
+    expect(payments[0].role).toBe('PRIMARY');
     expect(payments[0].amount).toBe(79900);
     expect(taxService.calculateForCheckout).toHaveBeenCalledWith(79900, '32');
   });
@@ -274,7 +296,7 @@ describe('CheckoutService', () => {
     });
     const second = await service.createOrder(userId, {
       offerId: offerId.toHexString(),
-      billing: billing('27'),
+      billing: billing(),
       idempotencyKey: 'key-1',
     });
 
@@ -282,6 +304,44 @@ describe('CheckoutService', () => {
     expect(orderModel.create).toHaveBeenCalledTimes(1);
     expect(payments).toHaveLength(1);
     expect(second.billing.stateCode).toBe('32');
+  });
+
+  it('rejects a replay whose checkout request does not match the stored hash', async () => {
+    await service.createOrder(userId, {
+      offerId: offerId.toHexString(),
+      billing: billing(),
+      idempotencyKey: 'key-1',
+    });
+
+    await expect(
+      service.createOrder(userId, {
+        offerId: offerId.toHexString(),
+        billing: billing('27'),
+        idempotencyKey: 'key-1',
+      }),
+    ).rejects.toMatchObject({
+      response: { details: { code: 'IDEMPOTENCY_KEY_REUSED' } },
+    });
+    expect(orderModel.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('replays a legacy order that has no request hash', async () => {
+    const first = await service.createOrder(userId, {
+      offerId: offerId.toHexString(),
+      billing: billing(),
+      idempotencyKey: 'key-1',
+    });
+    delete orders[0].requestHash;
+
+    const second = await service.createOrder(userId, {
+      offerId: offerId.toHexString(),
+      billing: billing('27'),
+      idempotencyKey: 'key-1',
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(second.billing.stateCode).toBe('32');
+    expect(orderModel.create).toHaveBeenCalledTimes(1);
   });
 
   it('does not reveal an order when another user replays the key', async () => {

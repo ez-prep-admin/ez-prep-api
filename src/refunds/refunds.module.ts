@@ -9,6 +9,7 @@ import { PaymentsModule } from '../payments/payments.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { AdminOrdersController } from './admin-orders.controller';
 import { RefundReconciliationScheduler } from './refund-reconciliation.scheduler';
+import { RefundIndexRepair } from './refund-index.repair';
 import { RefundsService } from './refunds.service';
 import { Refund, RefundSchema } from './schemas/refund.schema';
 
@@ -26,7 +27,7 @@ import { Refund, RefundSchema } from './schemas/refund.schema';
     CommerceAuditModule,
   ],
   controllers: [AdminOrdersController],
-  providers: [RefundsService, RefundReconciliationScheduler],
+  providers: [RefundsService, RefundReconciliationScheduler, RefundIndexRepair],
   exports: [RefundsService],
 })
 export class RefundsModule {}

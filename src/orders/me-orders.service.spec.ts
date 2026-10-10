@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { Payment } from '../payments/schemas/payment.schema';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
@@ -43,6 +44,10 @@ describe('OrdersService user history', () => {
         { provide: getModelToken(Payment.name), useValue: {} },
         { provide: ORDER_PAID_HANDLER, useValue: {} },
         { provide: EntitlementProvisioningService, useValue: {} },
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn() },
+        },
       ],
     }).compile();
     service = module.get(OrdersService);

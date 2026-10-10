@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { RefundStatus } from '../../common/enums/refund-status.enum';
+import { RefundKind } from '../domain/refund-kind.enum';
 
 export type RefundDocument = Refund & Document;
 
@@ -15,6 +16,15 @@ export class Refund {
 
   @Prop({ type: Types.ObjectId, ref: 'Payment', required: true })
   paymentId: Types.ObjectId;
+
+  /** ORDER refunds the purchase. DUPLICATE_CAPTURE is reserved for phase 14C. */
+  @Prop({
+    type: String,
+    enum: Object.values(RefundKind),
+    required: true,
+    default: RefundKind.ORDER,
+  })
+  kind: RefundKind;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
@@ -48,7 +58,8 @@ export class Refund {
 
 export const RefundSchema = SchemaFactory.createForClass(Refund);
 
-RefundSchema.index({ orderId: 1 }, { unique: true });
+RefundSchema.index({ orderId: 1 });
+RefundSchema.index({ paymentId: 1 }, { unique: true, name: 'paymentId_1' });
 
 RefundSchema.virtual('id').get(function () {
   return this._id.toHexString();

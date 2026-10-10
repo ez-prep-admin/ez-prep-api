@@ -6,12 +6,18 @@ export const HARNESS_KEY_SECRET = 'harness_key_secret';
 export function createRazorpayStub(): RazorpayOrdersClient & {
   refundPayment: jest.Mock;
 } {
+  let lastOrderId = '';
+  let lastAmount = 0;
   return {
-    createOrder: jest.fn(async input => ({
-      id: `order_${input.receipt}`,
-      amount: input.amount,
-      currency: 'INR',
-    })),
+    createOrder: jest.fn(async input => {
+      lastOrderId = `order_${input.receipt}`;
+      lastAmount = input.amount;
+      return {
+        id: lastOrderId,
+        amount: input.amount,
+        currency: 'INR',
+      };
+    }),
     refundPayment: jest.fn(async input => ({
       id: `rfnd_pending_${input.paymentId}`,
       amount: input.amount,
@@ -20,6 +26,13 @@ export function createRazorpayStub(): RazorpayOrdersClient & {
     })),
     fetchOrder: jest.fn(),
     fetchPayments: jest.fn(async () => []),
+    fetchPayment: jest.fn(async (paymentId: string) => ({
+      id: paymentId,
+      orderId: lastOrderId,
+      amount: lastAmount,
+      currency: 'INR',
+      status: 'captured',
+    })),
     fetchRefund: jest.fn(async id => ({
       id,
       amount: 99900,

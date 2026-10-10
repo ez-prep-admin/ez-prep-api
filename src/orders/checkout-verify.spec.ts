@@ -155,6 +155,12 @@ describe('CheckoutService razorpay verify', () => {
 
     expect(ordersService.markOrderPaid).toHaveBeenCalledWith('order1', {
       providerPaymentId: 'pay_1',
+      proof: {
+        source: 'VERIFY_FETCH',
+        providerPaymentId: 'pay_1',
+        amount: 79900,
+        currency: 'INR',
+      },
     });
     expect(paid.status).toBe(OrderStatus.PAID);
     expect(paid.providerData).toEqual({

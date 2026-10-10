@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { PaymentStatus } from '../../common/enums/payment-status.enum';
+import { PaymentRole } from '../domain/payment-role.enum';
 
 export type PaymentDocument = Payment & Document;
 
@@ -54,6 +55,14 @@ export class Payment {
   @Prop({ type: Date })
   capturedAt?: Date;
 
+  /** Absent on rows created before phase 14B. Boot repair sets those to PRIMARY. */
+  @Prop({
+    type: String,
+    enum: Object.values(PaymentRole),
+    default: PaymentRole.PRIMARY,
+  })
+  role?: PaymentRole;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -61,6 +70,14 @@ export class Payment {
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 
 PaymentSchema.index({ orderId: 1 });
+PaymentSchema.index(
+  { orderId: 1 },
+  {
+    unique: true,
+    name: 'orderId_1_role_primary',
+    partialFilterExpression: { role: PaymentRole.PRIMARY },
+  },
+);
 PaymentSchema.index(
   { provider: 1, providerPaymentId: 1 },
   {

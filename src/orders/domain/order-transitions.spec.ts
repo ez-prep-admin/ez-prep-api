@@ -19,12 +19,21 @@ describe('order transitions', () => {
       assertOrderTransition(OrderStatus.CREATED, OrderStatus.PAID),
     ).toThrow(IllegalOrderTransitionError);
     expect(() =>
-      assertOrderTransition(OrderStatus.EXPIRED, OrderStatus.PAID),
+      assertOrderTransition(OrderStatus.CANCELLED, OrderStatus.PAID),
     ).toThrow(IllegalOrderTransitionError);
   });
 
   it('allows PAID to REFUNDED', () => {
     expect(assertOrderTransition(OrderStatus.PAID, OrderStatus.REFUNDED)).toBe(
+      'apply',
+    );
+  });
+
+  it('allows a late capture from EXPIRED or FAILED', () => {
+    expect(assertOrderTransition(OrderStatus.EXPIRED, OrderStatus.PAID)).toBe(
+      'apply',
+    );
+    expect(assertOrderTransition(OrderStatus.FAILED, OrderStatus.PAID)).toBe(
       'apply',
     );
   });

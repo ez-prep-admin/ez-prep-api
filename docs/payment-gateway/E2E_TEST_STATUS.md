@@ -445,3 +445,11 @@ Do not check these until phase 16. One intra-state purchase and one inter-state 
 - [ ] An invoice PDF already stored in S3 still downloads unchanged.
 - [ ] `INSTANCE_ID=examflex` does not apply `ezprep.json`. With no `examflex.json`, the seed fails and names the missing file. A dry run writes nothing.
 
+## Phase 14B manual checks
+
+Confirmed by Sharun on 2026-10-11, with Razorpay test keys.
+
+- [x] With test keys, let the order pass its 30-minute window with the modal open, then pay. Access unlocks and admin shows the late-capture marker.
+- [x] Fail one method in the modal, then succeed with another: one paid order.
+- [x] Double-click Buy: one Razorpay order in the dashboard, with `notes.orderId`.
+

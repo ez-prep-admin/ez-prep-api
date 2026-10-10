@@ -16,11 +16,18 @@ const ALLOWED: Record<OrderStatus, OrderStatus[]> = {
     OrderStatus.CANCELLED,
   ],
   [OrderStatus.PAID]: [OrderStatus.REFUNDED],
-  [OrderStatus.FAILED]: [],
-  [OrderStatus.EXPIRED]: [],
+  [OrderStatus.FAILED]: [OrderStatus.PAID],
+  [OrderStatus.EXPIRED]: [OrderStatus.PAID],
   [OrderStatus.CANCELLED]: [],
   [OrderStatus.REFUNDED]: [],
 };
+
+/** Sources for PAID. Late edges are included only when the caller has provider proof. */
+export function paidOrderSources(proof: boolean): OrderStatus[] {
+  return proof
+    ? [OrderStatus.PENDING_PAYMENT, OrderStatus.EXPIRED, OrderStatus.FAILED]
+    : [OrderStatus.PENDING_PAYMENT];
+}
 
 /** Repeated PAID is a no-op. Every other illegal move throws. */
 export function assertOrderTransition(

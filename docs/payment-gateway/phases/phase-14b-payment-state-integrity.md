@@ -177,10 +177,10 @@ Revert the phase. New fields are additive. The partial unique index and the refu
 
 ## Completion checklist
 
-- [ ] `STATUS.md` updated with ops + **developer confirmation**
-- [ ] `state-machines.md` and `domain-model.md` updated
-- [ ] Indexes verified on local Mongo after boot
-- [ ] Tests green; regression gate run and logged
+- [x] `STATUS.md` updated with ops + **developer confirmation** (Sharun, 2026-10-11)
+- [x] `state-machines.md` and `domain-model.md` already described this phase; no rewrite
+- [x] Indexes verified on local Mongo after boot
+- [x] Tests green; regression gate run and logged
 
 ## STATUS.md update (mandatory)
 

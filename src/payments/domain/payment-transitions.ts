@@ -15,9 +15,16 @@ const ALLOWED: Record<PaymentStatus, PaymentStatus[]> = {
   ],
   [PaymentStatus.AUTHORIZED]: [PaymentStatus.CAPTURED, PaymentStatus.FAILED],
   [PaymentStatus.CAPTURED]: [PaymentStatus.REFUNDED],
-  [PaymentStatus.FAILED]: [],
+  [PaymentStatus.FAILED]: [PaymentStatus.CAPTURED],
   [PaymentStatus.REFUNDED]: [],
 };
+
+/** Sources for CAPTURED. FAILED is included only when the caller has provider proof. */
+export function capturedPaymentSources(proof: boolean): PaymentStatus[] {
+  return proof
+    ? [PaymentStatus.INITIATED, PaymentStatus.AUTHORIZED, PaymentStatus.FAILED]
+    : [PaymentStatus.INITIATED, PaymentStatus.AUTHORIZED];
+}
 
 /** Repeated CAPTURED is a no-op. Every other illegal move throws. */
 export function assertPaymentTransition(

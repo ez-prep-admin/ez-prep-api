@@ -31,8 +31,12 @@ import { TaxService } from '../tax/tax.service';
 import { CheckoutBillingDto } from './dto/create-checkout-order.dto';
 import { CheckoutOrderDataDto } from './dto/checkout-order-response.dto';
 import { duplicateField } from './domain/duplicate-key';
+import { checkoutRequestHash } from './domain/request-hash';
 import { OrdersService } from './orders.service';
 import { OrderBillingSnapshot, OrderDocument } from './schemas/order.schema';
+
+const PROVIDER_OPEN_WAIT_MS = 3_000;
+const PROVIDER_OPEN_POLL_MS = 250;
 
 @Injectable()
 export class CheckoutService {
@@ -58,11 +62,12 @@ export class CheckoutService {
     },
   ): Promise<CheckoutOrderDataDto> {
     const billing = this.toBilling(dto.billing);
+    const requestHash = checkoutRequestHash(dto.offerId, billing);
     const existing = await this.ordersService.findByIdempotencyKey(
       dto.idempotencyKey,
     );
     if (existing) {
-      return this.replay(existing, userId);
+      return this.replay(existing, userId, requestHash);
     }
 
     const priced = await this.priceOffer(dto.offerId);
@@ -106,6 +111,7 @@ export class CheckoutService {
         billing,
         paymentProvider: gateway.provider,
         idempotencyKey: dto.idempotencyKey,
+        requestHash,
         expiresAt: new Date(Date.now() + ORDER_PAYMENT_WINDOW_MS),
       });
     } catch (error) {
@@ -116,7 +122,7 @@ export class CheckoutService {
         if (!raced) {
           throw error;
         }
-        return this.replay(raced, userId);
+        return this.replay(raced, userId, requestHash);
       }
       throw error;
     }
@@ -148,7 +154,16 @@ export class CheckoutService {
         'Payment provider does not match this order',
       );
     }
-    if (order.status === OrderStatus.PAID) {
+    if (
+      order.status === OrderStatus.PAID &&
+      order.paymentProvider !== 'razorpay'
+    ) {
+      return this.toView(order);
+    }
+    if (
+      order.status === OrderStatus.REFUNDED &&
+      order.paymentProvider !== 'razorpay'
+    ) {
       return this.toView(order);
     }
     if (order.paymentProvider === 'razorpay') {
@@ -170,6 +185,13 @@ export class CheckoutService {
       providerPayload,
     });
 
+    if (result.status === 'PENDING_CAPTURE') {
+      return {
+        ...this.toView(order),
+        confirmation: 'PENDING_CAPTURE',
+      };
+    }
+
     if (
       !result.verified ||
       result.status !== 'CAPTURED' ||
@@ -180,9 +202,18 @@ export class CheckoutService {
       );
     }
 
+    const proof =
+      order.paymentProvider === 'razorpay'
+        ? {
+            source: 'VERIFY_FETCH' as const,
+            providerPaymentId: result.providerPaymentId,
+            amount: order.amount,
+            currency: order.currency,
+          }
+        : undefined;
     const paid = await this.ordersService.markOrderPaid(
       this.ordersService.idOf(order),
-      { providerPaymentId: result.providerPaymentId },
+      { providerPaymentId: result.providerPaymentId, proof },
     );
     return this.toView(paid);
   }
@@ -190,9 +221,17 @@ export class CheckoutService {
   private async replay(
     order: OrderDocument,
     userId: string,
+    requestHash: string,
   ): Promise<CheckoutOrderDataDto> {
     if (String(order.userId) !== userId) {
       throw new ConflictException('This idempotencyKey is already in use');
+    }
+    if (order.requestHash && order.requestHash !== requestHash) {
+      throw new ConflictException({
+        message:
+          'This idempotencyKey was already used for a different checkout',
+        details: { code: 'IDEMPOTENCY_KEY_REUSED' },
+      });
     }
     if (order.status === OrderStatus.CREATED) {
       return this.openProviderOrder(order);
@@ -210,19 +249,64 @@ export class CheckoutService {
       throw new BadRequestException('Only INR orders can be paid');
     }
 
-    const gateway = this.registry.get(order.paymentProvider);
-    const providerOrder = await gateway.createOrder({
-      orderId: this.ordersService.idOf(order),
-      amount: order.amount,
-      currency: 'INR',
-      receipt: order.orderNumber,
-    });
-    const pending = await this.ordersService.markPendingPayment(order, {
+    const claimed = await this.ordersService.claimProviderOpen(order);
+    if (!claimed) {
+      const opened = await this.waitForOpenedOrder(
+        this.ordersService.idOf(order),
+      );
+      if (
+        opened &&
+        opened.status !== OrderStatus.CREATED &&
+        opened.providerOrderId
+      ) {
+        return this.toView(opened);
+      }
+      throw new ConflictException({
+        message: 'Checkout is already opening a payment',
+        details: { code: 'CHECKOUT_IN_PROGRESS' },
+      });
+    }
+
+    const gateway = this.registry.get(claimed.paymentProvider);
+    let providerOrder: Awaited<ReturnType<typeof gateway.createOrder>>;
+    try {
+      providerOrder = await gateway.createOrder({
+        orderId: this.ordersService.idOf(claimed),
+        amount: claimed.amount,
+        currency: 'INR',
+        receipt: claimed.orderNumber,
+        userId: String(claimed.userId),
+        instanceId: this.commerceConfig.settings.instanceId,
+      });
+    } catch (error) {
+      await this.ordersService.releaseProviderOpenClaim(claimed);
+      throw error;
+    }
+    const pending = await this.ordersService.markPendingPayment(claimed, {
       provider: gateway.provider,
       providerOrderId: providerOrder.providerOrderId,
     });
     await this.ordersService.ensureInitiatedPayment(pending);
     return this.toView(pending, providerOrder.providerData);
+  }
+
+  private async waitForOpenedOrder(
+    orderId: string,
+  ): Promise<OrderDocument | null> {
+    const deadline = Date.now() + PROVIDER_OPEN_WAIT_MS;
+    let current = await this.ordersService.findById(orderId);
+    while (Date.now() < deadline) {
+      if (
+        current &&
+        current.status !== OrderStatus.CREATED &&
+        current.providerOrderId
+      ) {
+        return current;
+      }
+      await sleep(PROVIDER_OPEN_POLL_MS);
+      current = await this.ordersService.findById(orderId);
+    }
+    return current;
   }
 
   private async requireOwned(
@@ -373,4 +457,10 @@ export class CheckoutService {
       currency: order.currency,
     });
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
 }

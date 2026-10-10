@@ -172,8 +172,24 @@ export class Order {
   @Prop({ required: true, trim: true })
   idempotencyKey: string;
 
+  /** sha256 of offer id and billing. Absent on orders created before phase 14B. */
+  @Prop({ trim: true })
+  requestHash?: string;
+
   @Prop({ type: Date })
   expiresAt?: Date;
+
+  /** Set when reconciliation moves the order to EXPIRED. */
+  @Prop({ type: Date })
+  expiredAt?: Date;
+
+  /** Set when a provider-proven capture pays an expired or failed order. */
+  @Prop({ type: Date })
+  lateCaptureAt?: Date;
+
+  /** Short claim so only one request opens the provider order. */
+  @Prop({ type: Date })
+  providerOpenClaimAt?: Date;
 
   @Prop({ type: Date })
   paidAt?: Date;

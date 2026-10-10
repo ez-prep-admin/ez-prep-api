@@ -16,11 +16,13 @@ import { RefundStatus } from '../common/enums/refund-status.enum';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { InvoiceService } from '../invoices/invoice.service';
 import { OrdersService } from '../orders/orders.service';
+import { compareAndSet } from '../orders/domain/compare-and-set';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
 import { ProviderRefund } from '../payments/domain/payment-gateway';
 import { PaymentGatewayRegistry } from '../payments/domain/payment-gateway.registry';
 import { Payment, PaymentDocument } from '../payments/schemas/payment.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
+import { RefundKind } from './domain/refund-kind.enum';
 import { Refund, RefundDocument } from './schemas/refund.schema';
 
 export const REFUND_COMPLETED_MESSAGE = 'Order refunded';
@@ -214,9 +216,11 @@ export class RefundsService {
       throw new ConflictException('Only paid orders can be refunded');
     }
 
-    const payment = await this.paymentModel
-      .findOne({ orderId: order._id })
-      .exec();
+    const payment =
+      (await this.paymentModel
+        .findOne({ orderId: order._id, role: 'PRIMARY' })
+        .exec()) ??
+      (await this.paymentModel.findOne({ orderId: order._id }).exec());
     if (!payment || payment.status !== PaymentStatus.CAPTURED) {
       throw new ConflictException('Only captured payments can be refunded');
     }
@@ -268,8 +272,13 @@ export class RefundsService {
         currency: 'INR',
       });
     } catch (error) {
-      refund.status = RefundStatus.FAILED;
-      await refund.save();
+      await compareAndSet(
+        this.refundModel,
+        refund._id,
+        [RefundStatus.INITIATED],
+        RefundStatus.FAILED,
+        {},
+      );
       if (error instanceof HttpException) {
         throw error;
       }
@@ -282,8 +291,13 @@ export class RefundsService {
       (providerStatus !== 'pending' && providerStatus !== 'processed')
     ) {
       refund.providerRefundId = providerRefund.providerRefundId;
-      refund.status = RefundStatus.FAILED;
-      await refund.save();
+      await compareAndSet(
+        this.refundModel,
+        refund._id,
+        [RefundStatus.INITIATED],
+        RefundStatus.FAILED,
+        { providerRefundId: providerRefund.providerRefundId },
+      );
       throw new BadGatewayException('Payment provider request failed');
     }
 
@@ -346,13 +360,31 @@ export class RefundsService {
     if (!order) {
       return 'missing';
     }
-    if (order.status === OrderStatus.REFUNDED) {
-      refund.status = RefundStatus.COMPLETED;
-      await refund.save();
-      return 'already';
-    }
     if (amount !== refund.amount || currency !== 'INR') {
       return 'mismatch';
+    }
+    if (order.status === OrderStatus.REFUNDED) {
+      await compareAndSet(
+        this.refundModel,
+        refund._id,
+        [RefundStatus.INITIATED],
+        RefundStatus.COMPLETED,
+        {},
+      );
+      return 'already';
+    }
+
+    const claimed = await compareAndSet(
+      this.refundModel,
+      refund._id,
+      [RefundStatus.INITIATED],
+      RefundStatus.COMPLETED,
+      {},
+    );
+    if (!claimed.won) {
+      return claimed.doc?.status === RefundStatus.COMPLETED
+        ? 'already'
+        : 'missing';
     }
 
     const actorUserId = String(refund.initiatedBy);
@@ -362,9 +394,6 @@ export class RefundsService {
       refund.reason,
     );
     await this.ordersService.markOrderRefunded(this.idOf(order));
-
-    refund.status = RefundStatus.COMPLETED;
-    await refund.save();
 
     await this.commerceAuditService.log({
       actorUserId,
@@ -398,8 +427,16 @@ export class RefundsService {
       return 'left';
     }
 
-    refund.status = RefundStatus.FAILED;
-    await refund.save();
+    const failed = await compareAndSet(
+      this.refundModel,
+      refund._id,
+      [RefundStatus.INITIATED],
+      RefundStatus.FAILED,
+      {},
+    );
+    if (!failed.won) {
+      return 'left';
+    }
     await this.commerceAuditService.log({
       actorUserId: String(refund.initiatedBy),
       action: 'REFUND_FAILED',
@@ -514,37 +551,64 @@ export class RefundsService {
     reason: string,
   ): Promise<RefundDocument> {
     const existing = await this.refundModel
-      .findOne({ orderId: order._id })
+      .findOne({ paymentId: payment._id, kind: RefundKind.ORDER })
       .exec();
     if (existing?.status === RefundStatus.COMPLETED) {
       throw new ConflictException('Order is already refunded');
     }
     if (existing?.status === RefundStatus.INITIATED) {
-      throw new ConflictException('Refund already in progress');
+      throw new ConflictException({
+        message: 'Refund already in progress',
+        details: { code: 'REFUND_IN_PROGRESS' },
+      });
     }
 
     if (existing) {
-      existing.status = RefundStatus.INITIATED;
-      existing.reason = reason;
-      existing.initiatedBy = new Types.ObjectId(actorUserId);
-      existing.amount = payment.amount;
-      existing.provider = order.paymentProvider ?? payment.provider;
-      existing.paymentId = payment._id;
-      existing.providerRefundId = undefined;
-      await existing.save();
-      return existing;
+      const claimed = await compareAndSet(
+        this.refundModel,
+        existing._id,
+        [RefundStatus.FAILED],
+        RefundStatus.INITIATED,
+        {
+          reason,
+          initiatedBy: new Types.ObjectId(actorUserId),
+          amount: payment.amount,
+          provider: order.paymentProvider ?? payment.provider,
+          paymentId: payment._id,
+        },
+      );
+      if (!claimed.won || !claimed.doc) {
+        throw new ConflictException({
+          message: 'Refund already in progress',
+          details: { code: 'REFUND_IN_PROGRESS' },
+        });
+      }
+      claimed.doc.providerRefundId = undefined;
+      await claimed.doc.save();
+      return claimed.doc;
     }
 
-    return this.refundModel.create({
-      orderId: order._id,
-      paymentId: payment._id,
-      userId: order.userId,
-      provider: order.paymentProvider ?? payment.provider,
-      amount: payment.amount,
-      status: RefundStatus.INITIATED,
-      reason,
-      initiatedBy: new Types.ObjectId(actorUserId),
-    });
+    try {
+      return await this.refundModel.create({
+        orderId: order._id,
+        paymentId: payment._id,
+        kind: RefundKind.ORDER,
+        userId: order.userId,
+        provider: order.paymentProvider ?? payment.provider,
+        amount: payment.amount,
+        status: RefundStatus.INITIATED,
+        reason,
+        initiatedBy: new Types.ObjectId(actorUserId),
+      });
+    } catch (error) {
+      if (isDuplicateKey(error)) {
+        throw new ConflictException({
+          message: 'Refund already in progress',
+          details: { code: 'REFUND_IN_PROGRESS' },
+        });
+      }
+      throw error;
+    }
   }
 
   private async requireOrder(orderId: string): Promise<OrderDocument> {
@@ -670,4 +734,13 @@ function isOrderStatus(value: string): value is OrderStatus {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: number }).code === 11000
+  );
 }

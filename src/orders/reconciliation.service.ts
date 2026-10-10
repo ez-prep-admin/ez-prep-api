@@ -105,8 +105,19 @@ export class ReconciliationService {
       }
       await this.ordersService.markOrderPaid(orderId, {
         providerPaymentId: event.providerPaymentId,
+        proof: {
+          source: 'RECON_FETCH',
+          providerPaymentId: event.providerPaymentId,
+          amount: event.amount,
+          currency: event.currency,
+        },
       });
       return 'paid';
+    }
+
+    if (event.status === 'FAILED' && provider === 'razorpay') {
+      const expired = await this.ordersService.markOrderExpired(orderId);
+      return expired.status === OrderStatus.EXPIRED ? 'expired' : 'skipped';
     }
 
     if (event.status === 'FAILED') {

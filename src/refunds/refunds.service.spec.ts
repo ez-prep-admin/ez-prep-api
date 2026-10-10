@@ -22,6 +22,7 @@ import {
   RefundsService,
 } from './refunds.service';
 import { Refund } from './schemas/refund.schema';
+import { memoryFindOneAndUpdate } from '../orders/testing/memory-documents';
 
 type Row = Record<string, any>;
 
@@ -44,12 +45,14 @@ describe('RefundsService', () => {
     findById: jest.fn(),
     find: jest.fn(),
     countDocuments: jest.fn(),
+    findOneAndUpdate: jest.fn(),
   };
-  const paymentModel = { findOne: jest.fn() };
+  const paymentModel = { findOne: jest.fn(), findOneAndUpdate: jest.fn() };
   const refundModel = {
     findOne: jest.fn(),
     find: jest.fn(),
     create: jest.fn(),
+    findOneAndUpdate: jest.fn(),
   };
   const userModel = { find: jest.fn() };
 
@@ -150,6 +153,15 @@ describe('RefundsService', () => {
       refunds.push(row);
       return row;
     });
+    refundModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(refunds, filter, update),
+    }));
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

@@ -10,6 +10,7 @@ import { MIN_ORDER_AMOUNT_PAISE } from '../../../common/commerce/checkout.consta
 import {
   ClientProviderDataInput,
   CreatePaymentOrderInput,
+  FetchedProviderPayment,
   NormalizedPaymentEvent,
   PaymentGateway,
   PaymentVerificationResult,
@@ -22,6 +23,7 @@ import {
 import { normalizeRazorpayEvent } from './normalize-razorpay-event';
 import {
   RAZORPAY_ORDERS_CLIENT,
+  RazorpayFetchedPayment,
   RazorpayOrdersClient,
 } from './razorpay-orders.client';
 import {
@@ -68,6 +70,12 @@ export class RazorpayGateway implements PaymentGateway {
         amount: input.amount,
         currency: 'INR',
         receipt,
+        notes: {
+          instanceId: input.instanceId?.trim() ?? '',
+          orderId: input.orderId,
+          orderNumber: receipt,
+          userId: input.userId?.trim() ?? '',
+        },
       });
     } catch (error) {
       if (
@@ -142,10 +150,52 @@ export class RazorpayGateway implements PaymentGateway {
       };
     }
 
+    const fetched = await this.readCapturedPayment(paymentId);
+    if (fetched.status === 'authorized') {
+      return {
+        verified: true,
+        status: 'PENDING_CAPTURE',
+        providerPaymentId: paymentId,
+      };
+    }
+    if (fetched.status !== 'captured') {
+      return {
+        verified: false,
+        status: 'FAILED',
+        failureReason: 'Payment was not captured',
+      };
+    }
+    if (
+      fetched.amount !== input.amount ||
+      fetched.currency !== input.currency
+    ) {
+      return {
+        verified: false,
+        status: 'FAILED',
+        failureReason: 'Payment does not match this order',
+      };
+    }
+
+    const orderMatches =
+      Boolean(input.providerOrderId) &&
+      fetched.orderId === input.providerOrderId;
+    if (!orderMatches) {
+      const orphanOrderId = fetched.orderId
+        ? (await this.orders.fetchOrder(fetched.orderId)).notes?.orderId
+        : fetched.notes?.orderId;
+      if (orphanOrderId !== input.orderId) {
+        return {
+          verified: false,
+          status: 'FAILED',
+          failureReason: 'Payment does not match this order',
+        };
+      }
+    }
+
     return {
       verified: true,
       status: 'CAPTURED',
-      providerPaymentId: paymentId,
+      providerPaymentId: fetched.id || paymentId,
     };
   }
 
@@ -302,6 +352,20 @@ export class RazorpayGateway implements PaymentGateway {
     };
   }
 
+  async fetchPayment(
+    providerPaymentId: string,
+  ): Promise<FetchedProviderPayment> {
+    const payment = await this.orders.fetchPayment(providerPaymentId);
+    return {
+      providerPaymentId: payment.id,
+      providerOrderId: payment.orderId,
+      status: payment.status,
+      amount: payment.amount,
+      currency: payment.currency,
+      notesOrderId: payment.notes?.orderId,
+    };
+  }
+
   async fetchRefundStatus(providerRefundId: string): Promise<ProviderRefund> {
     const id = providerRefundId.trim();
     if (!id) {
@@ -354,6 +418,19 @@ export class RazorpayGateway implements PaymentGateway {
   private secret(name: string): string {
     return this.configService.get<string>(name)?.trim() ?? '';
   }
+
+  private async readCapturedPayment(
+    paymentId: string,
+  ): Promise<RazorpayFetchedPayment> {
+    let fetched = await this.orders.fetchPayment(paymentId);
+    let reads = 1;
+    while (fetched.status === 'authorized' && reads < 3) {
+      await sleep(1000);
+      fetched = await this.orders.fetchPayment(paymentId);
+      reads += 1;
+    }
+    return fetched;
+  }
 }
 
 function payloadString(
@@ -376,4 +453,10 @@ function statusCodeOf(error: unknown): string {
     }
   }
   return 'unknown';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => {
+    setTimeout(resolve, ms);
+  });
 }

@@ -4,6 +4,7 @@ export interface RazorpayOrderCreateInput {
   amount: number;
   currency: 'INR';
   receipt: string;
+  notes?: Record<string, string>;
 }
 
 export interface RazorpayCreatedOrder {
@@ -29,6 +30,7 @@ export interface RazorpayFetchedOrder {
   amount: number;
   currency: string;
   status: string;
+  notes?: Record<string, string>;
 }
 
 export interface RazorpayFetchedPayment {
@@ -36,6 +38,8 @@ export interface RazorpayFetchedPayment {
   amount: number;
   currency: string;
   status: string;
+  orderId?: string;
+  notes?: Record<string, string>;
 }
 
 export interface RazorpayOrdersClient {
@@ -43,5 +47,6 @@ export interface RazorpayOrdersClient {
   refundPayment(input: RazorpayRefundInput): Promise<RazorpayRefundResult>;
   fetchOrder(orderId: string): Promise<RazorpayFetchedOrder>;
   fetchPayments(orderId: string): Promise<RazorpayFetchedPayment[]>;
+  fetchPayment(paymentId: string): Promise<RazorpayFetchedPayment>;
   fetchRefund(refundId: string): Promise<RazorpayRefundResult>;
 }

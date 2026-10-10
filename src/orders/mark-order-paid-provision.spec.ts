@@ -1,6 +1,7 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
+import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { EntitlementProvisioningService } from '../entitlements/entitlement-provisioning.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
@@ -8,14 +9,26 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { ORDER_PAID_HANDLER } from './domain/order-paid-handler';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
+import {
+  memoryFindOneAndUpdate,
+  memoryUpdateOne,
+} from './testing/memory-documents';
 
 describe('OrdersService markOrderPaid provisioning', () => {
   const orders: Array<Record<string, any>> = [];
   const payments: Array<Record<string, any>> = [];
   const paidHandler = { onOrderPaid: jest.fn() };
   const provisioning = { provisionForPaidOrder: jest.fn() };
-  const orderModel = { findById: jest.fn() };
-  const paymentModel = { findOne: jest.fn() };
+  const orderModel = {
+    findById: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn(),
+  };
+  const paymentModel = {
+    findOne: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    create: jest.fn(),
+  };
 
   let service: OrdersService;
 
@@ -41,6 +54,22 @@ describe('OrdersService markOrderPaid provisioning', () => {
           ) ?? null,
       }),
     );
+    orderModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(orders, filter, update),
+    }));
+    orderModel.updateOne.mockImplementation((filter, update) => ({
+      exec: async () => memoryUpdateOne(orders, filter, update),
+    }));
+    paymentModel.findOneAndUpdate.mockImplementation((filter, update) => ({
+      exec: async () => memoryFindOneAndUpdate(payments, filter, update),
+    }));
+    paymentModel.create.mockImplementation(
+      async (doc: Record<string, unknown>) => {
+        const row = { ...doc, _id: new Types.ObjectId() };
+        payments.push(row);
+        return row;
+      },
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -49,6 +78,10 @@ describe('OrdersService markOrderPaid provisioning', () => {
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
         { provide: EntitlementProvisioningService, useValue: provisioning },
+        {
+          provide: CommerceAuditService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -96,15 +129,14 @@ describe('OrdersService markOrderPaid provisioning', () => {
     expect(provisioning.provisionForPaidOrder).not.toHaveBeenCalled();
   });
 
-  it('repairs an unprovisioned paid order without calling the handler again', async () => {
+  it('does not provision again when a later paid signal finds provisionedAt unset', async () => {
     const order = seed();
     await service.markOrderPaid(order.id, { providerPaymentId: 'pay_1' });
 
     await service.markOrderPaid(order.id, { providerPaymentId: 'pay_1' });
 
     expect(paidHandler.onOrderPaid).toHaveBeenCalledTimes(1);
-    expect(provisioning.provisionForPaidOrder).toHaveBeenCalledTimes(1);
-    expect(provisioning.provisionForPaidOrder).toHaveBeenCalledWith(order.id);
+    expect(provisioning.provisionForPaidOrder).not.toHaveBeenCalled();
   });
 
   it('skips repair when provisionedAt is already set', async () => {
