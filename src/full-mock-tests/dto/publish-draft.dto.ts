@@ -44,13 +44,23 @@ export class PublishDraftDto {
 
   @ApiPropertyOptional({
     description:
-      'Shuffle options within each subject block at attempt time. Does not reorder subjects.',
+      'Shuffle options within each subject block at attempt time. Does not reorder subjects or questions.',
     default: false,
     example: false,
   })
   @IsOptional()
   @IsBoolean()
   shuffleOptions?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Mixed papers only. When true, publish groups questions into contiguous blocks in exam subject order (all of the first subject, then the next). When false or omitted, the shuffled draft order is kept. Session-wise papers always stay in exam subject order; this flag does not change them.',
+    default: false,
+    example: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  keepSubjectOrder?: boolean;
 
   @ApiPropertyOptional({
     description:

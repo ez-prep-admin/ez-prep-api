@@ -455,13 +455,15 @@ export class FullMockTestsService {
     userId: string,
   ): Promise<{ mockTestId: string; draft: DraftResponseDto }> {
     const snapshot = draft.examSnapshot;
-    // Session-wise: force contiguous blocks in exam subject/session order.
-    // Mixed: keep the draft's whole-pack shuffle (do not regroup by subject).
-    const ordered = snapshot.isSessionWise
-      ? this.groupQuestionsBySubjectOrder(draft.questions, snapshot.subjects)
-      : draft.questions.map((q, position) =>
-          this.cloneDraftQuestion(q, position),
-        );
+    // Session-wise always stays in exam subject/session order.
+    // Mixed stays in the shuffled draft order unless keepSubjectOrder is set,
+    // in which case subjects become contiguous blocks in exam order.
+    const ordered =
+      snapshot.isSessionWise || dto.keepSubjectOrder
+        ? this.groupQuestionsBySubjectOrder(draft.questions, snapshot.subjects)
+        : draft.questions.map((q, position) =>
+            this.cloneDraftQuestion(q, position),
+          );
     this.assertNoDuplicateQuestions(ordered);
     if (
       snapshot.totalQuestions != null &&
