@@ -885,6 +885,292 @@ describe('FullMockTestsService', () => {
       expect(payload.isSessionWise).toBe(false);
     });
 
+    it('should keep mixed draft order when keepSubjectOrder is false', async () => {
+      const sub2 = '507f1f77bcf86cd799439019';
+      const draft = makeDraft({
+        examSnapshot: {
+          name: 'NTPC',
+          description: 'd',
+          duration: 90,
+          totalQuestions: 3,
+          isSessionWise: false,
+          subjects: [
+            {
+              subject: new Types.ObjectId(SUB_ID),
+              name: 'Maths',
+              numberOfQuestions: 1,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+            {
+              subject: new Types.ObjectId(sub2),
+              name: 'Reasoning',
+              numberOfQuestions: 2,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+          ],
+        },
+        questions: [
+          {
+            question: new Types.ObjectId(Q2),
+            subject: new Types.ObjectId(sub2),
+            difficultyLevel: 'easy',
+            position: 0,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(Q1),
+            subject: new Types.ObjectId(SUB_ID),
+            difficultyLevel: 'easy',
+            position: 1,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId('507f1f77bcf86cd799439031'),
+            subject: new Types.ObjectId(sub2),
+            difficultyLevel: 'medium',
+            position: 2,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+        ],
+      });
+      draftModel.findOneAndUpdate.mockResolvedValue(draft);
+      questionModel.find.mockReturnValue(
+        chainable([
+          questionLean(Q1),
+          questionLean(Q2),
+          questionLean('507f1f77bcf86cd799439031'),
+        ]),
+      );
+      mockTestModel.create.mockResolvedValue({
+        id: TEST_ID,
+        _id: new Types.ObjectId(TEST_ID),
+      });
+      questionModel.updateMany.mockResolvedValue({});
+
+      await service.publishDraft(
+        DRAFT_ID,
+        { keepSubjectOrder: false },
+        USER_ID,
+      );
+
+      const payload = mockTestModel.create.mock.calls[0][0];
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([Q2, Q1, '507f1f77bcf86cd799439031']);
+    });
+
+    it('should group a mixed paper into exam subject blocks when keepSubjectOrder is true', async () => {
+      const reasoningId = '507f1f77bcf86cd799439019';
+      const gaId = '507f1f77bcf86cd79943901a';
+      const mathA = Q1;
+      const mathB = '507f1f77bcf86cd799439032';
+      const reasonA = Q2;
+      const reasonB = '507f1f77bcf86cd799439033';
+      const gaA = '507f1f77bcf86cd799439034';
+      const draft = makeDraft({
+        examSnapshot: {
+          name: 'NTPC CBT 1',
+          description: 'd',
+          duration: 90,
+          totalQuestions: 5,
+          isSessionWise: false,
+          subjects: [
+            {
+              subject: new Types.ObjectId(SUB_ID),
+              name: 'Maths',
+              numberOfQuestions: 2,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+            {
+              subject: new Types.ObjectId(reasoningId),
+              name: 'Reasoning',
+              numberOfQuestions: 2,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+            {
+              subject: new Types.ObjectId(gaId),
+              name: 'General Awareness',
+              numberOfQuestions: 1,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+            },
+          ],
+        },
+        questions: [
+          {
+            question: new Types.ObjectId(gaA),
+            subject: new Types.ObjectId(gaId),
+            difficultyLevel: 'easy',
+            position: 0,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(mathB),
+            subject: new Types.ObjectId(SUB_ID),
+            difficultyLevel: 'hard',
+            position: 1,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(reasonA),
+            subject: new Types.ObjectId(reasoningId),
+            difficultyLevel: 'medium',
+            position: 2,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(mathA),
+            subject: new Types.ObjectId(SUB_ID),
+            difficultyLevel: 'easy',
+            position: 3,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(reasonB),
+            subject: new Types.ObjectId(reasoningId),
+            difficultyLevel: 'easy',
+            position: 4,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+        ],
+      });
+      draftModel.findOneAndUpdate.mockResolvedValue(draft);
+      questionModel.find.mockReturnValue(
+        chainable([
+          questionLean(mathA),
+          questionLean(mathB),
+          questionLean(reasonA),
+          questionLean(reasonB),
+          questionLean(gaA),
+        ]),
+      );
+      mockTestModel.create.mockResolvedValue({
+        id: TEST_ID,
+        _id: new Types.ObjectId(TEST_ID),
+      });
+      questionModel.updateMany.mockResolvedValue({});
+
+      await service.publishDraft(DRAFT_ID, { keepSubjectOrder: true }, USER_ID);
+
+      const payload = mockTestModel.create.mock.calls[0][0];
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([mathB, mathA, reasonA, reasonB, gaA]);
+      expect(payload.subjectConfig).toEqual([
+        expect.objectContaining({
+          name: 'Maths',
+          questionStartIndex: 0,
+          questionEndIndex: 1,
+        }),
+        expect.objectContaining({
+          name: 'Reasoning',
+          questionStartIndex: 2,
+          questionEndIndex: 3,
+        }),
+        expect.objectContaining({
+          name: 'General Awareness',
+          questionStartIndex: 4,
+          questionEndIndex: 4,
+        }),
+      ]);
+      expect(
+        payload.subjectConfig[0].questionIds.map((id: Types.ObjectId) =>
+          id.toString(),
+        ),
+      ).toEqual([mathB, mathA]);
+      expect(payload.isSessionWise).toBe(false);
+    });
+
+    it('should still regroup session-wise papers when keepSubjectOrder is false', async () => {
+      const sub2 = '507f1f77bcf86cd799439019';
+      const draft = makeDraft({
+        examSnapshot: {
+          name: 'CGL',
+          description: 'd',
+          duration: 60,
+          totalQuestions: 2,
+          totalMarks: 3,
+          isSessionWise: true,
+          subjects: [
+            {
+              subject: new Types.ObjectId(SUB_ID),
+              name: 'GS',
+              numberOfQuestions: 1,
+              marksPerQuestion: 2,
+              hasNegativeMarking: true,
+              negativeMarksPerQuestion: 0.5,
+              sessionTime: 15,
+            },
+            {
+              subject: new Types.ObjectId(sub2),
+              name: 'Math',
+              numberOfQuestions: 1,
+              marksPerQuestion: 1,
+              hasNegativeMarking: false,
+              negativeMarksPerQuestion: 0,
+              sessionTime: 15,
+            },
+          ],
+        },
+        questions: [
+          {
+            question: new Types.ObjectId(Q2),
+            subject: new Types.ObjectId(sub2),
+            difficultyLevel: 'easy',
+            position: 0,
+            marksPerQuestion: 1,
+            negativeMarking: 0,
+          },
+          {
+            question: new Types.ObjectId(Q1),
+            subject: new Types.ObjectId(SUB_ID),
+            difficultyLevel: 'easy',
+            position: 1,
+            marksPerQuestion: 2,
+            negativeMarking: 0.5,
+          },
+        ],
+      });
+      draftModel.findOneAndUpdate.mockResolvedValue(draft);
+      questionModel.find.mockReturnValue(
+        chainable([questionLean(Q1), questionLean(Q2)]),
+      );
+      mockTestModel.create.mockResolvedValue({
+        id: TEST_ID,
+        _id: new Types.ObjectId(TEST_ID),
+      });
+      questionModel.updateMany.mockResolvedValue({});
+
+      await service.publishDraft(
+        DRAFT_ID,
+        { keepSubjectOrder: false },
+        USER_ID,
+      );
+
+      const payload = mockTestModel.create.mock.calls[0][0];
+      expect(
+        payload.questionIds.map((id: Types.ObjectId) => id.toString()),
+      ).toEqual([Q1, Q2]);
+      expect(payload.isSessionWise).toBe(true);
+    });
+
     it('should keep question ids when grouping mongoose-like subdocuments', async () => {
       const asSubdoc = (plain: Record<string, unknown>) => {
         const doc: Record<string, unknown> = {};

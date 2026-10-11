@@ -407,7 +407,8 @@ Writes the paper into \`mocktests\` with \`paperType: FULL_EXAM\`, then incremen
 \`fullMockUsageCount\` / \`lastUsedInFullMockAt\` on every question.
 
 Session-wise: questions are regrouped into contiguous subject blocks in exam
-subject/session order. Mixed: draft order is kept (whole-pack shuffle).
+subject/session order. Mixed: draft order is kept (whole-pack shuffle) unless
+\`keepSubjectOrder\` is true, which groups mixed papers the same way.
 Each \`subjectConfig\` row stores \`questionIds\` plus start/end indexes.
 
 Students then see it on \`GET /full-mock-tests\` and take it with \`POST /mock-test-attempts/start\`.
