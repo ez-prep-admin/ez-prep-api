@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { CommerceAuditLog } from '../commerce-audit/schemas/commerce-audit-log.schema';
+import { legacyWhileSellingWarning } from '../commerce/commerce-config';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { RefundStatus } from '../common/enums/refund-status.enum';
@@ -76,6 +77,7 @@ export type CommerceHealthReport = {
   };
   sellerStateMismatches: HealthSlice;
   indexWarnings: string[];
+  enforcementWarnings: string[];
 };
 
 @Injectable()
@@ -121,6 +123,8 @@ export class CommerceHealthService {
   private async compute(now: Date): Promise<CommerceHealthReport> {
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
     const settings = this.commerceConfig.settings;
+    const legacyWarning = legacyWhileSellingWarning(settings);
+    const enforcementWarnings = legacyWarning ? [legacyWarning] : [];
     const [
       pendingPastWindow,
       needsReview,
@@ -196,6 +200,7 @@ export class CommerceHealthService {
     ]);
 
     const degraded =
+      enforcementWarnings.length > 0 ||
       indexWarnings.length > 0 ||
       webhook.webhookSilentWhilePaid ||
       webhook.signatureRejections1h > SIGNATURE_REJECTION_DEGRADED_THRESHOLD ||
@@ -241,6 +246,7 @@ export class CommerceHealthService {
       webhook,
       sellerStateMismatches,
       indexWarnings,
+      enforcementWarnings,
     };
   }
 

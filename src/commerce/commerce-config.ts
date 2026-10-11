@@ -77,6 +77,25 @@ export function parseCommerceSettings(env: EnvSource): CommerceSettings {
   };
 }
 
+export const LEGACY_WHILE_SELLING_WARNING =
+  'ACCESS_ENFORCEMENT_MODE=LEGACY while commerce is enabled in production. Paid papers stay open until this is ENFORCED.';
+
+export function legacyWhileSellingWarning(
+  settings: Pick<
+    CommerceSettings,
+    'nodeEnv' | 'commerceEnabled' | 'accessEnforcementMode'
+  >,
+): string | null {
+  if (
+    settings.nodeEnv === 'production' &&
+    settings.commerceEnabled &&
+    settings.accessEnforcementMode === 'LEGACY'
+  ) {
+    return LEGACY_WHILE_SELLING_WARNING;
+  }
+  return null;
+}
+
 export function productionCommerceBootError(
   settings: CommerceSettings,
 ): string | null {

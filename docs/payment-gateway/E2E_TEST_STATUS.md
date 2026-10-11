@@ -41,7 +41,7 @@ Canonical tax for a ₹999 offer at 18% inclusive, for orders created from phase
 
 ## Full pass — run this once, in order
 
-This is the start-to-finish script for phase 16. Check the journey and edge boxes as you go. Do not check them before that session. Phase 14 checkout is in the build. Phase 15 still has to land before this session signs the close-out. Leave every box below unchecked until then.
+This is the start-to-finish script for phase 16. Check the journey and edge boxes as you go. Do not check them before that session. Phases 14 and 15 are done. Leave every box below unchecked until this session.
 
 Apps: API on port 3000, ezprep-app on 3001, mock-app-admin on its local port. One admin user. Two students: **Student A** (no grant) and **Student B** (used only for the other-user invoice 404).
 
@@ -58,7 +58,7 @@ Use one exam the student can already open.
 - **Paper L** — the paper you will lock. Prefer an existing topic-wise paper.
 - **Paper F** — a different paper on the same exam. It stays `FREE`.
 
-Admin mock-test, full-mock, and sprint screens do not have an Access mode control. Do not save the topic-wise edit form to flip it: `PATCH /api/v1/mock-tests/:id` re-samples questions when the quota changes, and it is the wrong tool for a one-field change. Set `accessMode` to `ENTITLED` on Paper L’s mock-test document in local Mongo, and leave Paper F as `FREE`. Full-mock and sprint publish accept `accessMode` on `POST /api/v1/full-mock-tests/drafts/:id/publish` and `POST /api/v1/sprint-tests/drafts/:id/publish`. The admin publish forms do not send it, so those papers stay `FREE` unless the publish body includes `ENTITLED`. Phase 15 may add an admin control. Until then, use the Mongo field.
+Admin mock-test, full-mock, and sprint screens do not have an Access mode control. Phase 15 did not add one. Do not save the topic-wise edit form to flip it: `PATCH /api/v1/mock-tests/:id` re-samples questions when the quota changes, and it is the wrong tool for a one-field change. Set `accessMode` to `ENTITLED` on Paper L’s mock-test document in local Mongo, and leave Paper F as `FREE`. Full-mock and sprint publish accept `accessMode` on `POST /api/v1/full-mock-tests/drafts/:id/publish` and `POST /api/v1/sprint-tests/drafts/:id/publish`. The admin publish forms do not send it, so those papers stay `FREE` unless the publish body includes `ENTITLED`. Use the Mongo field.
 
 Record the exam id, Paper L id, and Paper F id in the close-out notes.
 
@@ -297,7 +297,7 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 - [ ] While one paper is starting, the other cards’ buttons are disabled. **View plans** does not enter that loading state.
 - [ ] Loading and disabled states on Start, Buy, and Pay survive double clicks.
 - [ ] Desktop and a narrow mobile width for lock, plans, checkout, and subscriptions.
-- [ ] Exam tabs stay open for a student who is locked out of Paper L. Header copy `Free Early Access` stays until phase 15 changes it.
+- [ ] Exam tabs stay open for a student who is locked out of Paper L. The header (from `sm`) and the mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`. Do not check this box here.
 
 ---
 
@@ -348,7 +348,7 @@ Run this only during that pass. Checkout `expiresAt` is 30 minutes and is not th
 
 ### Phase 13 — User access UI
 
-Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. Header copy `Free Early Access` is unchanged until phase 15. Phase 14 replaced the checkout shell and the Coming Soon subscriptions page. Use the Phase 14 copy below for those screens.
+Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. Phase 15 replaced `Free Early Access` with `Tests from ₹1` and `Limited-period offer`. Phase 14 replaced the checkout shell and the Coming Soon subscriptions page. Use the Phase 14 copy below for those screens.
 
 Routes and copy phase 16 must match:
 
@@ -384,7 +384,14 @@ Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or U
 
 ### Phase 15 — Rollout hardening
 
-Planned proof is J8. When phase 15 finishes, add the go-live runbook link and the production checklist. Do not mark the program live in `STATUS.md` until the close-out below is signed.
+Closed 2026-10-11. Sharun confirmed the local ENFORCED soak and restored `LEGACY`. These boxes stay unchecked for phase 16. Payments live stays No. Production steps stay in [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) and run only after phase 16 is signed.
+
+The callout is `components/dashboard/OfferCallout.tsx`. Desktop header from `sm` up, and the mobile menu drawer. Two lines: `Tests from ₹1` and `Limited-period offer`. **My Subscriptions** stays in the nav.
+
+- [ ] Header and mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`.
+- [ ] With `ACCESS_ENFORCEMENT_MODE=ENFORCED`, a FREE paper starts. An ENTITLED paper with no covering entitlement shows locked / **View plans**, and `POST /api/v1/mock-test-attempts/start` returns 403 `ENTITLEMENT_REQUIRED`. Owner confirmed this on 2026-10-11 for the phase close. Repeat it in the phase 16 pass before checking this box.
+- [ ] The student app env and bundle contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. They do not contain `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`.
+- [ ] No job or seed granted entitlements to every user.
 
 ---
 

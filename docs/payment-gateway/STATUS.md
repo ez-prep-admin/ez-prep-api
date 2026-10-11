@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 15 **pending** — phase 14D closed 2026-10-11 |
+| Current phase | 16 **pending** — phase 15 closed 2026-10-11 |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -82,7 +82,7 @@ Date: YYYY-MM-DD
 | 14B | Payment state integrity (ad-hoc) | **done** | 2026-10-11 | Sharun — local indexes, Razorpay notes, automatic capture, late pay, second method, and double-click |
 | 14C | Webhook, refund, repair robustness (ad-hoc) | **done** | 2026-10-11 | Sharun — local tick, dashboard refund, health webhook block, S3 restore, wrong secret, defaults restored |
 | 14D | Checkout client + admin ops (ad-hoc) | **done** | 2026-10-11 | Sharun — local checkout, ownership, legal, and admin ops smoke; line-by-line rows stay on the E2E board for phase 16 |
-| 15 | Rollout hardening | pending | | Go-live steps are listed in GOLIVE_TODOS. Prod seed, live webhook, and ENFORCED soak are not done. Not the live switch |
+| 15 | Rollout hardening | **done** | 2026-10-11 | Sharun — local ENFORCED soak; launch copy is `Tests from ₹1` / `Limited-period offer`. Payments live stays No |
 | 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
 
 ---
@@ -881,3 +881,35 @@ Date: 2026-10-11
 **GOLIVE_TODOS touched:** none
 
 **Next:** phase 15
+
+### 2026-10-11 — Phase 15 — Rollout hardening
+
+**Code:** ez-prep-api, ezprep-app, and mock-app-admin working trees. No commit.
+
+**Tests:** API Jest 200 suites / 1609 tests passed. `tsc -p tsconfig.build.json --noEmit` passed. Admin Vitest on the commerce-health client and page: 2 files / 6 tests passed. Admin `npx tsc --noEmit` passed. ezprep-app `npm run typecheck` passed. ESLint on the three dashboard files: 0 errors. One pre-existing `exhaustive-deps` warning remains in `DashboardHeader.tsx`. No new app test runner (D-15).
+
+**Shipped:**
+- Production commerce that is still `ACCESS_ENFORCEMENT_MODE=LEGACY` still boots. The boot log warns `ACCESS_ENFORCEMENT_MODE=LEGACY while commerce is enabled in production. Paid papers stay open until this is ENFORCED.` Commerce health is `degraded` and the **Access enforcement** card shows that sentence. Local LEGACY, commerce off, and production `ENFORCED` do not add that warning.
+- The LEGACY allow path stays, so rollback R2 and go-live Steps 18–20 still work.
+- The header and mobile-menu callout no longer say `Free Early Access`. Owner copy, in `OfferCallout`: `Tests from ₹1` and `Limited-period offer`. **My Subscriptions** stays in the nav.
+- `GO_LIVE_GUIDE.md` Step 18 now expects that degraded health while mode is still `LEGACY`. Step 21 expects `accessMode=ENFORCED` on the boot line and health `ok` when that is the only change. Seed command, webhook path, the four webhook events, and Step 13 key names already matched the code.
+
+**Developer ops (manual) — confirm each:**
+- [x] Local ENFORCED soak. Sharun, 2026-10-11: `ACCESS_ENFORCEMENT_MODE=ENFORCED`, commerce left on, test-mode Razorpay. Production was not changed.
+- [x] A FREE paper starts. An ENTITLED paper with no covering entitlement shows locked / **View plans**, and a raw start is 403 `ENTITLEMENT_REQUIRED`.
+- [x] Desktop header and the mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`.
+- [x] The student app has `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. It does not have `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`.
+- [x] `ACCESS_ENFORCEMENT_MODE` restored to `LEGACY` and the API restarted.
+- [x] N/A — production seller seed (`U-OPS-01`), live keys, and the live webhook (`U-OPS-02`) run from `GO_LIVE_GUIDE.md` only after phase 16 is signed. No mass entitlement grant.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-11
+
+**DoD:** met
+
+**Deviations:** The older phase objective said to remove the LEGACY allow path and to document production credentials. The later tasks, the go-live guide, and rollback R2 keep the allow path. The guard is a boot warning plus a named health degradation, not a boot failure. The launch badge was not deleted. Owner wording is `Tests from ₹1` / `Limited-period offer`. `commerce-health.service.spec.ts` gained an optional settings argument on its helper; the two existing cases still call it with the previous default. New cases and `commerce-config.spec.ts` are additive. New file: `commerce-config.guard.spec.ts`.
+
+**GOLIVE_TODOS touched:** none. Open rows stay go-live steps or the Step 0A exceptions (U-GST-04, U-GST-07, U-GST-10).
+
+**Next:** phase 16. Payments live stays No.

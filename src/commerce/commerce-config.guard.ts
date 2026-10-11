@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { productionCommerceBootError } from './commerce-config';
+import {
+  legacyWhileSellingWarning,
+  productionCommerceBootError,
+} from './commerce-config';
 import { CommerceConfigService } from './commerce-config.service';
 
 @Injectable()
@@ -20,6 +23,10 @@ export class CommerceConfigGuard implements OnModuleInit {
     );
     if (settings.accessModeWarning) {
       this.logger.warn(settings.accessModeWarning);
+    }
+    const legacyWarning = legacyWhileSellingWarning(settings);
+    if (legacyWarning) {
+      this.logger.warn(legacyWarning);
     }
     if (settings.nodeEnv === 'production' && settings.trustProxyHops === 0) {
       this.logger.warn(

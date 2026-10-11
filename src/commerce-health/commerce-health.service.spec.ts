@@ -9,6 +9,7 @@ import { Payment } from '../payments/schemas/payment.schema';
 import { Refund } from '../refunds/schemas/refund.schema';
 import { WebhookDeliveryStat } from '../webhooks/schemas/webhook-delivery-stat.schema';
 import { WebhookEvent } from '../webhooks/schemas/webhook-event.schema';
+import { LEGACY_WHILE_SELLING_WARNING } from '../commerce/commerce-config';
 import { CommerceHealthService } from './commerce-health.service';
 
 function query(result: unknown) {
@@ -38,19 +39,22 @@ function model(counts: () => number) {
 }
 
 describe('CommerceHealthService', () => {
-  async function service(paidCount: number) {
+  async function service(
+    paidCount: number,
+    settings: Record<string, unknown> = {
+      commerceEnabled: true,
+      paymentProvider: 'fake',
+      invoicesEnabled: true,
+      reconciliationEnabled: true,
+    },
+  ) {
     const module = await Test.createTestingModule({
       providers: [
         CommerceHealthService,
         {
           provide: CommerceConfigService,
           useValue: {
-            settings: {
-              commerceEnabled: true,
-              paymentProvider: 'fake',
-              invoicesEnabled: true,
-              reconciliationEnabled: true,
-            },
+            settings,
           },
         },
         {
@@ -93,5 +97,36 @@ describe('CommerceHealthService', () => {
 
     expect(warn).toHaveBeenCalledWith('COMMERCE_DEGRADED');
     warn.mockRestore();
+  });
+
+  it('degrades when production commerce is still LEGACY', async () => {
+    const health = await service(0, {
+      nodeEnv: 'production',
+      commerceEnabled: true,
+      accessEnforcementMode: 'LEGACY',
+    });
+    const report = await health.snapshot(new Date('2026-10-11T00:00:00.000Z'));
+
+    expect(report.status).toBe('degraded');
+    expect(report.enforcementWarnings).toEqual([LEGACY_WHILE_SELLING_WARNING]);
+  });
+
+  it('stays ok for local LEGACY and for production ENFORCED', async () => {
+    const local = await service(0, {
+      nodeEnv: 'development',
+      commerceEnabled: true,
+      accessEnforcementMode: 'LEGACY',
+    });
+    const enforced = await service(0, {
+      nodeEnv: 'production',
+      commerceEnabled: true,
+      accessEnforcementMode: 'ENFORCED',
+    });
+    const now = new Date('2026-10-11T00:00:00.000Z');
+
+    expect((await local.snapshot(now)).status).toBe('ok');
+    expect((await local.snapshot(now)).enforcementWarnings).toEqual([]);
+    expect((await enforced.snapshot(now)).status).toBe('ok');
+    expect((await enforced.snapshot(now)).enforcementWarnings).toEqual([]);
   });
 });

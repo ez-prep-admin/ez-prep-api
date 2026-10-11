@@ -367,8 +367,8 @@ pm2 logs <process> --lines 50
 
 **Check:**
 
-- No crash loop. The boot guard refuses to start if anything required is missing or wrong, and its message names the key (Playbook P4).
-- Admin → **Commerce health** shows status `ok`, `commerceEnabled: true`, and provider `razorpay`.
+- No crash loop. The boot guard refuses to start if anything required is missing or wrong, and its message names the key (Playbook P4). `ACCESS_ENFORCEMENT_MODE=LEGACY` does not stop the boot. The log includes `ACCESS_ENFORCEMENT_MODE=LEGACY while commerce is enabled in production. Paid papers stay open until this is ENFORCED.`
+- Admin → **Commerce health** shows status `degraded` for that one reason. The **Access enforcement** card count is 1 and its text is that same warning. Every other card is 0. Flags show `commerceEnabled: true`, provider `razorpay`, and `accessEnforcementMode` `LEGACY`.
 
 ### Step 19A / 19B — Webhook reachability probe
 
@@ -425,7 +425,8 @@ Every paper is still `FREE` (Step 14), so students see no change yet.
 **Check:**
 
 - A non-buyer account can start a free paper.
-- The API boot line shows `ENFORCED`, and Commerce health's effective flags show the same.
+- The API boot line shows `accessMode=ENFORCED` and does not log the LEGACY warning from Step 18.
+- Commerce health status is `ok` when nothing else is wrong. The **Access enforcement** card count is 0. Effective flags show `accessEnforcementMode` `ENFORCED`.
 
 ### Step 22 — Make the chosen papers paid
 
@@ -513,4 +514,5 @@ Each switch is an env change plus `pm2 restart <process> --update-env`. It takes
 
 ## Change log
 
+- 2026-10-11: Phase 15. Step 18 expects Commerce health `degraded` while production commerce is still `LEGACY`, with the Access enforcement warning. Step 21 expects `accessMode=ENFORCED` on the boot line and health `ok` once that is the only change. The boot still accepts `LEGACY` (rollback R2).
 - 2026-10-10: Created as the single go-live source. It replaces the runbook planned for phase 15, the go-live steps in `PRE_RELEASE_REVIEW.md`, and the step lists in `GOLIVE_TODOS.md` U-OPS-01 to U-OPS-04.

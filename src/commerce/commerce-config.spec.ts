@@ -1,4 +1,6 @@
 import {
+  LEGACY_WHILE_SELLING_WARNING,
+  legacyWhileSellingWarning,
   parseCommerceSettings,
   productionCommerceBootError,
 } from './commerce-config';
@@ -87,5 +89,41 @@ describe('productionCommerceBootError', () => {
     );
     expect(settings.paymentProvider).toBe('razorpay');
     expect(productionCommerceBootError(settings)).toBeNull();
+  });
+});
+
+describe('legacyWhileSellingWarning', () => {
+  it('names LEGACY when production commerce is on and still allows boot', () => {
+    const settings = parseCommerceSettings(env(live));
+    expect(legacyWhileSellingWarning(settings)).toBe(
+      LEGACY_WHILE_SELLING_WARNING,
+    );
+    expect(productionCommerceBootError(settings)).toBeNull();
+  });
+
+  it('stays quiet for local LEGACY and for production ENFORCED', () => {
+    expect(
+      legacyWhileSellingWarning(
+        parseCommerceSettings(
+          env({
+            NODE_ENV: 'development',
+            COMMERCE_ENABLED: 'true',
+            ACCESS_ENFORCEMENT_MODE: 'LEGACY',
+          }),
+        ),
+      ),
+    ).toBeNull();
+    expect(
+      legacyWhileSellingWarning(
+        parseCommerceSettings(
+          env({ ...live, ACCESS_ENFORCEMENT_MODE: 'ENFORCED' }),
+        ),
+      ),
+    ).toBeNull();
+    expect(
+      legacyWhileSellingWarning(
+        parseCommerceSettings(env({ ...live, COMMERCE_ENABLED: 'false' })),
+      ),
+    ).toBeNull();
   });
 });
