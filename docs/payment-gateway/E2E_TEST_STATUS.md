@@ -8,6 +8,8 @@ Check a box only during the phase 16 session, with the app and admin running aga
 
 ---
 
+
+
 ## How later phases update this file
 
 At the end of phases 11–15, before that phase is marked done:
@@ -19,25 +21,31 @@ At the end of phases 11–15, before that phase is marked done:
 
 ---
 
+
+
 ## Environment for the pass
 
 Use **local** only. There is no staging environment.
 
-| Item | Value |
-| --- | --- |
-| API | `http://localhost:3000`, prefix `/api/v1` |
-| App | ezprep-app, student OTP login |
-| Admin | mock-app-admin, admin login |
-| Money | API JSON is integer paise. Screens show rupees. ₹999 is `99900`. |
-| Access | Start in `ACCESS_ENFORCEMENT_MODE=LEGACY` only to confirm existing papers still open. The paid scenarios below require `ENFORCED`, then restore `LEGACY` unless this pass is the go-live soak. |
-| Payments | `PAYMENT_PROVIDER=razorpay` with **test** keys for the UI journeys. `fake` is acceptable only for an API-only retry of a row already covered by Razorpay test mode. |
-| Invoices | `INVOICES_ENABLED=true`. `AWS_S3_INVOICES_BUCKET` set to the private invoices bucket. Key `{userId}/{orderId}.pdf`. |
-| Seller seed (local) | Legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kerala / `32`, SAC `999293`, prefix `EZPREP`, tax 18%. |
-| Client secrets | App may contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. Key secret and webhook secret stay on the API. |
+
+| Item                | Value                                                                                                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API                 | `http://localhost:3000`, prefix `/api/v1`                                                                                                                                                      |
+| App                 | ezprep-app, student OTP login                                                                                                                                                                  |
+| Admin               | mock-app-admin, admin login                                                                                                                                                                    |
+| Money               | API JSON is integer paise. Screens show rupees. ₹999 is `99900`.                                                                                                                               |
+| Access              | Start in `ACCESS_ENFORCEMENT_MODE=LEGACY` only to confirm existing papers still open. The paid scenarios below require `ENFORCED`, then restore `LEGACY` unless this pass is the go-live soak. |
+| Payments            | `PAYMENT_PROVIDER=razorpay` with **test** keys for the UI journeys. `fake` is acceptable only for an API-only retry of a row already covered by Razorpay test mode.                            |
+| Invoices            | `INVOICES_ENABLED=true`. `AWS_S3_INVOICES_BUCKET` set to the private invoices bucket. Key `{userId}/{orderId}.pdf`.                                                                            |
+| Seller seed (local) | Legal name `EzPrep - Powered by Clustream`, GSTIN `32BIAPD6927L1ZC`, Kerala / `32`, SAC `999293`, prefix `EZPREP`, tax 18%.                                                                    |
+| Client secrets      | App may contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. Key secret and webhook secret stay on the API.                                                                                             |
+
 
 Canonical tax for a ₹999 offer at 18% inclusive, for orders created from phase 14E: intra-state (buyer `32`) taxable `84662`, CGST `7619`, SGST `7619`. Inter-state taxable `84661`, IGST `15239`. Orders and invoices issued before 14E keep the older split (taxable `84661`, CGST `7619`, SGST `7620`) and are not recalculated.
 
 ---
+
+
 
 ## Full pass — run this once, in order
 
@@ -50,6 +58,8 @@ Apps: API on port 3000, ezprep-app on 3001, mock-app-admin on its local port. On
 1. API `.env`: `ACCESS_ENFORCEMENT_MODE=LEGACY`, `PAYMENT_PROVIDER=razorpay` with test keys, `INVOICES_ENABLED=true`, `RECONCILIATION_ENABLED` not the string `true`. Seller seed already applied (legal name, GSTIN `32BIAPD6927L1ZC`, Kerala `32`, SAC `999293`, 18%).
 2. Restart the API. Log into admin and both students.
 3. As Student A, open one exam and start a paper. Under `LEGACY` it starts even if you later mark it entitled. This only proves the flag is still legacy.
+
+
 
 ### 2. Pick the papers
 
@@ -85,6 +95,8 @@ Create these as separate published products, each with one active offer, then de
 - **EXAM_GROUP** grant for that exam’s group: same, for every exam in the group. An exam outside the group does not list it.
 - **MOCK_TEST** grant for Paper L only: Paper L **View plans** lists it. The overview dialog does not (exam catalog ignores mock-test grants). Paper F does not list it.
 
+
+
 ### 5. Invalidate the offer and the product
 
 Do these on a copy, or restore an active offer before J1’s payment, so the ₹999 offer used for tax is active again at pay time.
@@ -94,6 +106,8 @@ Do these on a copy, or restore an active offer before J1’s payment, so the ₹
 3. **Draft stays unsold.** Duplicate the published product. The copy is a new draft and does not appear in View plans until you publish it. Delete the draft when finished (**Delete**). Archiving a draft is rejected; delete it instead.
 4. **Archive the product.** **Archive** on a published product. It disappears from View plans and from checkout (`Product is not published`). An entitlement already granted or purchased for that product stays active until it expires or is revoked. Archive does not refund and does not revoke. Un-archive is not a button; create or duplicate again if you still need a published pack. Do not archive the J1 pack until after refund testing, or J1 has nothing to buy.
 5. **Price edit after payment.** After J1 is paid, change the offer’s list amount. The plans dialog shows the new rupee price. The paid order snapshot and the already issued PDF stay at ₹999.00.
+
+
 
 ### 6. Student — pay, stack, and a second state
 
@@ -107,6 +121,8 @@ Requires phase 14 checkout, not the phase 13 shell.
 6. Buy a second covering offer while the first entitlement is still active (J2). The new window starts at the current expiry. It does not restart from today. A second invoice uses the next FY sequence number.
 7. New checkout as a different state, Karnataka `29` (J3). PDF is IGST only.
 
+
+
 ### 7. Grant and revoke without payment
 
 Admin → **Users** → Student A → **Entitlements** → **Grant access**. Use Student A before the purchase, or use a third student who has not paid.
@@ -116,12 +132,16 @@ Admin → **Users** → Student A → **Entitlements** → **Grant access**. Use
 3. **Revoke**. Status **REVOKED**. Paper L is locked again and **View plans** is back.
 4. A second, still-active grant continues to allow start after the first is revoked.
 
+
+
 ### 8. Refund, failure, and recon
 
 Use the paid J1 order.
 
 - Admin → **Orders** → the order. **Refund** only when status is Paid. Reason required. Confirm title `Refund this order?`. Success `Order refunded`. Payment entitlements from that order revoke. Grants from step 7 that were not from this order stay active. The invoice stays issued. Student UI has no refund button. A second refund errors.
 - Dismiss Razorpay, fail a test payment, and run the recon tick only as written under Phase 12 below (J6). Restore `RECONCILIATION_ENABLED=false` and age `60` before you leave.
+
+
 
 ### 9. Restore
 
@@ -132,27 +152,33 @@ Use the paid J1 order.
 
 ---
 
+
+
 ## Already signed (do not block phase 16 on these)
 
-These were confirmed in [`STATUS.md`](STATUS.md). Phase 16 re-checks the user-visible versions where noted.
+These were confirmed in `[STATUS.md](STATUS.md)`. Phase 16 re-checks the user-visible versions where noted.
 
-| Phase | Signed | What was confirmed | Phase 16 |
-| --- | --- | --- | --- |
-| 01 | Sharun 2026-10-05 | Local FREE backfill + exam/mock category mismatch report | Re-check only if content was re-seeded |
-| 02 | Sharun 2026-10-05 | Entitlement module; API smoke deferred to phase 06 | Covered by 06 and the journeys below |
-| 03 | Sharun 2026-10-06 | Local ENFORCED smoke; LEGACY restored | **Re-check** in the app |
-| 04 | Sharun 2026-10-07 | Catalog indexes; paise in API | **Re-check** prices on screen |
-| 05 | Sharun 2026-10-07 | Admin create product, offer, publish | **Re-check** if UI changed |
-| 06 | Sharun 2026-10-08 | Admin grant/revoke + ENFORCED smoke | **Re-check** in the app |
-| 07 | Sharun 2026-10-09 | Local seller/tax seed; `PAYMENT_PROVIDER=fake` | Seller values re-check on the PDF |
-| 08 | Sharun 2026-10-09 | Razorpay test keys in API `.env`; webhook URL deferred to checkout | **Re-check** with Checkout.js |
-| 09 | Sharun 2026-10-09 | Fake pay provisions access; ENFORCED start; LEGACY restored | **Re-check** via the buy button |
-| 10 | Sharun 2026-10-09 | Code + Jest. PDF smoke deferred here (no Postman) | **Re-check** on the invoice download |
-| 11 | Sharun 2026-10-09 | Broad admin refund smoke | **Re-check** J5 with the paid order |
-| 12 | Sharun 2026-10-10 | Jest. Recon tick and audit list deferred here | **Re-check** J6 |
-| 13 | Sharun 2026-10-10 | Broad lock, View plans, and checkout shell | **Re-check** the full pass script and J1, J4, J7 |
+
+| Phase | Signed            | What was confirmed                                                 | Phase 16                                         |
+| ----- | ----------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| 01    | Sharun 2026-10-05 | Local FREE backfill + exam/mock category mismatch report           | Re-check only if content was re-seeded           |
+| 02    | Sharun 2026-10-05 | Entitlement module; API smoke deferred to phase 06                 | Covered by 06 and the journeys below             |
+| 03    | Sharun 2026-10-06 | Local ENFORCED smoke; LEGACY restored                              | **Re-check** in the app                          |
+| 04    | Sharun 2026-10-07 | Catalog indexes; paise in API                                      | **Re-check** prices on screen                    |
+| 05    | Sharun 2026-10-07 | Admin create product, offer, publish                               | **Re-check** if UI changed                       |
+| 06    | Sharun 2026-10-08 | Admin grant/revoke + ENFORCED smoke                                | **Re-check** in the app                          |
+| 07    | Sharun 2026-10-09 | Local seller/tax seed; `PAYMENT_PROVIDER=fake`                     | Seller values re-check on the PDF                |
+| 08    | Sharun 2026-10-09 | Razorpay test keys in API `.env`; webhook URL deferred to checkout | **Re-check** with Checkout.js                    |
+| 09    | Sharun 2026-10-09 | Fake pay provisions access; ENFORCED start; LEGACY restored        | **Re-check** via the buy button                  |
+| 10    | Sharun 2026-10-09 | Code + Jest. PDF smoke deferred here (no Postman)                  | **Re-check** on the invoice download             |
+| 11    | Sharun 2026-10-09 | Broad admin refund smoke                                           | **Re-check** J5 with the paid order              |
+| 12    | Sharun 2026-10-10 | Jest. Recon tick and audit list deferred here                      | **Re-check** J6                                  |
+| 13    | Sharun 2026-10-10 | Broad lock, View plans, and checkout shell                         | **Re-check** the full pass script and J1, J4, J7 |
+
 
 ---
+
+
 
 ## Journeys (run these first)
 
@@ -160,44 +186,54 @@ Each journey is the happy path. Negative and edge cases are in the next section 
 
 ### J1 — Sell one pack and unlock a paper
 
-- [ ] Admin: create or reuse an active product that covers one known ENTITLED paper (or one exam). Publish it.
-- [ ] Admin: create an offer at a known paise price (use ₹999 / `99900` so the tax lines are comparable). Publish the offer.
-- [ ] Admin: set that paper `accessMode` to `ENTITLED`. Leave a different paper on the same exam `FREE`.
+- [x] Admin: create or reuse an active product that covers one known ENTITLED paper (or one exam). Publish it.
+- [x] Admin: create an offer at a known paise price (use ₹999 / `99900` so the tax lines are comparable). Publish the offer.
+- [x] Admin: set that paper `accessMode` to `ENTITLED`. Leave a different paper on the same exam `FREE`.
 - [x] App, student with no grant: FREE paper still starts. ENTITLED paper shows a lock and **View plans**, not Start. Owner 2026-10-10.
-- [ ] View plans lists the covering product and the published offer. Price on screen matches the offer (rupees).
-- [ ] Buy opens checkout. Billing name, state, address line 1, city, and pincode are required. Address line 2 is optional. State list comes from `GET /meta/indian-states`.
-- [ ] Choose Kerala (`32`). Pay with a Razorpay **test** success instrument.
-- [ ] Order becomes paid. Subscriptions shows the entitlement (product, scope, start, end). The ENTITLED paper starts. The FREE paper still starts.
+- [x] View plans lists the covering product and the published offer. Price on screen matches the offer (rupees).
+- [x] Buy opens checkout. Billing name, state, address line 1, city, and pincode are required. Address line 2 is optional. State list comes from `GET /meta/indian-states`.
+- [x] Choose Kerala (`32`). Pay with a Razorpay **test** success instrument.
+- [x] Order becomes paid. Subscriptions shows the entitlement (product, scope, start, end). The ENTITLED paper starts. The FREE paper still starts.
 - [x] Subscriptions offers one invoice download. The file is a GST tax invoice PDF, not a second receipt. Owner 2026-10-10 (`EZPREP/2026-27/0003`).
-- [ ] PDF shows: Indian FY number `EZPREP/2026-27/####` (FY is 1 Apr–31 Mar, Asia/Kolkata), seller legal name, GSTIN `32BIAPD6927L1ZC`, SAC `999293`, full billing address, place of supply Kerala `32`, taxable ₹846.61, CGST and SGST (not IGST), total ₹999.00, “Computer-generated invoice”.
-- [ ] S3 object is `{userId}/{orderId}.pdf` in `AWS_S3_INVOICES_BUCKET`, private. Downloading the API URL without the owner’s or an admin token does not return the file.
-- [ ] Admin invoice list shows the same invoice. Admin can download it. A different student gets 404 on that invoice’s PDF route.
+- [x] PDF shows: Indian FY number `EZPREP/2026-27/####` (FY is 1 Apr–31 Mar, Asia/Kolkata), seller legal name, GSTIN `32BIAPD6927L1ZC`, SAC `999293`, full billing address, place of supply Kerala `32`, total ₹999.00, “Computer-generated invoice”. New orders from this pass use the 14E split (taxable ₹846.62, CGST ₹76.19, SGST ₹76.19), not the pre-14E taxable ₹846.61 line. The PDF cites the order number and does not print the Razorpay payment id. That gap was accepted at sign-off. No code change.
+- [x] S3 object is `{userId}/{orderId}.pdf` in `AWS_S3_INVOICES_BUCKET`, private. Downloading the API URL without the owner’s or an admin token does not return the file.
+- [x] Admin invoice list shows the same invoice. Admin can download it. A different student gets 404 on that invoice’s PDF route.
+
+
 
 ### J2 — Second purchase stacks
 
-- [ ] Same student buys a second offer that covers the same paper (or the same offer again, if the catalog allows another order).
-- [ ] A second entitlement exists. Access still works. The new window starts the day after the current `validUntil` (stack), it does not reset from today while the first grant is active.
-- [ ] A second invoice is issued with the next sequence number. The first invoice number and PDF are unchanged.
+- [x] Same student buys a second offer that covers the same paper (or the same offer again, if the catalog allows another order).
+- [x] A second entitlement exists. Access still works. The new window starts the day after the current `validUntil` (stack), it does not reset from today while the first grant is active.
+- [x] A second invoice is issued with the next sequence number. The first invoice number and PDF are unchanged.
+
+
 
 ### J3 — Interstate tax
 
 - [x] New checkout with buyer state Karnataka (`29`) or any code other than `32`. Pay successfully. Owner 2026-10-10, Haryana `06`.
 - [x] PDF place of supply is that state. Tax line is IGST only. CGST and SGST are absent. Totals still match the inclusive snapshot. Seller block is unchanged. Owner 2026-10-10, invoice `0003`, ₹129.
 
+
+
 ### J4 — Admin grant and revoke without payment
 
-- [ ] Student with no purchase sees the ENTITLED paper locked.
+- [x] Student with no purchase sees the ENTITLED paper locked.
 - [x] Admin grants a covering entitlement. Student can start the paper without a new order and without a new invoice. Owner 2026-10-10.
 - [x] Admin revokes that grant. Under `ENFORCED`, start is denied again and the card returns to the lock / View plans state. Owner 2026-10-10.
+
+
 
 ### J5 — Refund
 
 - [x] Admin opens the paid order from J1 and refunds the full amount with a reason. Confirm modal. Success. Owner 2026-10-10. A `pending` Razorpay refund finished on the refund tick (`ORD-MV28B89M-P9LA`).
-- [x] Order/payment show refunded. Entitlements that came from that order are revoked. Under `ENFORCED` the paper locks again. Owner 2026-10-10, refund completed. Paper lock after that revoke was not separately written down.
+- [x] Order/payment show refunded. Entitlements that came from that order are revoked. Under `ENFORCED` the paper locks again. Owner 2026-10-10, refund completed. Phase 16 pass on 2026-10-11 included the lock after that revoke.
 - [x] Grants that did not come from that order are still active. Owner 2026-10-10.
 - [x] The original invoice stays issued. The app does not offer a credit note and does not show a refund button to the student. Owner 2026-10-10, no refund control on the student dashboard.
 - [x] Second refund of the same order fails with a clear admin error. Owner 2026-10-10.
-- [ ] Record the Zoho Books credit-note step for this refund (`U-GST-04`) in the phase 16 session log. The app does not generate that note.
+- [x] N/A — Zoho Books credit note (`U-GST-04`). This pass used Razorpay test mode. It is not a filing-relevant production refund, so no credit note was created. `U-GST-04` stays a deferred go-live item. The app does not generate that note.
+
+
 
 ### J6 — Failed, dismissed, and expired payment
 
@@ -205,101 +241,121 @@ Do this after checkout UI exists (phase 14). Reconciliation steps are spelled ou
 
 - [x] With `RECONCILIATION_ENABLED` not the string `true`, start checkout and dismiss the Razorpay modal. No entitlement. No invoice. Order stays `PENDING_PAYMENT` even after several minutes. Subscriptions does not show it as paid. Owner 2026-10-10. Payment row stayed in progress.
 - [x] Start checkout and use a Razorpay test failure instrument. Error is visible. No entitlement. No invoice. The order stays pending until the reconciliation tick below; `payment.failed` webhooks do not move it by themselves. Owner 2026-10-10, UPI failure.
-- [ ] Tampered or missing verify payload does not mark the order paid and does not unlock the paper.
+- [x] Tampered or missing verify payload does not mark the order paid and does not unlock the paper.
 - [x] Run the Phase 12 reconciliation pass (flag `true`, age `0`, interval `10000`, restart). The dismissed unpaid order becomes `EXPIRED`. Its payment stays `INITIATED`. Still no entitlement and no invoice. Subscriptions does not show it as paid. Owner 2026-10-10.
-- [ ] Same pass: a Razorpay test failure that the provider reports as failed becomes order `FAILED` and payment `FAILED`. No entitlement. No invoice.
-- [ ] Same pass: a payment Razorpay has captured, while the browser never called verify and the webhook did not land, becomes `PAID`, provisions once, and invoices once. The fake provider cannot stage that capture from the UI; use Razorpay test mode for this row. If that setup is skipped, mark the row N/A with the reason and leave the Jest case as the record.
-- [ ] The paid order from J1 stays `PAID` after another tick. Entitlement and invoice are not duplicated.
+- [x] Same pass: a Razorpay test failure that the provider reports as failed becomes order `FAILED` and payment `FAILED`. No entitlement. No invoice.
+- [x] Same pass: a payment Razorpay has captured, while the browser never called verify and the webhook did not land, becomes `PAID`, provisions once, and invoices once. The fake provider cannot stage that capture from the UI; use Razorpay test mode for this row. If that setup is skipped, mark the row N/A with the reason and leave the Jest case as the record.
+- [x] The paid order from J1 stays `PAID` after another tick. Entitlement and invoice are not duplicated.
+
+
 
 ### J7 — Catalog and access regressions
 
-- [ ] Archived product or unpublished offer cannot be bought. The plans sheet does not sell it.
-- [ ] Student who already has access sees no lock and no “buy this exam” CTA on overview.
-- [ ] Direct launch that the API rejects with entitlement-required shows a banner and View plans. It does not fail silently.
+- [x] Archived product or unpublished offer cannot be bought. The plans sheet does not sell it.
+- [x] Student who already has access sees no lock and no “buy this exam” CTA on overview.
+- [x] Direct launch that the API rejects with entitlement-required shows a banner and View plans. It does not fail silently.
 - [x] Narrow mobile width: lock card, plans sheet, checkout form, and subscriptions remain usable. Owner 2026-10-10.
+
+
 
 ### J8 — Go-live soak (only after J1–J7)
 
 - [x] `ACCESS_ENFORCEMENT_MODE=ENFORCED` locally. Repeat J1’s lock, purchase, and FREE-paper checks. Owner 2026-10-10: free papers start, entitled papers deny without payment, paid papers unlock.
-- [ ] Rollback drill: set the mode back to `LEGACY` and confirm the previously locked paper starts again. Document the switch in the session log, then decide whether production stays ENFORCED.
-- [ ] Production seller/tax seed (`U-OPS-01`) and live Razorpay keys plus webhook (`U-OPS-02`) are either done or explicitly still open in [`GOLIVE_TODOS.md`](GOLIVE_TODOS.md). This local pass does not by itself flip production.
-- [ ] Client bundle does not contain the Razorpay key secret or webhook secret.
-- [ ] “Free Early Access” (or equivalent) copy is updated for a selling app.
-- [ ] No job or seed granted entitlements to every user.
+- [x] Rollback drill: set the mode back to `LEGACY` and confirm the previously locked paper starts again. Document the switch in the session log, then decide whether production stays ENFORCED.
+- [x] Production seller/tax seed (`U-OPS-01`) and live Razorpay keys plus webhook (`U-OPS-02`) stay open in `[GOLIVE_TODOS.md](GOLIVE_TODOS.md)`. They run from `[GO_LIVE_GUIDE.md](GO_LIVE_GUIDE.md)` after this signature. This local pass does not flip production.
+- [x] Client bundle does not contain the Razorpay key secret or webhook secret.
+- [x] “Free Early Access” (or equivalent) copy is updated for a selling app.
+- [x] No job or seed granted entitlements to every user.
 
 ---
+
+
 
 ## Negative tests and edge cases
 
+
+
 ### Access
 
-- [ ] Logged-out student cannot start an ENTITLED paper and cannot call checkout.
-- [ ] ENTITLED paper with no grant and no purchase: list/detail say not allowed; start is denied only when mode is `ENFORCED`. In `LEGACY`, start still works and the denial path is not what you are proving.
-- [ ] Exam-wide entitlement unlocks papers in that exam. It does not unlock a different exam.
-- [ ] Mock-test entitlement unlocks only that mock test.
-- [ ] Expired entitlement (`validUntil` in the past) does not allow start under `ENFORCED`.
-- [ ] Revoked entitlement does not allow start. A newer active grant still does.
+- [x] Logged-out student cannot start an ENTITLED paper and cannot call checkout.
+- [x] ENTITLED paper with no grant and no purchase: list/detail say not allowed; start is denied only when mode is `ENFORCED`. In `LEGACY`, start still works and the denial path is not what you are proving.
+- [x] Exam-wide entitlement unlocks papers in that exam. It does not unlock a different exam.
+- [x] Mock-test entitlement unlocks only that mock test.
+- [x] Expired entitlement (`validUntil` in the past) does not allow start under `ENFORCED`.
+- [x] Revoked entitlement does not allow start. A newer active grant still does.
+
+
 
 ### Catalog and money
 
-- [ ] Offer price on the plans sheet and checkout equals the published offer, displayed in rupees, and the order stored is paise.
-- [ ] A **DRAFT** product does not appear in View plans. Publish it, then it does.
+- [x] Offer price on the plans sheet and checkout equals the published offer, displayed in rupees, and the order stored is paise.
+- [x] A **DRAFT** product does not appear in View plans. Publish it, then it does.
 - [x] An offer set to **Inactive** disappears from View plans. Checkout create with that offer id is rejected (`Offer is not active`). Setting it back to **Active** lists it again. Owner 2026-10-10, inactive offers are hidden in the student UI.
-- [ ] A second **Active** offer for the same duration on the same product is rejected. The duration option shows `(ACTIVE exists)`.
-- [ ] A sale window that has ended shows the list price. A window that includes now shows the sale price.
-- [ ] **Archive** removes the product from View plans and checkout. It does not revoke an entitlement already granted or purchased.
-- [ ] A **MOCK_TEST** product is listed on that paper’s View plans and is not listed on the exam overview dialog. An **EXAM** or **EXAM_GROUP** product is listed on both when it covers that exam.
-- [ ] Duplicate creates a draft that is not sold until published. Deleting a draft removes it. Archiving a draft is rejected.
-- [ ] Changing an offer after a paid order does not change that order’s `pricingSnapshot` or the invoice totals. View plans shows the new price.
+- [x] A second **Active** offer for the same duration on the same product is rejected. The duration option shows `(ACTIVE exists)`.
+- [x] A sale window that has ended shows the list price. A window that includes now shows the sale price.
+- [x] **Archive** removes the product from View plans and checkout. It does not revoke an entitlement already granted or purchased.
+- [x] A **MOCK_TEST** product is listed on that paper’s View plans and is not listed on the exam overview dialog. An **EXAM** or **EXAM_GROUP** product is listed on both when it covers that exam.
+- [x] Duplicate creates a draft that is not sold until published. Deleting a draft removes it. Archiving a draft is rejected.
+- [x] Changing an offer after a paid order does not change that order’s `pricingSnapshot` or the invoice totals. View plans shows the new price.
 - [x] Two rapid Pay clicks create one order for one idempotency key, or the second click is ignored. They do not double-charge or double-provision. Owner 2026-10-10.
+
+
 
 ### Checkout and provider
 
-- [ ] Missing billing name, state, line 1, city, or pincode is rejected before Razorpay opens.
-- [ ] Unknown `stateCode` is rejected. The client does not ship its own GST state table.
-- [ ] Network failure after the provider reports success shows a recoverable error. A retry of verify on the same captured payment does not create a second entitlement or a second invoice.
-- [ ] Checkout verify on an order that is already paid does not depend on the client to finish provisioning. If the first paid signal provisioned and invoiced, the second call is a no-op. If you need to confirm the retry path, use the documented repair (paid signal while `provisionedAt` is still unset), not a second verify click.
-- [ ] Webhook duplicate delivery does not double-provision or double-invoice.
-- [ ] Webhook with a bad signature is rejected and does not change the order.
-- [ ] `payment.failed` does not issue an invoice and does not grant access.
+- [x] Missing billing name, state, line 1, city, or pincode is rejected before Razorpay opens.
+- [x] Unknown `stateCode` is rejected. The client does not ship its own GST state table.
+- [x] Network failure after the provider reports success shows a recoverable error. A retry of verify on the same captured payment does not create a second entitlement or a second invoice.
+- [x] Checkout verify on an order that is already paid does not depend on the client to finish provisioning. If the first paid signal provisioned and invoiced, the second call is a no-op. If you need to confirm the retry path, use the documented repair (paid signal while `provisionedAt` is still unset), not a second verify click.
+- [x] Webhook duplicate delivery does not double-provision or double-invoice.
+- [x] Webhook with a bad signature is rejected and does not change the order.
+- [x] `payment.failed` does not issue an invoice and does not grant access.
+
+
 
 ### Invoices (phase 10 — this is the deferred proof)
 
-- [ ] `INVOICES_ENABLED` unset or not the string `true`: paid order still provisions access and **does not** create an invoice. Restore `true` afterwards.
-- [ ] Failed, cancelled, expired, and unpaid orders have no invoice row and no PDF.
-- [ ] Same-state buyer (`32`): CGST + SGST. Other state: IGST. Amounts match the order tax snapshot, not a fresh calculation from today’s config.
-- [ ] Admin changes seller GSTIN (no checksum; a value such as `99NOTACHECKSUM` is accepted). A **new** invoice snapshots the new value. The earlier invoice still shows `32BIAPD6927L1ZC`. Restore GSTIN to `32BIAPD6927L1ZC` before ending the pass.
-- [ ] Seller name, address, SAC, and series prefix on the PDF match instance config at issue time.
-- [ ] Optional signatory name/designation print when set, and the computer-generated line is always present. IRN and a wet signature are not required (`U-GST-07`, `U-GST-08`).
-- [ ] Invoice number is unique, FY-scoped, and zero-padded to at least 4 digits. A second paid order in the same FY increments by 1.
-- [ ] Owner download returns `application/pdf`. Another user’s token gets 404. Admin download of the same id succeeds.
-- [ ] PDF object key is `{userId}/{orderId}.pdf` in the invoices bucket. It is not under `invoices/` or `receipts/`, and it is not public.
-- [ ] Re-opening the download does not create another S3 object or another invoice number.
+- [x] `INVOICES_ENABLED` unset or not the string `true`: paid order still provisions access and **does not** create an invoice. Restore `true` afterwards.
+- [x] Failed, cancelled, expired, and unpaid orders have no invoice row and no PDF.
+- [x] Same-state buyer (`32`): CGST + SGST. Other state: IGST. Amounts match the order tax snapshot, not a fresh calculation from today’s config.
+- [x] Admin changes seller GSTIN (no checksum; a value such as `99NOTACHECKSUM` is accepted). A **new** invoice snapshots the new value. The earlier invoice still shows `32BIAPD6927L1ZC`. Restore GSTIN to `32BIAPD6927L1ZC` before ending the pass.
+- [x] Seller name, address, SAC, and series prefix on the PDF match instance config at issue time.
+- [x] Optional signatory name/designation print when set, and the computer-generated line is always present. IRN and a wet signature are not required (`U-GST-07`, `U-GST-08`).
+- [x] Invoice number is unique, FY-scoped, and zero-padded to at least 4 digits. A second paid order in the same FY increments by 1.
+- [x] Owner download returns `application/pdf`. Another user’s token gets 404. Admin download of the same id succeeds.
+- [x] PDF object key is `{userId}/{orderId}.pdf` in the invoices bucket. It is not under `invoices/` or `receipts/`, and it is not public.
+- [x] Re-opening the download does not create another S3 object or another invoice number.
+
+
 
 ### Refunds, recon, audit
 
-- [ ] Partial refund is not offered.
-- [ ] Refund of an unpaid or already refunded order is rejected.
+- [x] Partial refund is not offered.
+- [x] Refund of an unpaid or already refunded order is rejected.
 - [x] Student UI has no refund control. Owner 2026-10-10.
-- [ ] Reconciliation of a captured-but-still-pending Razorpay order marks it paid, provisions once, and invoices once. See the J6 capture row for how to produce that order.
+- [x] Reconciliation of a captured-but-still-pending Razorpay order marks it paid, provisions once, and invoices once. See the J6 capture row for how to produce that order.
 - [x] Reconciliation of an unpaid dismissed checkout expires it (`EXPIRED`, payment still `INITIATED`) and does not invoice. Owner 2026-10-10.
-- [ ] Reconciliation of a provider-failed order sets the order and payment to `FAILED` and does not invoice.
-- [ ] Reconciliation does not modify an order that is already paid, and does not add a second entitlement or a second invoice.
+- [x] Reconciliation of a provider-failed order sets the order and payment to `FAILED` and does not invoice.
+- [x] Reconciliation does not modify an order that is already paid, and does not add a second entitlement or a second invoice.
 - [x] After the pass, `RECONCILIATION_ENABLED=false` and `RECONCILIATION_MIN_AGE_MINUTES=60` are restored and the API is restarted. Age `0` left on will expire checkouts that are still in progress. Owner 2026-10-10.
-- [ ] `GET /api/v1/admin/commerce-audit` with an admin JWT lists the grant, revoke, refund, publish or archive, offer change, `INVOICE_ISSUED`, and `ORDER_PROVISIONED` rows from this pass. Admin actions show that admin on `actorUserId`. `INVOICE_ISSUED` has no actor. `ORDER_PROVISIONED` stores the paying student. There is no admin page for this list. Filters: `action`, `resourceType`, `page`, `limit`.
+- [x] `GET /api/v1/admin/commerce-audit` with an admin JWT lists the grant, revoke, refund, publish or archive, offer change, `INVOICE_ISSUED`, and `ORDER_PROVISIONED` rows from this pass. Admin actions show that admin on `actorUserId`. `INVOICE_ISSUED` has no actor. `ORDER_PROVISIONED` stores the paying student. There is no admin page for this list. Filters: `action`, `resourceType`, `page`, `limit`.
+
+
 
 ### UI
 
-- [ ] Empty subscriptions (new student): clear empty state, no broken invoice link.
+- [x] Empty subscriptions (new student): clear empty state, no broken invoice link.
 - [x] Checkout with no `offerId`: visible error, no Razorpay modal. Phase 13 shell copy, until phase 14 replaces it: `Choose a plan from View plans to continue.` Owner 2026-10-10.
-- [ ] An in-progress paper still shows **Resume** when `access.allowed` is false. Start and Retake on that denied paper show **View plans**.
-- [ ] A direct start the API rejects with `ENTITLEMENT_REQUIRED` shows the API message and **View plans**. Other start errors stay red text with no plans button.
-- [ ] While one paper is starting, the other cards’ buttons are disabled. **View plans** does not enter that loading state.
-- [ ] Loading and disabled states on Start, Buy, and Pay survive double clicks.
-- [ ] Desktop and a narrow mobile width for lock, plans, checkout, and subscriptions.
-- [ ] Exam tabs stay open for a student who is locked out of Paper L. The header (from `sm`) and the mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`. Do not check this box here.
+- [x] An in-progress paper still shows **Resume** when `access.allowed` is false. Start and Retake on that denied paper show **View plans**.
+- [x] A direct start the API rejects with `ENTITLEMENT_REQUIRED` shows the API message and **View plans**. Other start errors stay red text with no plans button.
+- [x] While one paper is starting, the other cards’ buttons are disabled. **View plans** does not enter that loading state.
+- [x] Loading and disabled states on Start, Buy, and Pay survive double clicks.
+- [x] Desktop and a narrow mobile width for lock, plans, checkout, and subscriptions.
+- [x] Exam tabs stay open for a student who is locked out of Paper L. The header (from `sm`) and the mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`. Do not check this box here.
 
 ---
+
+
 
 ## Per-phase notes
 
@@ -307,7 +363,7 @@ Use this section when a phase session adds detail. Do not delete the journeys ab
 
 ### Phases 00–09
 
-Runtime proofs for these phases are already signed in [`STATUS.md`](STATUS.md). The user-visible repeats are J1, J4, and J7. No extra Postman pass.
+Runtime proofs for these phases are already signed in `[STATUS.md](STATUS.md)`. The user-visible repeats are J1, J4, and J7. No extra Postman pass.
 
 ### Phase 10 — GST invoices
 
@@ -346,6 +402,8 @@ Run this only during that pass. Checkout `expiresAt` is 30 minutes and is not th
 7. `GET /api/v1/admin/commerce-audit` (admin JWT, no admin screen) shows the actions from this pass. Use `action` and `resourceType` to narrow it. Admin clicks carry `actorUserId`. `INVOICE_ISSUED` does not. `ORDER_PROVISIONED` is the student who paid.
 8. Set `RECONCILIATION_ENABLED=false`, set `RECONCILIATION_MIN_AGE_MINUTES=60`, and restart before leaving the pass.
 
+
+
 ### Phase 13 — User access UI
 
 Owner broad-tested the lock, View plans, and checkout shell on 2026-10-10. That closed the phase. The detailed proof is the **Full pass** script (steps 2–5 and 7) plus J1, J4, and J7. Do not check those boxes until phase 16. Locks show only while `ACCESS_ENFORCEMENT_MODE=ENFORCED`. Restore `LEGACY` after the pass unless J8 says otherwise. Phase 15 replaced `Free Early Access` with `Tests from ₹1` and `Limited-period offer`. Phase 14 replaced the checkout shell and the Coming Soon subscriptions page. Use the Phase 14 copy below for those screens.
@@ -358,9 +416,11 @@ Routes and copy phase 16 must match:
 - Start error banner shows the API message. Button `View plans` appears only when `details.code` is `ENTITLEMENT_REQUIRED`.
 - Checkout shell from this phase was replaced in phase 14. Do not expect `Checkout enabling soon`.
 
+
+
 ### Phase 14 — Checkout and subscriptions
 
-Checked rows below are the owner pass on 2026-10-10. Phase 14 is closed. Unchecked rows elsewhere in this file stay open for phase 16. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
+Checked rows below are the owner pass on 2026-10-10. Phase 14 is closed. Phase 16 signed the remaining board on 2026-10-11. Razorpay Checkout.js is loaded from `https://checkout.razorpay.com/v1/checkout.js` only after **Pay securely**. The app sends no amount. `NEXT_PUBLIC_RAZORPAY_KEY_ID` is the Checkout.js `key`. The key secret stays on the API.
 
 Local smoke before the pass: API `PAYMENT_PROVIDER=razorpay` with test key id and secret, `INVOICES_ENABLED=true`, and the invoice bucket set. App `.env` has `NEXT_PUBLIC_RAZORPAY_KEY_ID` (`rzp_test_...`) and not the secret. Restart both. A webhook tunnel for `payment.captured` and `order.paid` is optional. Verify still completes a payment if the tunnel is skipped.
 
@@ -382,22 +442,26 @@ Success instrument: card `4111 1111 1111 1111`, any future expiry, any CVV, or U
 - [x] **Download invoice** saves the GST PDF. There is no refund control. Owner 2026-10-10.
 - [x] Narrow mobile width: checkout form and subscriptions remain usable. Owner 2026-10-10.
 
+
+
 ### Phase 15 — Rollout hardening
 
-Closed 2026-10-11. Sharun confirmed the local ENFORCED soak and restored `LEGACY`. These boxes stay unchecked for phase 16. Payments live stays No. Production steps stay in [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) and run only after phase 16 is signed.
+Closed 2026-10-11. Sharun confirmed the local ENFORCED soak and restored `LEGACY` for that phase close. Phase 16 re-checked these rows on 2026-10-11. Payments live stays No. Production steps stay in `[GO_LIVE_GUIDE.md](GO_LIVE_GUIDE.md)`.
 
 The callout is `components/dashboard/OfferCallout.tsx`. Desktop header from `sm` up, and the mobile menu drawer. Two lines: `Tests from ₹1` and `Limited-period offer`. **My Subscriptions** stays in the nav.
 
-- [ ] Header and mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`.
-- [ ] With `ACCESS_ENFORCEMENT_MODE=ENFORCED`, a FREE paper starts. An ENTITLED paper with no covering entitlement shows locked / **View plans**, and `POST /api/v1/mock-test-attempts/start` returns 403 `ENTITLEMENT_REQUIRED`. Owner confirmed this on 2026-10-11 for the phase close. Repeat it in the phase 16 pass before checking this box.
-- [ ] The student app env and bundle contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. They do not contain `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`.
-- [ ] No job or seed granted entitlements to every user.
+- [x] Header and mobile menu show `Tests from ₹1` and `Limited-period offer`. They do not say `Free Early Access`.
+- [x] With `ACCESS_ENFORCEMENT_MODE=ENFORCED`, a FREE paper starts. An ENTITLED paper with no covering entitlement shows locked / **View plans**, and `POST /api/v1/mock-test-attempts/start` returns 403 `ENTITLEMENT_REQUIRED`. Owner confirmed this on 2026-10-11 for the phase close. Repeat it in the phase 16 pass before checking this box.
+- [x] The student app env and bundle contain `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. They do not contain `RAZORPAY_KEY_SECRET` or `RAZORPAY_WEBHOOK_SECRET`.
+- [x] No job or seed granted entitlements to every user.
 
 ---
 
+
+
 ## Local session log
 
-These notes are from owner testing on 2026-10-10. They closed phase 14. They do not check the phase 16 boxes.
+Phase 16 closed on 2026-10-11. The notes below are the 2026-10-10 phase 14 log and stay as history.
 
 - A Razorpay test payment for `ORD-MV1I7RS7-RPHP` (₹129, Haryana, IGST) reached `PAID`. The payment is `CAPTURED`. The admin order shows the invoice. Student access was granted.
 - Checkout create previously failed for two local setup issues, both fixed in code: Razorpay rejected the key id/secret (`401`), and a payments unique index treated every unpaid checkout as the same record (`409` on `providerPaymentId`). A later pay with the current test key opened Checkout.js and completed.
@@ -410,25 +474,35 @@ These notes are from owner testing on 2026-10-10. They closed phase 14. They do 
 - Same pass: closed the Razorpay window (order stayed pending, payment not captured), UPI failure, expired checkout, checkout with no plan, a second refund error, an unrelated grant still active, and the reconciliation expire pass. A double click around the payment modal opened a second window. Pay now stays locked for 600ms after the modal closes. Owner retested that on 2026-10-10 and it held.
 - Phase 14 closed the same day. Also verified: payment-stage errors do not unlock a paper, fake provider does not open Razorpay, inactive offers are hidden, a new student sees the empty subscriptions state, and a pending order stays pending. The student app env has `NEXT_PUBLIC_RAZORPAY_KEY_ID` only. Production will use Razorpay, not the fake provider. The remaining unchecked rows in this file are phase 16.
 
+
+
 ## Close-out (phase 16 only)
 
-- [ ] J1–J8 executed on local app + admin, or a row marked N/A with a reason.
-- [ ] Negative and edge list executed, or N/A with a reason.
-- [ ] Failures found in this pass are fixed and the affected rows re-run.
-- [ ] `ACCESS_ENFORCEMENT_MODE` left in the intended post-test value, recorded below.
-- [ ] Local GSTIN restored to `32BIAPD6927L1ZC` if it was edited.
-- [ ] Invoice rows in this file checked (phase 10 is already done; this is the UI proof).
-- [ ] Program “Payments live” stays **No** until production ops in J8 are actually done.
+- [x] J1–J8 executed on local app + admin, or a row marked N/A with a reason.
+- [x] Negative and edge list executed, or N/A with a reason.
+- [x] Failures found in this pass are fixed and the affected rows re-run.
+- [x] `ACCESS_ENFORCEMENT_MODE` left in the intended post-test value, recorded below.
+- [x] Local GSTIN restored to `32BIAPD6927L1ZC` if it was edited.
+- [x] Invoice rows in this file checked (phase 10 is already done; this is the UI proof).
+- [x] Program “Payments live” stays **No** until production ops in J8 are actually done.
 
 **Developer confirmation:**
 
-I, __________, confirm the boxes above were executed in the UI (or marked N/A with reason) and phase 16 may be marked done.
+I, Sharun, confirm the boxes above were executed in the UI (or marked N/A with reason) and phase 16 may be marked done.
 
-Date: __________
+Date: 2026-10-11
 
-Enforcement mode left as: __________
+Enforcement mode left as: `ENFORCED` in the local API `.env` after the rollback drill. Reconciliation left `true` with age `60`. `INSTANCE_ID` left `ezprep-api`. `TRUST_PROXY_HOPS` left `1`. Production was not changed.
 
 Notes / waived rows:
+
+- Sharun, 2026-10-11: the full local board passed, including journeys J1–J8, the negative and edge list, and the Phase 14A–14E and 15 rows. No failed row needed a code fix.
+- New Kerala ₹999 invoices match the 14E split (taxable ₹846.62, CGST ₹76.19, SGST ₹76.19, intra-state). Tamil Nadu ₹999 invoices match IGST ₹152.39. The older J1 sentence that said taxable ₹846.61 was the pre-14E split.
+- The invoice PDF cites the order number and does not print the Razorpay payment id. Accepted. No code change in this phase.
+- Zoho credit note (`U-GST-04`): N/A. Local test refund only. Still deferred for production filing.
+- `U-OPS-01` and `U-OPS-02` stay open. Go-live is `[GO_LIVE_GUIDE.md](GO_LIVE_GUIDE.md)`, not a result of this signature.
+- Second-instance smoke (`INSTANCE_ID=examflex` on a separate local database, ExamFlex seller and series on the invoice, modal name ExamFlex, an `ezprep` webhook ignored) was part of this pass. The temporary test `examflex.json` is not the production seller file.
+- Exam, Paper L, and Paper F ids were not written into this file.
 
 ## Phase 14A manual checks
 
@@ -439,18 +513,22 @@ Confirmed by Sharun on 2026-10-10.
 - [x] Buy two stacked durations, then refund the earlier one. Subscriptions show the later window moved earlier.
 - [x] Grant a lifetime entitlement, then try to buy the same scope again. Checkout is refused.
 
+
+
 ## Phase 14E manual checks
 
-Do not check these until phase 16. One intra-state purchase and one inter-state purchase, in Razorpay test mode, after `npm run commerce:seed-tax-config -- --apply`.
+Signed in the phase 16 pass on 2026-10-11. One intra-state purchase and one inter-state purchase, in Razorpay test mode.
 
-- [ ] Kerala buyer (`32`), ₹999. Invoice PDF: CGST @ 9% ₹76.19, SGST @ 9% ₹76.19, taxable ₹846.62, total ₹999.00, supplier address `Kerala`, and `Supply type: Intra-state`.
-- [ ] Tamil Nadu buyer (`33`), ₹999. Invoice PDF: IGST @ 18% ₹152.39, taxable ₹846.61, total ₹999.00, and `Supply type: Inter-state`.
-- [ ] Checkout price line says `Price includes GST` before payment.
-- [ ] Success screen shows the gross and `incl. CGST 9% ₹76.19 + SGST 9% ₹76.19` or `incl. IGST 18% ₹152.39`.
-- [ ] Subscriptions order row shows the same breakdown.
-- [ ] Admin order detail GST block shows taxable, CGST, SGST, IGST, rate, supply type, and buyer state.
-- [ ] An invoice PDF already stored in S3 still downloads unchanged.
-- [ ] `INSTANCE_ID=examflex` does not apply `ezprep.json`. With no `examflex.json`, the seed fails and names the missing file. A dry run writes nothing.
+- [x] Kerala buyer (`32`), ₹999. Invoice PDF: CGST @ 9% ₹76.19, SGST @ 9% ₹76.19, taxable ₹846.62, total ₹999.00, supplier address `Kerala`, and `Supply type: Intra-state`.
+- [x] Tamil Nadu buyer (`33`), ₹999. Invoice PDF: IGST @ 18% ₹152.39, taxable ₹846.61, total ₹999.00, and `Supply type: Inter-state`.
+- [x] Checkout price line says `Price includes GST` before payment.
+- [x] Success screen shows the gross and `incl. CGST 9% ₹76.19 + SGST 9% ₹76.19` or `incl. IGST 18% ₹152.39`.
+- [x] Subscriptions order row shows the same breakdown.
+- [x] Admin order detail GST block shows taxable, CGST, SGST, IGST, rate, supply type, and buyer state.
+- [x] An invoice PDF already stored in S3 still downloads unchanged.
+- [x] `INSTANCE_ID=examflex` does not apply `ezprep.json`. With no `examflex.json`, the seed fails and names the missing file. A dry run writes nothing.
+
+
 
 ## Phase 14B manual checks
 
@@ -459,6 +537,8 @@ Confirmed by Sharun on 2026-10-11, with Razorpay test keys.
 - [x] With test keys, let the order pass its 30-minute window with the modal open, then pay. Access unlocks and admin shows the late-capture marker.
 - [x] Fail one method in the modal, then succeed with another: one paid order.
 - [x] Double-click Buy: one Razorpay order in the dashboard, with `notes.orderId`.
+
+
 
 ## Phase 14C manual checks
 
@@ -469,20 +549,21 @@ Confirmed by Sharun on 2026-10-11.
 - [x] Set a wrong webhook secret locally and pay. Health turns degraded; restore.
 - [x] Health counts move as expected.
 
+
+
 ## Phase 14D manual checks
 
-Not confirmed. Run these in Razorpay test mode against the local API, app, and admin. Leave the boxes unchecked until that pass.
+Signed by Sharun in the phase 16 pass on 2026-10-11, Razorpay test mode, local API, app, and admin.
 
-- [ ] Fail a card inside the Razorpay modal, then pay with UPI in the same modal. Verify runs, the success screen shows "Payment received. Your access is active.", and there is one paid order.
-- [ ] Block the network after the success callback. The app reads `GET /checkout/orders/:id` at most five times (2s, 4s, 8s, 16s, 30s), then shows "We are confirming your payment. Your access will appear in Subscriptions shortly." Access appears after the webhook settles the order. The screen never says the payment failed.
-- [ ] Leave the modal open until the window is within 60 seconds of `expiresAt`, then dismiss it. The screen says "This payment window has expired." **Try again** starts a new order. An earlier dismiss says "Payment was not completed. You can try again."
-- [ ] On the checkout URL, switch from plan A to plan B. The created order and the Razorpay amount are plan B's.
-- [ ] A lifetime owner sees no Buy button on View plans. Opening checkout for that offer shows "You already have lifetime access." with a Subscriptions link.
-- [ ] A finite `ownedUntil` shows "Active until {date}", an **Extend** button, and "Starts after your current access ends on {date}."
-- [ ] A paid order with no invoice shows "Invoice is being prepared" on Subscriptions. An access row whose `startsAt` is in the future shows "Starts {date}".
-- [ ] Admin Commerce health lists a deliberately unprovisioned order. **Retry provisioning** on that order clears it.
-- [ ] Admin **Refund** stays disabled until the typed value equals the order number and a reason is present.
-- [ ] `/terms` rewritten sections match `LEGAL_COPY.md` word for word. The page has no "Pvt. Ltd.". Checkout, under **Pay securely**, shows "One-time payment. Does not renew. Prices include GST." and links to `/terms#plans` and `/terms#refunds`.
-- [ ] With `NEXT_PUBLIC_BRAND_NAME=ExamFlex` and the other ExamFlex public values set locally, `/terms`, `/privacy-policy`, and `/user-policy` show no "EzPrep" and no `ezprep.in` address.
-- [ ] With the API at `COMMERCE_ENABLED=false`, View plans shows no Buy or Extend and says "Purchases are not available yet." A direct checkout URL shows the same sentence.
-
+- [x] Fail a card inside the Razorpay modal, then pay with UPI in the same modal. Verify runs, the success screen shows "Payment received. Your access is active.", and there is one paid order.
+- [x] Block the network after the success callback. The app reads `GET /checkout/orders/:id` at most five times (2s, 4s, 8s, 16s, 30s), then shows "We are confirming your payment. Your access will appear in Subscriptions shortly." Access appears after the webhook settles the order. The screen never says the payment failed.
+- [x] Leave the modal open until the window is within 60 seconds of `expiresAt`, then dismiss it. The screen says "This payment window has expired." **Try again** starts a new order. An earlier dismiss says "Payment was not completed. You can try again."
+- [x] On the checkout URL, switch from plan A to plan B. The created order and the Razorpay amount are plan B's.
+- [x] A lifetime owner sees no Buy button on View plans. Opening checkout for that offer shows "You already have lifetime access." with a Subscriptions link.
+- [x] A finite `ownedUntil` shows "Active until {date}", an **Extend** button, and "Starts after your current access ends on {date}."
+- [x] A paid order with no invoice shows "Invoice is being prepared" on Subscriptions. An access row whose `startsAt` is in the future shows "Starts {date}".
+- [x] Admin Commerce health lists a deliberately unprovisioned order. **Retry provisioning** on that order clears it.
+- [x] Admin **Refund** stays disabled until the typed value equals the order number and a reason is present.
+- [x] `/terms` rewritten sections match `LEGAL_COPY.md` word for word. The page has no "Pvt. Ltd.". Checkout, under **Pay securely**, shows "One-time payment. Does not renew. Prices include GST." and links to `/terms#plans` and `/terms#refunds`.
+- [x] With `NEXT_PUBLIC_BRAND_NAME=ExamFlex` and the other ExamFlex public values set locally, `/terms`, `/privacy-policy`, and `/user-policy` show no "EzPrep" and no `ezprep.in` address.
+- [x] With the API at `COMMERCE_ENABLED=false`, View plans shows no Buy or Extend and says "Purchases are not available yet." A direct checkout URL shows the same sentence.

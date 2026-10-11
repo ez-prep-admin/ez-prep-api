@@ -50,9 +50,9 @@ Run one thorough manual pass of everything built in phases 00–15, in the stude
 
 ## Completion checklist
 
-- [ ] `E2E_TEST_STATUS.md` signed
-- [ ] `STATUS.md` phase board: 16 `done` only after that signature
-- [ ] Failures from the pass fixed and re-checked
+- [x] `E2E_TEST_STATUS.md` signed
+- [x] `STATUS.md` phase board: 16 `done` only after that signature
+- [x] Failures from the pass fixed and re-checked. None reported.
 
 ## Definition of done
 

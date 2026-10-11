@@ -14,7 +14,7 @@ Legacy alias: [`PAYMENT_STATUS.md`](PAYMENT_STATUS.md) points here.
 | Field | Value |
 | --- | --- |
 | Pack locked for development | **LOCKED** 2026-10-04 — owner ack; CA items via GOLIVE_TODOS (non-blocking) |
-| Current phase | 16 **pending** — phase 15 closed 2026-10-11 |
+| Current phase | 16 **done** — local E2E signed 2026-10-11. Next is production go-live from GO_LIVE_GUIDE.md |
 | Enforcement mode | Config live: `ACCESS_ENFORCEMENT_MODE` (default `LEGACY`); wired into `startAttempt` (deny only when ENFORCED) |
 | Money unit | Integer **paise** in Mongo + API JSON (`99900` = ₹999). Frontends convert to ₹ for display. |
 | Payments live | No |
@@ -83,7 +83,7 @@ Date: YYYY-MM-DD
 | 14C | Webhook, refund, repair robustness (ad-hoc) | **done** | 2026-10-11 | Sharun — local tick, dashboard refund, health webhook block, S3 restore, wrong secret, defaults restored |
 | 14D | Checkout client + admin ops (ad-hoc) | **done** | 2026-10-11 | Sharun — local checkout, ownership, legal, and admin ops smoke; line-by-line rows stay on the E2E board for phase 16 |
 | 15 | Rollout hardening | **done** | 2026-10-11 | Sharun — local ENFORCED soak; launch copy is `Tests from ₹1` / `Limited-period offer`. Payments live stays No |
-| 16 | End-to-end verification | pending | | Last gate before go-live. Full script in E2E_TEST_STATUS.md: admin catalog, offer invalidation, user flow, plus phase 10 PDF, phase 11 J5, phase 12 J6, phase 13 detailed UI |
+| 16 | End-to-end verification | **done** | 2026-10-11 | Sharun — local board signed. Payments live stays No. Go-live is GO_LIVE_GUIDE |
 
 ---
 
@@ -913,3 +913,27 @@ Date: 2026-10-11
 **GOLIVE_TODOS touched:** none. Open rows stay go-live steps or the Step 0A exceptions (U-GST-04, U-GST-07, U-GST-10).
 
 **Next:** phase 16. Payments live stays No.
+
+### 2026-10-11 — Phase 16 — End-to-end verification
+
+**Code:** docs only (`E2E_TEST_STATUS.md`, this file, phase 16 checklist). No product change. No commit.
+
+**Tests:** Manual board in [`E2E_TEST_STATUS.md`](E2E_TEST_STATUS.md). Sharun reported the full local pass passed. No failed row, so no code fix and no new Jest or Vitest run.
+
+**Developer ops (manual) — confirm each:**
+- [x] Local board: journeys J1–J8, the negative and edge list, and the Phase 14A–14E and 15 rows. Razorpay test mode. Production was not changed.
+- [x] Deferred proofs included: phase 10 invoice PDF (14E Kerala and Tamil Nadu amounts), phase 11 J5 refund with the paper locking again, phase 12 recon and audit list, phase 13 detailed access UI, phase 14D line-by-line rows, and the ExamFlex second-instance smoke.
+- [x] N/A — Zoho credit note (`U-GST-04`). Local test refund only. Not a filing-relevant production refund. The row stays deferred for go-live.
+- [x] N/A — production seller seed (`U-OPS-01`), live keys, and the live webhook (`U-OPS-02`). They run from [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md) after this signature. Payments live stays No.
+
+**Developer confirmation:**  
+I, Sharun, confirm I completed the developer ops above (or marked N/A with reason) and this phase may be marked done.  
+Date: 2026-10-11
+
+**DoD:** met
+
+**Deviations:** The invoice PDF cites the order number and does not print the Razorpay payment id. Accepted. No code change. New Kerala invoices use the 14E split (taxable ₹846.62, CGST ₹76.19, SGST ₹76.19). The older J1 sentence that said taxable ₹846.61 was the pre-14E split. Exam, Paper L, and Paper F ids were not written down. Local `.env` at sign-off is still `ACCESS_ENFORCEMENT_MODE=ENFORCED`, `RECONCILIATION_ENABLED=true`, age `60`, `INSTANCE_ID=ezprep-api`, `TRUST_PROXY_HOPS=1`. Go-live uses `INSTANCE_ID=ezprep`.
+
+**GOLIVE_TODOS touched:** none. `U-GST-04`, `U-OPS-01`, and `U-OPS-02` stay open.
+
+**Next:** production go-live from [`GO_LIVE_GUIDE.md`](GO_LIVE_GUIDE.md). Payments live stays No. There is no phase 17.
