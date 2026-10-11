@@ -90,6 +90,8 @@ PaymentSchema.index(
 );
 PaymentSchema.index({ providerOrderId: 1 });
 PaymentSchema.index({ status: 1 });
+/** Gross receipts group captured and refunded primary payments by currency. */
+PaymentSchema.index({ status: 1, role: 1, currency: 1 });
 
 PaymentSchema.virtual('id').get(function () {
   return this._id.toHexString();

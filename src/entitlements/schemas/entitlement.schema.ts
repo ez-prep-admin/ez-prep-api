@@ -107,6 +107,8 @@ EntitlementSchema.index({
 EntitlementSchema.index({ userId: 1, productId: 1, status: 1 });
 EntitlementSchema.index({ userId: 1, status: 1, expiresAt: 1 });
 EntitlementSchema.index({ expiresAt: 1 });
+/** Active, lapsed, and paid-user accounting matches are not scoped by user. */
+EntitlementSchema.index({ status: 1, expiresAt: 1 });
 
 EntitlementSchema.virtual('id').get(function () {
   return this._id.toHexString();

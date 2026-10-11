@@ -78,6 +78,8 @@ export const RefundSchema = SchemaFactory.createForClass(Refund);
 
 RefundSchema.index({ orderId: 1 });
 RefundSchema.index({ paymentId: 1 }, { unique: true, name: 'paymentId_1' });
+/** Completed order refunds and duplicate-capture refunds are summed separately. */
+RefundSchema.index({ status: 1, kind: 1 });
 
 RefundSchema.virtual('id').get(function () {
   return this._id.toHexString();
