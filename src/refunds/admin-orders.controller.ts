@@ -46,7 +46,11 @@ export class AdminOrdersController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'List orders (Admin)' })
+  @ApiOperation({
+    summary: 'List orders (Admin)',
+    description:
+      'Buyer email and phone number are masked. Search matches the order number.',
+  })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'status', required: false, enum: OrderStatus })
@@ -87,7 +91,10 @@ export class AdminOrdersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get an order (Admin)' })
+  @ApiOperation({
+    summary: 'Get an order (Admin)',
+    description: 'Buyer email and phone number are masked in the response.',
+  })
   @ApiParam({ name: 'id' })
   @ApiNotFoundResponse({ description: 'Order not found' })
   async get(@Param('id') id: string) {
