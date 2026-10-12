@@ -360,7 +360,7 @@ describe('RefundsService', () => {
     expect(gateway.refund).not.toHaveBeenCalled();
   });
 
-  it('includes the buyer name on the order list', async () => {
+  it('masks buyer email and phone on the order list and detail', async () => {
     const order = seedPaid();
     users.push({
       _id: order.userId,
@@ -371,16 +371,26 @@ describe('RefundsService', () => {
     });
 
     const result = await service.list({});
-
-    expect(result.data).toHaveLength(1);
-    expect(result.data[0].user).toEqual({
+    const maskedUser = {
       id: String(order.userId),
       name: 'Ada Lovelace',
-      email: 'ada@example.com',
-      phoneNumber: '+919876543210',
+      email: 'a***@example.com',
+      phoneNumber: '+91**********',
       username: 'ada',
-    });
+    };
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].user).toEqual(maskedUser);
     expect(result.data[0].userId).toBe(String(order.userId));
+    expect(JSON.stringify(result.data[0].user)).not.toContain(
+      'ada@example.com',
+    );
+    expect(JSON.stringify(result.data[0].user)).not.toContain('9876543210');
+
+    const detail = await service.get(order.id);
+    expect(detail.user).toEqual(maskedUser);
+    expect(JSON.stringify(detail.user)).not.toContain('ada@example.com');
+    expect(JSON.stringify(detail.user)).not.toContain('9876543210');
   });
 
   it('keeps the order paid when the provider refund is still pending', async () => {

@@ -9,6 +9,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
+import {
+  maskEmail,
+  maskPhoneNumber,
+} from '../admin-users/admin-users.guardrails';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
@@ -1125,8 +1129,8 @@ export class RefundsService {
         {
           id: String(user._id),
           name: user.name,
-          email: user.email,
-          phoneNumber: user.phoneNumber,
+          email: maskEmail(user.email),
+          phoneNumber: maskPhoneNumber(user.phoneNumber),
           username: user.username,
         },
       ]),
