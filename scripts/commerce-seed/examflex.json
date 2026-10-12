@@ -1,11 +1,11 @@
 {
   "instanceId": "examflex",
   "seller": {
-    "legalName": "Replace with the ExamFlex legal name",
-    "gstin": "00EXAMPLEGSTIN1",
-    "registeredAddress": "Replace with the registered address",
-    "state": "Tamil Nadu",
-    "stateCode": "33"
+    "legalName": "EzPrep - Powered by Clustream",
+    "gstin": "32BIAPD6927L1ZC",
+    "registeredAddress": "Kerala, India",
+    "state": "Kerala",
+    "stateCode": "32"
   },
   "taxConfig": {
     "taxEnabled": true,
@@ -15,6 +15,6 @@
     "currency": "INR",
     "sacCode": "999293",
     "sacDescription": "Commercial training and coaching services",
-    "invoiceSeriesPrefix": "EXAMFLEX"
+    "invoiceSeriesPrefix": "EZPREP"
   }
 }
