@@ -197,12 +197,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       case 11000:
       case 11001: {
         // Duplicate key error
-        const field = this.extractDuplicateField(error);
         return {
           status: HttpStatus.CONFLICT,
-          message: field
-            ? `A record with this ${field} already exists`
-            : 'Duplicate entry. A record with this value already exists.',
+          message: this.duplicateKeyMessage(error),
           error: 'DuplicateEntry',
         };
       }
@@ -228,11 +225,42 @@ export class HttpExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Extract field name from duplicate key error
+   * Duplicate-key text safe to show in the client.
+   * Compound index names are not field labels.
+   */
+  private duplicateKeyMessage(error: MongoError): string {
+    if (this.isProviderPaymentDuplicate(error)) {
+      return 'Payment could not be started. Please try again.';
+    }
+    const field = this.extractDuplicateField(error);
+    return field
+      ? `A record with this ${field} already exists`
+      : 'Duplicate entry. A record with this value already exists.';
+  }
+
+  private isProviderPaymentDuplicate(error: MongoError): boolean {
+    const keyPattern = (error as { keyPattern?: Record<string, unknown> })
+      .keyPattern;
+    if (keyPattern && 'providerPaymentId' in keyPattern) {
+      return true;
+    }
+    return (
+      error.message.includes('providerPaymentId') ||
+      error.message.includes('provider_1_providerPaymentId')
+    );
+  }
+
+  /**
+   * Extract a single-field index name from a duplicate key error.
    */
   private extractDuplicateField(error: MongoError): string | null {
-    const message = error.message;
-    const match = message.match(/index: (\w+)_/);
+    const keyPattern = (error as { keyPattern?: Record<string, unknown> })
+      .keyPattern;
+    const fields = keyPattern ? Object.keys(keyPattern) : [];
+    if (fields.length === 1 && /^[A-Za-z0-9]+$/.test(fields[0])) {
+      return fields[0];
+    }
+    const match = error.message.match(/index: ([A-Za-z0-9]+)_/);
     return match ? match[1] : null;
   }
 

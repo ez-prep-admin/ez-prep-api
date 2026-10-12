@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SafeQuestionDto } from '../../mock-test-attempts/dto/start-attempt-response.dto';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 
 export class SprintQuestionItemDto extends SafeQuestionDto {
   @ApiProperty({ description: '0-based position across the whole paper' })
@@ -56,6 +57,9 @@ export class SprintDraftSettingsDto {
 
   @ApiProperty()
   showResultsImmediately: boolean;
+
+  @ApiProperty({ enum: AccessMode })
+  accessMode: AccessMode;
 }
 
 export class SprintDraftResponseDto {

@@ -11,6 +11,9 @@ import { FullMockTestDraft } from './schemas/full-mock-test-draft.schema';
 import { FullMockSelectionService } from './full-mock-selection.service';
 import { MockTestsService } from '../mock-tests/mock-tests.service';
 import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
 
 const EXAM_ID = '507f1f77bcf86cd799439011';
@@ -167,6 +170,27 @@ describe('FullMockTestsService', () => {
   const imageUrlResolver = {
     resolveMany: jest.fn().mockResolvedValue([null, null, null]),
   };
+  const accessControlService = {
+    resolveAccessForMockTests: jest.fn(
+      async (
+        _userId: string | undefined,
+        papers: Array<{ id: string; accessMode?: string }>,
+      ) => {
+        const map = new Map();
+        for (const paper of papers) {
+          const entitled = paper.accessMode === AccessMode.ENTITLED;
+          map.set(paper.id, {
+            allowed: !entitled,
+            reason: entitled
+              ? AccessDecisionReason.ENTITLEMENT_REQUIRED
+              : AccessDecisionReason.ALLOWED,
+            accessMode: paper.accessMode ?? AccessMode.FREE,
+          });
+        }
+        return map;
+      },
+    ),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -183,6 +207,7 @@ describe('FullMockTestsService', () => {
         { provide: FullMockSelectionService, useValue: selectionService },
         { provide: MockTestsService, useValue: mockTestsService },
         { provide: ImageUrlResolver, useValue: imageUrlResolver },
+        { provide: AccessControlService, useValue: accessControlService },
       ],
     }).compile();
 

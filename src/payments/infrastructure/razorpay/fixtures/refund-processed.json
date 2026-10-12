@@ -1,0 +1,16 @@
+{
+  "entity": "event",
+  "event": "refund.processed",
+  "contains": ["refund"],
+  "payload": {
+    "refund": {
+      "entity": {
+        "id": "rfnd_test_processed",
+        "payment_id": "pay_test_captured",
+        "amount": 12900,
+        "currency": "INR",
+        "status": "processed"
+      }
+    }
+  }
+}

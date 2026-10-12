@@ -137,6 +137,25 @@ describe('HttpExceptionFilter', () => {
     );
   });
 
+  it('hides the payments compound index name', () => {
+    const err = new Error(
+      'E11000 duplicate key error collection: live.payments index: provider_1_providerPaymentId_1 dup key',
+    );
+    err.name = 'MongoServerError';
+    (err as any).code = 11000;
+    (err as any).keyPattern = { provider: 1, providerPaymentId: 1 };
+
+    filter.catch(err, host);
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    expect(json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: 'DuplicateEntry',
+        message: 'Payment could not be started. Please try again.',
+      }),
+    );
+  });
+
   it('should handle duplicate key without extractable field (code 11001)', () => {
     const err = new Error('dup');
     err.name = 'MongoError';

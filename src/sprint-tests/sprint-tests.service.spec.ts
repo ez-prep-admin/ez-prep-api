@@ -10,6 +10,9 @@ import { MockTest } from '../mock-tests/schemas/mock-test.schema';
 import { SprintTestDraft } from './schemas/sprint-test-draft.schema';
 import { MockTestsService } from '../mock-tests/mock-tests.service';
 import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { AccessControlService } from '../access/access-control.service';
+import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
+import { AccessMode } from '../common/enums/access-mode.enum';
 import { PaperType } from '../common/enums/paper-type.enum';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
 
@@ -112,6 +115,27 @@ describe('SprintTestsService', () => {
   const imageUrlResolver = {
     resolveMany: jest.fn().mockResolvedValue([null, null, null]),
   };
+  const accessControlService = {
+    resolveAccessForMockTests: jest.fn(
+      async (
+        _userId: string | undefined,
+        papers: Array<{ id: string; accessMode?: string }>,
+      ) => {
+        const map = new Map();
+        for (const paper of papers) {
+          const entitled = paper.accessMode === AccessMode.ENTITLED;
+          map.set(paper.id, {
+            allowed: !entitled,
+            reason: entitled
+              ? AccessDecisionReason.ENTITLEMENT_REQUIRED
+              : AccessDecisionReason.ALLOWED,
+            accessMode: paper.accessMode ?? AccessMode.FREE,
+          });
+        }
+        return map;
+      },
+    ),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -128,6 +152,7 @@ describe('SprintTestsService', () => {
         { provide: getModelToken(SprintTestDraft.name), useValue: draftModel },
         { provide: MockTestsService, useValue: mockTestsService },
         { provide: ImageUrlResolver, useValue: imageUrlResolver },
+        { provide: AccessControlService, useValue: accessControlService },
       ],
     }).compile();
     service = module.get(SprintTestsService);
@@ -186,6 +211,7 @@ describe('SprintTestsService', () => {
     );
     expect(payload.questions[0].marksPerQuestion).toBe(2);
     expect(payload.durationInMinutes).toBe(15);
+    expect(payload.accessMode).toBe(AccessMode.FREE);
   });
 
   it('freezes hand-picked question ids in order and skips recency sampling', async () => {
@@ -427,6 +453,22 @@ describe('SprintTestsService', () => {
     expect(created.questionIds).toHaveLength(1);
     expect(questionModel.updateMany).not.toHaveBeenCalled();
     expect(draft.status).toBe('PUBLISHED');
+  });
+
+  it('publishes the access mode stored on the draft when publish omits it', async () => {
+    const draft = makeDraft({ accessMode: AccessMode.ENTITLED });
+    draftModel.findOneAndUpdate.mockResolvedValue(draft);
+    questionModel.find.mockReturnValue(chainable([questionRow(Q1)]));
+    mockTestModel.create.mockResolvedValue({
+      _id: new Types.ObjectId(TEST_ID),
+      id: TEST_ID,
+    });
+
+    await service.publishDraft(DRAFT_ID, {}, USER_ID);
+
+    expect(mockTestModel.create.mock.calls[0][0].accessMode).toBe(
+      AccessMode.ENTITLED,
+    );
   });
 
   it('rolls a failed publish back to REVIEW', async () => {

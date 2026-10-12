@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 import { UserAttemptAction } from '../../common/enums/user-attempt-action.enum';
+import { AccessResponseDto } from '../../access/dto/access-response.dto';
 import { ExamSummaryDto } from '../../mock-tests/dto/mock-test-list-item.dto';
 import { DraftSubjectBlockDto } from './draft-response.dto';
 
@@ -58,6 +60,21 @@ export class FullMockSubjectConfigDto {
 export class FullMockTestListItemDto {
   @ApiProperty({ example: '64f123456789abcdef123456' })
   id: string;
+
+  @ApiProperty({
+    description:
+      'Paper access mode. FREE = no entitlement required; ENTITLED = requires covering entitlement.',
+    enum: AccessMode,
+    example: AccessMode.FREE,
+  })
+  accessMode: AccessMode;
+
+  @ApiProperty({
+    description:
+      'Backend-computed access for the current user. Do not authorize from the client alone.',
+    type: AccessResponseDto,
+  })
+  access: AccessResponseDto;
 
   @ApiPropertyOptional({ example: 'SSC CGL Tier 1 Full Mock 12' })
   title?: string;

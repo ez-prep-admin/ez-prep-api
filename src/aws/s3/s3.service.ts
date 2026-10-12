@@ -410,6 +410,17 @@ export class S3Service {
   }
 
   /**
+   * GST tax invoice PDF in AWS_S3_INVOICES_BUCKET.
+   * Format: {userId}/{orderId}.pdf
+   * One commerce PDF per paid order (D-11). A user prefix lists that user's invoices.
+   */
+  generateGstInvoiceKey(userId: string, orderId: string): string {
+    const safeUserId = this.sanitizePathSegment(userId);
+    const safeOrderId = this.sanitizePathSegment(orderId);
+    return `${safeUserId}/${safeOrderId}.pdf`;
+  }
+
+  /**
    * Structured key for imported question images
    * Format: question-imports/{uploadId}/{imageId}.{ext}
    */

@@ -7,7 +7,9 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
-import { User, UserDocument } from './schemas/user.schema';
+import { indianStateByCode } from '../common/commerce/indian-states';
+import { CheckoutBillingDto } from '../orders/dto/create-checkout-order.dto';
+import { User, UserBillingProfile, UserDocument } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateAdminDto } from '../auth/dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -17,6 +19,13 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { OrderStatus } from '../common/enums/order-status.enum';
+import { TaxInvoiceStatus } from '../common/enums/tax-invoice-status.enum';
+import { Order, OrderDocument } from '../orders/schemas/order.schema';
+import {
+  TaxInvoice,
+  TaxInvoiceDocument,
+} from '../invoices/schemas/tax-invoice.schema';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 
 export interface UserWithGoogleLink {
@@ -24,9 +33,24 @@ export interface UserWithGoogleLink {
   googleSub?: string;
 }
 
+export interface BillingProfileView {
+  name: string;
+  state: string;
+  stateCode: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  pincode: string;
+}
+
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(TaxInvoice.name)
+    private invoiceModel: Model<TaxInvoiceDocument>,
+  ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
     if (createUserDto.role === UserRole.ADMIN) {
@@ -341,10 +365,28 @@ export class UsersService {
   }
 
   async hardDelete(id: string): Promise<void> {
-    const result = await this.userModel.findByIdAndDelete(id).exec();
-    if (!result) {
+    const user = await this.userModel.findById(id).select('_id').exec();
+    if (!user) {
       throw new NotFoundException(`User with ID "${id}" not found`);
     }
+    const userId = new Types.ObjectId(id);
+    const [orders, invoices] = await Promise.all([
+      this.orderModel
+        .countDocuments({
+          userId,
+          status: { $in: [OrderStatus.PAID, OrderStatus.REFUNDED] },
+        })
+        .exec(),
+      this.invoiceModel
+        .countDocuments({ userId, status: TaxInvoiceStatus.ISSUED })
+        .exec(),
+    ]);
+    if (orders > 0 || invoices > 0) {
+      throw new ConflictException(
+        'User has paid orders or issued invoices and cannot be hard-deleted',
+      );
+    }
+    await this.userModel.findByIdAndDelete(id).exec();
   }
 
   // Admin-specific methods
@@ -381,6 +423,48 @@ export class UsersService {
       deletedUsers,
       inactiveUsers: totalUsers - activeUsers,
     };
+  }
+
+  // ── Billing profile (checkout prefill; not the profile location) ─────────
+
+  async getBillingProfile(userId: string): Promise<BillingProfileView | null> {
+    const user = await this.requireUser(userId);
+    return toBillingProfileView(user.billingProfile);
+  }
+
+  async updateBillingProfile(
+    userId: string,
+    dto: CheckoutBillingDto,
+  ): Promise<BillingProfileView> {
+    const state = indianStateByCode(dto.stateCode);
+    if (!state) {
+      throw new BadRequestException('Unknown billing stateCode');
+    }
+
+    const addressLine2 = dto.addressLine2?.trim();
+    const billingProfile: UserBillingProfile = {
+      name: dto.name.trim(),
+      state: state.name,
+      stateCode: state.code,
+      addressLine1: dto.addressLine1.trim(),
+      city: dto.city.trim(),
+      pincode: dto.pincode,
+      ...(addressLine2 ? { addressLine2 } : {}),
+    };
+
+    const user = await this.userModel
+      .findByIdAndUpdate(userId, { $set: { billingProfile } }, { new: true })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+
+    const view = toBillingProfileView(user.billingProfile);
+    if (!view) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    return view;
   }
 
   // ── Extended profile ──────────────────────────────────────────────────────
@@ -653,11 +737,23 @@ export class UsersService {
       obj.targetExamRemainingDays = Math.max(0, Math.ceil(diff / 86_400_000));
     }
 
-    // Never leak password hashes or the Google subject in API payloads
+    // Never leak password hashes, the Google subject, or checkout billing
     delete obj.passwordHash;
     delete obj.googleSub;
+    delete obj.billingProfile;
 
     return new UserResponseDto(obj);
+  }
+
+  private async requireUser(userId: string): Promise<UserDocument> {
+    if (!Types.ObjectId.isValid(userId)) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    return user;
   }
 
   private toGoogleLink(user: UserDocument): UserWithGoogleLink {
@@ -668,4 +764,22 @@ export class UsersService {
       googleSub,
     };
   }
+}
+
+function toBillingProfileView(
+  profile: UserBillingProfile | null | undefined,
+): BillingProfileView | null {
+  if (!profile?.name || !profile.stateCode) {
+    return null;
+  }
+  const addressLine2 = profile.addressLine2?.trim();
+  return {
+    name: profile.name,
+    state: profile.state,
+    stateCode: profile.stateCode,
+    addressLine1: profile.addressLine1,
+    ...(addressLine2 ? { addressLine2 } : {}),
+    city: profile.city,
+    pincode: profile.pincode,
+  };
 }

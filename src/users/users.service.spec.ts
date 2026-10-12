@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
+import { Order } from '../orders/schemas/order.schema';
+import { TaxInvoice } from '../invoices/schemas/tax-invoice.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -80,6 +82,18 @@ describe('UsersService', () => {
         {
           provide: getModelToken(User.name),
           useValue: mockUserModel,
+        },
+        {
+          provide: getModelToken(Order.name),
+          useValue: {
+            countDocuments: jest.fn().mockReturnValue(chain(0)),
+          },
+        },
+        {
+          provide: getModelToken(TaxInvoice.name),
+          useValue: {
+            countDocuments: jest.fn().mockReturnValue(chain(0)),
+          },
         },
       ],
     }).compile();
@@ -405,12 +419,13 @@ describe('UsersService', () => {
 
   describe('hardDelete', () => {
     it('should permanently delete a user', async () => {
+      mockUserModel.findById.mockReturnValue(chain({ _id: OID }));
       mockUserModel.findByIdAndDelete.mockReturnValue(chain({ _id: OID }));
       await expect(service.hardDelete(OID)).resolves.toBeUndefined();
     });
 
     it('should throw NotFoundException', async () => {
-      mockUserModel.findByIdAndDelete.mockReturnValue(chain(null));
+      mockUserModel.findById.mockReturnValue(chain(null));
       await expect(service.hardDelete('missing')).rejects.toThrow(
         NotFoundException,
       );

@@ -89,7 +89,7 @@ export class InstanceConfigController {
   @ApiOperation({
     summary: 'Update this deployment instance configuration',
     description:
-      'Changes only the fields you send. Send null or an empty string to clear logoUrl or faviconUrl.',
+      'Changes only the fields you send. Send null or an empty string to clear logoUrl or faviconUrl. Nested seller and taxConfig keys update on their own. A new GSTIN is stored as sent, with no checksum or state-prefix check.',
   })
   @ApiResponse({
     status: 200,

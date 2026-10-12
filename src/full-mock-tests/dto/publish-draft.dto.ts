@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,8 +9,19 @@ import {
   Min,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { AccessMode } from '../../common/enums/access-mode.enum';
 
 export class PublishDraftDto {
+  @ApiPropertyOptional({
+    description:
+      'Paper access mode. FREE = no entitlement required; ENTITLED = requires covering entitlement. Defaults to FREE.',
+    enum: AccessMode,
+    default: AccessMode.FREE,
+  })
+  @IsOptional()
+  @IsEnum(AccessMode)
+  accessMode?: AccessMode;
+
   @ApiPropertyOptional({
     description:
       'Title shown to students. Defaults to the exam name if omitted.',

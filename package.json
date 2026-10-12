@@ -24,6 +24,10 @@
     "test:unit": "jest --config jest.config.js --testPathPatterns=spec.ts",
     "test:integration": "jest --config jest.config.js --testPathPatterns=e2e-spec.ts",
     "smoke": "bash scripts/smoke-api.sh",
+    "commerce:backfill-access-mode-free": "ts-node -r tsconfig-paths/register scripts/backfill-mocktest-access-mode-free.ts",
+    "commerce:report-exam-category-mismatches": "ts-node -r tsconfig-paths/register scripts/report-exam-category-mismatches.ts",
+    "commerce:seed-tax-config": "ts-node -r tsconfig-paths/register scripts/commerce-seed/seed-tax-config.ts",
+    "commerce:seed-local-tax-config": "npm run commerce:seed-tax-config",
     "test:all": "npm run test:unit && npm run test:e2e",
     "test:ci": "jest --config jest.config.js --coverage --watchAll=false --ci",
     "test:coverage": "jest --config jest.config.js --coverage --coverageReporters=text-lcov",
@@ -58,6 +62,8 @@
     "openai": "^6.45.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdfkit": "^0.20.2",
+    "razorpay": "^2.9.8",
     "reflect-metadata": "^0.1.14",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
@@ -75,6 +81,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^24.13.3",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/supertest": "^6.0.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
@@ -92,22 +99,5 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0"
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
   }
 }

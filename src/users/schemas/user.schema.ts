@@ -119,6 +119,33 @@ export class UserInteractions {
 export const UserInteractionsSchema =
   SchemaFactory.createForClass(UserInteractions);
 
+/** GST checkout identity. Separate from `location`, which is not a billing address. */
+@Schema({ _id: false })
+export class UserBillingProfile {
+  @Prop({ required: true, trim: true, maxlength: 120 })
+  name: string;
+
+  @Prop({ required: true, trim: true })
+  state: string;
+
+  @Prop({ required: true, trim: true })
+  stateCode: string;
+
+  @Prop({ required: true, trim: true, maxlength: 200 })
+  addressLine1: string;
+
+  @Prop({ trim: true, maxlength: 200 })
+  addressLine2?: string;
+
+  @Prop({ required: true, trim: true, maxlength: 80 })
+  city: string;
+
+  @Prop({ required: true, trim: true })
+  pincode: string;
+}
+export const UserBillingProfileSchema =
+  SchemaFactory.createForClass(UserBillingProfile);
+
 // ─── Main User schema ──────────────────────────────────────────────────────────
 
 @Schema({
@@ -222,6 +249,10 @@ export class User {
   // ── Group 6: Interactions (personalisation & ads) ─────────────────────────
   @Prop({ type: UserInteractionsSchema, default: () => ({}) })
   interactions: UserInteractions;
+
+  /** Last checkout billing identity. Omitted until the user saves one. */
+  @Prop({ type: UserBillingProfileSchema })
+  billingProfile?: UserBillingProfile;
 
   // Timestamps added automatically by mongoose (timestamps: true)
   createdAt?: Date;

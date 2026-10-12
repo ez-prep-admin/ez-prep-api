@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { useContainer } from 'class-validator';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { CommerceConfigService } from './commerce/commerce-config.service';
 import { securityConfig, getCorsConfig } from './common/config/security.config';
 import { ObserveInstrument } from './common/observability/observe.config';
 import { observeEnabled } from './common/observability/observe.policy';
@@ -47,9 +48,13 @@ async function bootstrap() {
   try {
     // NestJs Observability for monitoring and logging
     const app = await NestFactory.create(AppModule, {
+      rawBody: true,
       ...(observeEnabled() ? { instrument: ObserveInstrument } : {}),
     });
     const configService = app.get(ConfigService);
+    const trustProxyHops = app.get(CommerceConfigService).settings
+      .trustProxyHops;
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
     // Enable class-validator to use NestJS dependency injection
     useContainer(app.select(AppModule), { fallbackOnErrors: true });

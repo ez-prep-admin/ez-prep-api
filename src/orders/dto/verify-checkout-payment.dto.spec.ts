@@ -1,0 +1,64 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { useContainer } from 'class-validator';
+import { PaymentGatewayRegistry } from '../../payments/domain/payment-gateway.registry';
+import { RegisteredPaymentProviderConstraint } from '../../payments/domain/registered-payment-provider.constraint';
+import { VerifyCheckoutPaymentDto } from './verify-checkout-payment.dto';
+
+const pipe = new ValidationPipe({
+  transform: true,
+  whitelist: true,
+  forbidNonWhitelisted: true,
+  transformOptions: { enableImplicitConversion: true },
+});
+
+async function parse(body: Record<string, unknown>) {
+  return pipe.transform(body, {
+    type: 'body',
+    metatype: VerifyCheckoutPaymentDto,
+  });
+}
+
+describe('VerifyCheckoutPaymentDto', () => {
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        RegisteredPaymentProviderConstraint,
+        {
+          provide: PaymentGatewayRegistry,
+          useValue: {
+            isRegistered: (value: string) =>
+              value === 'razorpay' || value === 'fake',
+          },
+        },
+      ],
+    }).compile();
+    useContainer(moduleRef, { fallbackOnErrors: true });
+  });
+  it('requires the three Razorpay fields when provider is razorpay', async () => {
+    await expect(
+      parse({
+        provider: 'razorpay',
+        providerPayload: { razorpay_order_id: 'order_1' },
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    const dto = await parse({
+      provider: 'razorpay',
+      providerPayload: {
+        razorpay_order_id: 'order_1',
+        razorpay_payment_id: 'pay_1',
+        razorpay_signature: 'sig',
+      },
+    });
+    expect(dto.provider).toBe('razorpay');
+  });
+
+  it('accepts a fake payload without Razorpay fields', async () => {
+    const dto = await parse({
+      provider: 'fake',
+      providerPayload: { fakePaymentId: 'pay_test_1' },
+    });
+    expect(dto.providerPayload).toEqual({ fakePaymentId: 'pay_test_1' });
+  });
+});

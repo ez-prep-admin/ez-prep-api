@@ -28,6 +28,22 @@ import { InstanceConfigModule } from './instance-config/instance-config.module';
 import { ValidationModule } from './common/validators/validation.module';
 import { AwsModule } from './aws/aws.module';
 import { RedisModule } from './redis/redis.module';
+import { CommerceModule } from './commerce/commerce.module';
+import { CommerceAuditModule } from './commerce-audit/commerce-audit.module';
+import { EntitlementsModule } from './entitlements/entitlements.module';
+import { AccessModule } from './access/access-control.module';
+import { ProductsModule } from './products/products.module';
+import { OffersModule } from './offers/offers.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { TaxModule } from './tax/tax.module';
+import { PaymentsModule } from './payments/payments.module';
+import { OrdersModule } from './orders/orders.module';
+import { AccountingModule } from './accounting/accounting.module';
+import { CommerceHealthModule } from './commerce-health/commerce-health.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { MetaModule } from './meta/meta.module';
+import { RefundsModule } from './refunds/refunds.module';
 import { securityConfig } from './common/config/security.config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -84,6 +100,7 @@ const observeRootModule = createObserveRootModule();
     }),
     // Rate limiting configuration
     ThrottlerModule.forRoot([securityConfig.rateLimit]),
+    CommerceModule,
     ...(observeRootModule ? [observeRootModule] : []),
     // AWS services (Global module)
     AwsModule,
@@ -110,6 +127,21 @@ const observeRootModule = createObserveRootModule();
     ImportModule,
     CurrentAffairsModule,
     InstanceConfigModule,
+    CommerceAuditModule,
+    EntitlementsModule,
+    AccessModule,
+    ProductsModule,
+    OffersModule,
+    CatalogModule,
+    TaxModule,
+    PaymentsModule,
+    OrdersModule,
+    CommerceHealthModule,
+    AccountingModule,
+    WebhooksModule,
+    InvoicesModule,
+    RefundsModule,
+    MetaModule,
   ],
   controllers: [AppController],
   providers: [
