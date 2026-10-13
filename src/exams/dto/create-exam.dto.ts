@@ -203,6 +203,16 @@ export class CreateExamDto {
 
   @ApiPropertyOptional({
     description:
+      'Whether this exam is listed on the student dashboard, search, and profile exam picker. Defaults to false. Does not affect isActive.',
+    example: false,
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  showInApp?: boolean;
+
+  @ApiPropertyOptional({
+    description:
       'Score-percent cutoffs for result messages. All four keys are required when set: needs_improvement at 0, then strictly increasing good, very_good, and excellent.',
     type: [PerformanceBandDto],
   })
