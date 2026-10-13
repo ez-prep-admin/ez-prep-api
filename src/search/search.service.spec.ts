@@ -84,7 +84,12 @@ describe('SearchService', () => {
     expect(result.exams[0].category.id).toBe(categoryId);
     expect(result.exams[0].examGroup.id).toBe(groupId);
     expect(categoryModel.find).toHaveBeenCalled();
-    expect(examModel.find).toHaveBeenCalled();
+    expect(examModel.find).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isActive: true,
+        showInApp: true,
+      }),
+    );
   });
 
   it('should fall back to _id when id is missing and clamp limit', async () => {

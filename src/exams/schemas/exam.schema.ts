@@ -96,6 +96,10 @@ export class Exam {
   @Prop({ default: false })
   trending: boolean;
 
+  /** Listed on the student dashboard, search, and profile exam picker. Missing values stay hidden. */
+  @Prop({ default: false })
+  showInApp: boolean;
+
   /** Score-percent cutoffs for student result messages. Missing values use app defaults. */
   @Prop({ type: [PerformanceBandSchema], default: undefined })
   performanceBands?: PerformanceBand[];

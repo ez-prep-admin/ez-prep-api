@@ -50,6 +50,7 @@ export class SearchService {
 
     const examQuery: FilterQuery<ExamDocument> = {
       isActive: true,
+      showInApp: true,
       $or: [{ name: regexPattern }, { description: regexPattern }],
     };
 

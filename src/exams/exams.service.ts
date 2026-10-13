@@ -144,6 +144,7 @@ export class ExamsService {
     const examQuery: FilterQuery<Exam> = {
       isActive: true,
       isDeleted: { $ne: true },
+      showInApp: true,
     };
 
     // Get all active categories
@@ -484,6 +485,7 @@ export class ExamsService {
       ...obj,
       id: obj.id || exam._id.toString(),
       trending: obj.trending === true,
+      showInApp: obj.showInApp === true,
       category: this.toRefId(obj.category) || '',
       examGroup: this.toRefId(obj.examGroup) || '',
       subjects: obj.subjects?.map(s => ({

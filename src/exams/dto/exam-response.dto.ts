@@ -148,6 +148,14 @@ export class ExamResponseDto {
   @Expose()
   trending: boolean;
 
+  @ApiProperty({
+    description:
+      'Whether this exam is listed on the student dashboard, search, and profile exam picker. False when unset. Independent of isActive.',
+    example: false,
+  })
+  @Expose()
+  showInApp: boolean;
+
   @ApiPropertyOptional({
     description:
       'Score-percent cutoffs for result messages. Omitted when the exam uses app defaults.',

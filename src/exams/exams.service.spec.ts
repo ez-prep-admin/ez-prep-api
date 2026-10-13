@@ -141,6 +141,9 @@ describe('ExamsService', () => {
       examModel.countDocuments.mockReturnValue(chain(1));
       const result = await service.findAll(1, 10, 'sbi', OID, true);
       expect(result.data).toHaveLength(1);
+      expect(examModel.find).toHaveBeenCalledWith(
+        expect.not.objectContaining({ showInApp: true }),
+      );
     });
   });
 
@@ -191,6 +194,11 @@ describe('ExamsService', () => {
       );
 
       const result = await service.getExamsByCategory();
+      expect(examModel.find).toHaveBeenCalledWith({
+        isActive: true,
+        isDeleted: { $ne: true },
+        showInApp: true,
+      });
       expect(result).toHaveLength(1);
       expect(result[0].exams[0].duration).toBe('1h 30min');
       expect(result[0].exams[0].testsCount).toBe(3);
