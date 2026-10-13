@@ -7,8 +7,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { StudyTimePreference } from '../common/enums/study-time-preference.enum';
-import { SubscriptionPlan } from '../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../common/enums/subscription-status.enum';
+import { activeEntitlementFilter } from '../accounting/accounting.filters';
+import {
+  Entitlement,
+  EntitlementDocument,
+} from '../entitlements/schemas/entitlement.schema';
 import {
   MockTestAttempt,
   MockTestAttemptDocument,
@@ -40,7 +43,10 @@ import {
   AppUserDetailDto,
   AppUserDetailProfileDto,
 } from './dto/app-user-detail.dto';
-import { AppUserListItemDto } from './dto/app-user-list-item.dto';
+import {
+  AppUserAccessDto,
+  AppUserListItemDto,
+} from './dto/app-user-list-item.dto';
 import { PaginatedAppUsersResponseDto } from './dto/paginated-app-users-response.dto';
 
 @Injectable()
@@ -49,6 +55,8 @@ export class AdminUsersService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     @InjectModel(MockTestAttempt.name)
     private readonly attemptModel: Model<MockTestAttemptDocument>,
+    @InjectModel(Entitlement.name)
+    private readonly entitlementModel: Model<EntitlementDocument>,
   ) {}
 
   async listAppUsers(
@@ -73,17 +81,24 @@ export class AdminUsersService {
     ]);
 
     const learners = excludeNonAppUsers(documents);
-    const attemptCounts = await this.countAttemptsByUser(
-      learners.map(user => user._id as Types.ObjectId),
-    );
+    const learnerIds = learners.map(user => user._id as Types.ObjectId);
+    const [attemptCounts, accessByUser] = await Promise.all([
+      this.countAttemptsByUser(learnerIds),
+      this.loadAccess(learnerIds),
+    ]);
 
     const data = learners
-      .map(user =>
-        this.toListItem(
+      .map(user => {
+        const item = this.toListItem(
           user,
           attemptCounts.get(String(user._id)) ?? EMPTY_ATTEMPT_ACTIVITY,
-        ),
-      )
+        );
+        if (!item) {
+          return null;
+        }
+        item.access = accessByUser.get(String(user._id)) ?? EMPTY_USER_ACCESS;
+        return item;
+      })
       .filter((item): item is AppUserListItemDto => item !== null);
 
     const totalPages = Math.ceil(total / validLimit);
@@ -129,13 +144,14 @@ export class AdminUsersService {
     }
 
     const learnerId = user._id as Types.ObjectId;
-    const [attemptCounts, performanceRows] = await Promise.all([
+    const [attemptCounts, performanceRows, accessByUser] = await Promise.all([
       this.countAttemptsByUser([learnerId]),
       this.attemptModel
         .aggregate<UserPerformanceAggregate>(
           buildUserPerformancePipeline(learnerId),
         )
         .exec(),
+      this.loadAccess([learnerId]),
     ]);
 
     const activity =
@@ -144,6 +160,7 @@ export class AdminUsersService {
     if (!listItem) {
       throw new NotFoundException('Learner not found');
     }
+    listItem.access = accessByUser.get(String(user._id)) ?? EMPTY_USER_ACCESS;
 
     const performance = mapUserPerformance(
       Array.isArray(performanceRows) ? performanceRows[0] : undefined,
@@ -178,6 +195,26 @@ export class AdminUsersService {
       counts.set(String(row._id), normalizeAttemptActivity(row));
     }
     return counts;
+  }
+
+  private async loadAccess(
+    userIds: Types.ObjectId[],
+  ): Promise<Map<string, AppUserAccessDto>> {
+    const access = new Map<string, AppUserAccessDto>();
+    if (userIds.length === 0) {
+      return access;
+    }
+
+    const rows = await this.entitlementModel
+      .find({
+        userId: { $in: userIds },
+        ...activeEntitlementFilter(new Date()),
+      })
+      .select('userId expiresAt')
+      .lean()
+      .exec();
+
+    return summarizeAccess(rows);
   }
 
   private toListItem(
@@ -217,9 +254,6 @@ export class AdminUsersService {
     }
 
     const location = obj.location as AppUserListItemDto['location'] | undefined;
-    const subscription = obj.subscription as
-      | { plan?: SubscriptionPlan; status?: SubscriptionStatus }
-      | undefined;
     const counts = normalizeAttemptActivity(activity);
 
     return {
@@ -232,10 +266,7 @@ export class AdminUsersService {
       isActive: obj.isActive !== false,
       gender: obj.gender as AppUserListItemDto['gender'],
       location,
-      subscription: {
-        plan: subscription?.plan ?? SubscriptionPlan.FREE,
-        status: subscription?.status ?? SubscriptionStatus.ACTIVE,
-      },
+      access: EMPTY_USER_ACCESS,
       membershipTier:
         obj.membershipTier as AppUserListItemDto['membershipTier'],
       badgesEarnedCount:
@@ -266,21 +297,10 @@ export class AdminUsersService {
     listItem: AppUserListItemDto,
   ): AppUserDetailProfileDto {
     const obj = user.toObject() as Record<string, unknown>;
-    const subscription = (obj.subscription ?? {}) as Record<string, unknown>;
     const preferences = (obj.preferences ?? {}) as Record<string, unknown>;
     const study = studyPreference(preferences);
     const profile: AppUserDetailProfileDto = {
       ...listItem,
-      subscription: {
-        plan: listItem.subscription?.plan ?? SubscriptionPlan.FREE,
-        status: listItem.subscription?.status ?? SubscriptionStatus.ACTIVE,
-        startedAt: asOptionalDate(subscription.startedAt),
-        expiresAt: asOptionalDate(subscription.expiresAt),
-        trialEndsAt: asOptionalDate(subscription.trialEndsAt),
-        ...(typeof subscription.autoRenew === 'boolean'
-          ? { autoRenew: subscription.autoRenew }
-          : {}),
-      },
     };
 
     const bio = asOptionalString(obj.bio);
@@ -304,6 +324,52 @@ export class AdminUsersService {
     }
     return profile;
   }
+}
+
+const EMPTY_USER_ACCESS: AppUserAccessDto = {
+  paid: false,
+  usableCount: 0,
+};
+
+type AccessRow = {
+  userId?: Types.ObjectId | string;
+  expiresAt?: Date | null;
+};
+
+function summarizeAccess(rows: AccessRow[]): Map<string, AppUserAccessDto> {
+  const grouped = new Map<
+    string,
+    { count: number; lifetime: boolean; soonest?: Date }
+  >();
+
+  for (const row of rows) {
+    if (row.userId == null) {
+      continue;
+    }
+    const id = String(row.userId);
+    const current = grouped.get(id) ?? { count: 0, lifetime: false };
+    current.count += 1;
+    const expiresAt = asOptionalDate(row.expiresAt);
+    if (!expiresAt) {
+      current.lifetime = true;
+    } else if (!current.soonest || expiresAt < current.soonest) {
+      current.soonest = expiresAt;
+    }
+    grouped.set(id, current);
+  }
+
+  const access = new Map<string, AppUserAccessDto>();
+  for (const [id, current] of grouped) {
+    const summary: AppUserAccessDto = {
+      paid: true,
+      usableCount: current.count,
+    };
+    if (!current.lifetime && current.soonest) {
+      summary.expiresAt = current.soonest;
+    }
+    access.set(id, summary);
+  }
+  return access;
 }
 
 const STUDY_TIMES = new Set<string>(Object.values(StudyTimePreference));

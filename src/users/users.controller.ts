@@ -28,7 +28,6 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
-import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -156,7 +155,7 @@ export class UsersController {
     summary: 'Get own profile',
     description:
       'Returns the full profile of the authenticated user, including extended fields ' +
-      '(bio, location, subscription, preferences, interactions, membership tier, etc.).',
+      '(bio, location, preferences, interactions, membership tier, etc.).',
   })
   @ApiResponse({
     status: 200,
@@ -300,32 +299,6 @@ export class UsersController {
   ): Promise<{ message: string; data: UserResponseDto }> {
     const user = await this.usersService.update(id, updateUserDto);
     return { message: 'User updated successfully', data: user };
-  }
-
-  @Patch(':id/subscription')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @ApiBearerAuth()
-  @ApiOperation({
-    summary: 'Update user subscription (Admin only)',
-    description:
-      'Updates the subscription plan, status, and billing dates for a user.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Subscription updated successfully',
-    type: UserResponseDto,
-  })
-  @ApiBadRequestResponse({ description: 'Validation failed' })
-  @ApiNotFoundResponse({ description: 'User not found' })
-  @ApiUnauthorizedResponse({ description: 'Authentication required' })
-  @ApiForbiddenResponse({ description: 'Admin access required' })
-  async updateSubscription(
-    @Param('id') id: string,
-    @Body() dto: UpdateSubscriptionDto,
-  ): Promise<{ message: string; data: UserResponseDto }> {
-    const user = await this.usersService.updateSubscription(id, dto);
-    return { message: 'Subscription updated successfully', data: user };
   }
 
   @Patch(':id/toggle-status')

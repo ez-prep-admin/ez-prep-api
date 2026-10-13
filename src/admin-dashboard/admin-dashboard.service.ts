@@ -144,7 +144,7 @@ export class AdminDashboardService {
     const last7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const [totalLearners, activeLearners, newLast7Days, newLast30Days, byPlan] =
+    const [totalLearners, activeLearners, newLast7Days, newLast30Days] =
       await Promise.all([
         this.userModel.countDocuments(LEARNER),
         this.userModel.countDocuments({ ...LEARNER, isActive: true }),
@@ -156,16 +156,6 @@ export class AdminDashboardService {
           ...LEARNER,
           createdAt: { $gte: last30 },
         }),
-        this.userModel.aggregate<{ _id: string; count: number }>([
-          { $match: LEARNER },
-          {
-            $group: {
-              _id: { $ifNull: ['$subscription.plan', 'unknown'] },
-              count: { $sum: 1 },
-            },
-          },
-          { $sort: { count: -1 } },
-        ]),
       ]);
 
     return {
@@ -174,10 +164,6 @@ export class AdminDashboardService {
       inactiveLearners: totalLearners - activeLearners,
       newLast7Days,
       newLast30Days,
-      byPlan: byPlan.map(row => ({
-        plan: row._id || 'unknown',
-        count: row.count,
-      })),
     };
   }
 

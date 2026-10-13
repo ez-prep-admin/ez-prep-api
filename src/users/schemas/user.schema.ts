@@ -3,8 +3,6 @@ import { Document, Query, Types } from 'mongoose';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { Gender } from '../../common/enums/gender.enum';
 import { MembershipTier } from '../../common/enums/membership-tier.enum';
-import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../../common/enums/subscription-status.enum';
 import { StudyTimePreference } from '../../common/enums/study-time-preference.enum';
 
 export type UserDocument = User & Document;
@@ -27,37 +25,6 @@ export class UserLocation {
   timezone?: string;
 }
 export const UserLocationSchema = SchemaFactory.createForClass(UserLocation);
-
-@Schema({ _id: false })
-export class UserSubscription {
-  @Prop({
-    type: String,
-    enum: SubscriptionPlan,
-    default: SubscriptionPlan.FREE,
-  })
-  plan: SubscriptionPlan;
-
-  @Prop({
-    type: String,
-    enum: SubscriptionStatus,
-    default: SubscriptionStatus.ACTIVE,
-  })
-  status: SubscriptionStatus;
-
-  @Prop()
-  startedAt?: Date;
-
-  @Prop()
-  expiresAt?: Date;
-
-  @Prop()
-  trialEndsAt?: Date;
-
-  @Prop({ default: false })
-  autoRenew: boolean;
-}
-export const UserSubscriptionSchema =
-  SchemaFactory.createForClass(UserSubscription);
 
 @Schema({ _id: false })
 export class NotificationPreferences {
@@ -224,11 +191,7 @@ export class User {
   @Prop()
   targetExamDate?: Date;
 
-  // ── Group 3: Subscription summary ────────────────────────────────────────
-  @Prop({ type: UserSubscriptionSchema, default: () => ({}) })
-  subscription: UserSubscription;
-
-  // ── Group 4: Achievement / gamification ──────────────────────────────────
+  // ── Achievement / gamification ────────────────────────────────────────────
   @Prop({
     type: String,
     enum: MembershipTier,
@@ -267,7 +230,6 @@ UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ googleSub: 1 }, { unique: true, sparse: true });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
 UserSchema.index({ membershipTier: 1 });
-UserSchema.index({ 'subscription.plan': 1, 'subscription.status': 1 });
 UserSchema.index({ targetExam: 1 }, { sparse: true });
 UserSchema.index({ 'interactions.interestedExams': 1 }, { sparse: true });
 

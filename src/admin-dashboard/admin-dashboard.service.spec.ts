@@ -145,13 +145,12 @@ describe('AdminDashboardService', () => {
       .mockResolvedValueOnce(7)
       .mockResolvedValueOnce(2)
       .mockResolvedValueOnce(5);
-    userModel.aggregate.mockResolvedValue([{ _id: 'free', count: 8 }]);
 
     const result = await service.getUsers();
     expect(result.totalLearners).toBe(10);
     expect(result.activeLearners).toBe(7);
     expect(result.inactiveLearners).toBe(3);
-    expect(result.byPlan).toEqual([{ plan: 'free', count: 8 }]);
+    expect(result).not.toHaveProperty('byPlan');
     expect(userModel.countDocuments.mock.calls[0][0]).toEqual({
       role: UserRole.USER,
       isDeleted: { $ne: true },

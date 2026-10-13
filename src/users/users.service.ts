@@ -15,7 +15,6 @@ import { CreateAdminDto } from '../auth/dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
-import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -624,37 +623,6 @@ export class UsersService {
           e => new Types.ObjectId(e),
         );
       }
-    }
-
-    const user = await this.userModel
-      .findByIdAndUpdate(new Types.ObjectId(id), { $set }, { new: true })
-      .exec();
-
-    if (!user) {
-      throw new NotFoundException(`User with ID "${id}" not found`);
-    }
-
-    return this.toResponseDto(user);
-  }
-
-  // ── Subscription (admin-internal) ─────────────────────────────────────────
-
-  async updateSubscription(
-    id: string,
-    dto: UpdateSubscriptionDto,
-  ): Promise<UserResponseDto> {
-    const $set: Record<string, unknown> = {};
-
-    if (dto.plan !== undefined) $set['subscription.plan'] = dto.plan;
-    if (dto.status !== undefined) $set['subscription.status'] = dto.status;
-    if (dto.autoRenew !== undefined)
-      $set['subscription.autoRenew'] = dto.autoRenew;
-    if (dto.startedAt !== undefined)
-      $set['subscription.startedAt'] = new Date(dto.startedAt);
-    if (dto.expiresAt !== undefined)
-      $set['subscription.expiresAt'] = new Date(dto.expiresAt);
-    if (dto.trialEndsAt !== undefined) {
-      $set['subscription.trialEndsAt'] = new Date(dto.trialEndsAt);
     }
 
     const user = await this.userModel
