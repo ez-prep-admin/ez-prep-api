@@ -1,23 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StudyTimePreference } from '../../common/enums/study-time-preference.enum';
-import {
-  AppUserListItemDto,
-  AppUserSubscriptionDto,
-} from './app-user-list-item.dto';
-
-export class AppUserSubscriptionDetailDto extends AppUserSubscriptionDto {
-  @ApiPropertyOptional()
-  startedAt?: Date;
-
-  @ApiPropertyOptional()
-  expiresAt?: Date;
-
-  @ApiPropertyOptional()
-  trialEndsAt?: Date;
-
-  @ApiPropertyOptional({ example: false })
-  autoRenew?: boolean;
-}
+import { AppUserListItemDto } from './app-user-list-item.dto';
 
 export class AppUserStudyDto {
   @ApiPropertyOptional({ enum: StudyTimePreference })
@@ -39,9 +22,6 @@ export class AppUserDetailProfileDto extends AppUserListItemDto {
 
   @ApiPropertyOptional()
   lastTierUpdatedAt?: Date;
-
-  @ApiProperty({ type: AppUserSubscriptionDetailDto })
-  subscription: AppUserSubscriptionDetailDto;
 
   @ApiPropertyOptional({ type: AppUserStudyDto })
   study?: AppUserStudyDto;

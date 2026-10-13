@@ -20,7 +20,7 @@ import {
  * Sole authorizer for mock-test access (access-control.md).
  * Controllers and frontends must not reimplement grant hierarchy.
  *
- * Do not consult User.subscription / membershipTier (D-06, R-13).
+ * Do not consult membershipTier (D-06, R-13).
  */
 @Injectable()
 export class AccessControlService {

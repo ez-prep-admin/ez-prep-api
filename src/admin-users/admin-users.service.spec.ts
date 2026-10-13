@@ -5,13 +5,24 @@ import { Types } from 'mongoose';
 import { AdminUsersService } from './admin-users.service';
 import { User } from '../users/schemas/user.schema';
 import { MockTestAttempt } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
+import { Entitlement } from '../entitlements/schemas/entitlement.schema';
+import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
-import { SubscriptionPlan } from '../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../common/enums/subscription-status.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 import { Gender } from '../common/enums/gender.enum';
 import { APP_USER_ROLE } from './admin-users.guardrails';
 import { buildAttemptActivityPipeline } from './admin-users.attempt-counts';
+
+function selectChain(result: unknown) {
+  const q: any = {
+    exec: jest.fn().mockResolvedValue(result),
+    select: jest.fn(),
+    lean: jest.fn(),
+  };
+  q.select.mockReturnValue(q);
+  q.lean.mockReturnValue(q);
+  return q;
+}
 
 function chain(result: unknown) {
   const q: any = {
@@ -41,10 +52,6 @@ function learnerDoc(overrides: Record<string, unknown> = {}) {
     avatarUrl: 'https://cdn.example/a.png',
     gender: Gender.FEMALE,
     location: { city: 'Bengaluru', state: 'KA', country: 'IN' },
-    subscription: {
-      plan: SubscriptionPlan.PREMIUM,
-      status: SubscriptionStatus.ACTIVE,
-    },
     membershipTier: MembershipTier.GOLD,
     badgesEarnedCount: 4,
     createdAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -74,6 +81,9 @@ describe('AdminUsersService', () => {
   const attemptModel: any = {
     aggregate: jest.fn(),
   };
+  const entitlementModel: any = {
+    find: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -84,11 +94,16 @@ describe('AdminUsersService', () => {
           provide: getModelToken(MockTestAttempt.name),
           useValue: attemptModel,
         },
+        {
+          provide: getModelToken(Entitlement.name),
+          useValue: entitlementModel,
+        },
       ],
     }).compile();
 
     service = module.get(AdminUsersService);
     jest.clearAllMocks();
+    entitlementModel.find.mockReturnValue(selectChain([]));
   });
 
   it('should be defined', () => {
@@ -160,11 +175,8 @@ describe('AdminUsersService', () => {
         topicWise: { finished: 2, open: 0 },
       },
       targetExam: { id: 'exam1', name: 'UPSC' },
-      subscription: {
-        plan: SubscriptionPlan.PREMIUM,
-        status: SubscriptionStatus.ACTIVE,
-      },
     });
+    expect(result.data[0]).not.toHaveProperty('subscription');
     expect(JSON.stringify(result.data[0])).not.toContain('anita@example.com');
     expect(JSON.stringify(result.data[0])).not.toContain('+919876543210');
     expect(result.data[0]).not.toHaveProperty('username');
@@ -201,6 +213,7 @@ describe('AdminUsersService', () => {
     const result = await service.listAppUsers();
 
     expect(attemptModel.aggregate).not.toHaveBeenCalled();
+    expect(entitlementModel.find).not.toHaveBeenCalled();
     expect(result.data).toEqual([]);
     expect(result.pagination.total).toBe(0);
     expect(result.pagination.totalPages).toBe(0);
@@ -231,6 +244,7 @@ describe('AdminUsersService', () => {
     const result = await service.listAppUsers();
 
     expect(attemptModel.aggregate).not.toHaveBeenCalled();
+    expect(entitlementModel.find).not.toHaveBeenCalled();
     expect(result.data).toEqual([]);
   });
 
@@ -292,10 +306,9 @@ describe('AdminUsersService', () => {
     expect(result.data[0].targetExam).toBeUndefined();
   });
 
-  it('defaults subscription and treats missing isActive as true', async () => {
+  it('treats missing isActive as true', async () => {
     const user = learnerDoc({
       isActive: undefined,
-      subscription: undefined,
       phoneNumber: undefined,
       avatarUrl: undefined,
       badgesEarnedCount: undefined,
@@ -314,10 +327,7 @@ describe('AdminUsersService', () => {
 
     const result = await service.listAppUsers();
     expect(result.data[0].isActive).toBe(true);
-    expect(result.data[0].subscription).toEqual({
-      plan: SubscriptionPlan.FREE,
-      status: SubscriptionStatus.ACTIVE,
-    });
+    expect(result.data[0]).not.toHaveProperty('subscription');
     expect(result.data[0].badgesEarnedCount).toBe(0);
     expect(result.data[0].createdAt).toEqual(new Date(0));
   });
@@ -438,6 +448,61 @@ describe('AdminUsersService', () => {
     expect(payload).not.toContain('9876543210');
     expect(payload).toContain('gmail.com');
   });
+
+  it('resolves paid access for the page in one usable-entitlement query', async () => {
+    const paidId = '507f1f77bcf86cd799439011';
+    const lifetimeId = '507f1f77bcf86cd799439012';
+    const soon = new Date('2026-06-01T00:00:00.000Z');
+    const later = new Date('2026-12-01T00:00:00.000Z');
+    userModel.find.mockReturnValue(
+      chain([
+        learnerDoc({ id: paidId, _id: paidId, name: 'Paid Learner' }),
+        learnerDoc({
+          id: lifetimeId,
+          _id: lifetimeId,
+          name: 'Lifetime Learner',
+        }),
+      ]),
+    );
+    userModel.countDocuments.mockReturnValue(chain(2));
+    attemptModel.aggregate.mockReturnValue(chain([]));
+    entitlementModel.find.mockReturnValue(
+      selectChain([
+        { userId: paidId, expiresAt: later },
+        { userId: paidId, expiresAt: soon },
+        { userId: lifetimeId, expiresAt: null },
+        { userId: lifetimeId, expiresAt: later },
+      ]),
+    );
+
+    const result = await service.listAppUsers();
+
+    expect(entitlementModel.find).toHaveBeenCalledTimes(1);
+    const filter = entitlementModel.find.mock.calls[0][0];
+    expect(filter.userId).toEqual({ $in: [paidId, lifetimeId] });
+    expect(filter.status).toBe(EntitlementStatus.ACTIVE);
+    expect(filter.startsAt).toEqual({ $lte: expect.any(Date) });
+    expect(filter.$or).toEqual([
+      { expiresAt: null },
+      { expiresAt: { $gt: expect.any(Date) } },
+    ]);
+    expect(result.data.map(item => item.access)).toEqual([
+      { paid: true, usableCount: 2, expiresAt: soon },
+      { paid: true, usableCount: 2 },
+    ]);
+  });
+
+  it('treats a learner with no usable grant as free', async () => {
+    const user = learnerDoc();
+    userModel.find.mockReturnValue(chain([user]));
+    userModel.countDocuments.mockReturnValue(chain(1));
+    attemptModel.aggregate.mockReturnValue(chain([]));
+
+    const result = await service.listAppUsers();
+
+    expect(result.data[0].access).toEqual({ paid: false, usableCount: 0 });
+    expect(result.data[0]).not.toHaveProperty('subscription');
+  });
 });
 
 describe('AdminUsersService.getAppUserDetails', () => {
@@ -450,6 +515,9 @@ describe('AdminUsersService.getAppUserDetails', () => {
   const attemptModel: any = {
     aggregate: jest.fn(),
   };
+  const entitlementModel: any = {
+    find: jest.fn(),
+  };
   const learnerId = '507f1f77bcf86cd799439011';
 
   beforeEach(async () => {
@@ -461,11 +529,16 @@ describe('AdminUsersService.getAppUserDetails', () => {
           provide: getModelToken(MockTestAttempt.name),
           useValue: attemptModel,
         },
+        {
+          provide: getModelToken(Entitlement.name),
+          useValue: entitlementModel,
+        },
       ],
     }).compile();
 
     service = module.get(AdminUsersService);
     jest.clearAllMocks();
+    entitlementModel.find.mockReturnValue(selectChain([]));
   });
 
   function detailUser(overrides: Record<string, unknown> = {}) {
@@ -480,12 +553,6 @@ describe('AdminUsersService.getAppUserDetails', () => {
         studyTime: 'morning',
         weeklyStudyGoalHours: 12,
         notifications: { email: false, promotionalOffers: true },
-      },
-      subscription: {
-        plan: SubscriptionPlan.PREMIUM,
-        status: SubscriptionStatus.ACTIVE,
-        startedAt: new Date('2026-01-01T00:00:00.000Z'),
-        autoRenew: true,
       },
       interactions: { likedTopics: ['secret-topic'] },
       googleSub: 'google-sub',
@@ -563,6 +630,7 @@ describe('AdminUsersService.getAppUserDetails', () => {
     );
     expect(userModel.findOne).not.toHaveBeenCalled();
     expect(attemptModel.aggregate).not.toHaveBeenCalled();
+    expect(entitlementModel.find).not.toHaveBeenCalled();
   });
 
   it('does not reveal admins or missing learners', async () => {
@@ -581,6 +649,7 @@ describe('AdminUsersService.getAppUserDetails', () => {
       '"role":"admin"',
     );
     expect(attemptModel.aggregate).not.toHaveBeenCalled();
+    expect(entitlementModel.find).not.toHaveBeenCalled();
   });
 
   it('treats an admin document as not found', async () => {
@@ -592,6 +661,20 @@ describe('AdminUsersService.getAppUserDetails', () => {
       'Learner not found',
     );
     expect(attemptModel.aggregate).not.toHaveBeenCalled();
+    expect(entitlementModel.find).not.toHaveBeenCalled();
+  });
+
+  it('marks the profile paid when a usable grant does not expire', async () => {
+    userModel.findOne.mockReturnValue(chain(detailUser()));
+    mockAggregates();
+    entitlementModel.find.mockReturnValue(
+      selectChain([{ userId: learnerId, expiresAt: null }]),
+    );
+
+    const result = await service.getAppUserDetails(learnerId);
+
+    expect(result.profile.access).toEqual({ paid: true, usableCount: 1 });
+    expect(result.profile).not.toHaveProperty('subscription');
   });
 
   it('returns masked profile details, recent finished attempts, and analysis', async () => {
@@ -617,12 +700,8 @@ describe('AdminUsersService.getAppUserDetails', () => {
         fullExam: { finished: 1, open: 2 },
         topicWise: { finished: 3, open: 0 },
       },
-      subscription: {
-        plan: SubscriptionPlan.PREMIUM,
-        status: SubscriptionStatus.ACTIVE,
-        autoRenew: true,
-      },
       study: { studyTime: 'morning', weeklyStudyGoalHours: 12 },
+      access: { paid: false, usableCount: 0 },
     });
     expect(result.profile.dateOfBirth).toEqual(
       new Date('1998-04-05T00:00:00.000Z'),

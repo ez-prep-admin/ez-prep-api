@@ -41,7 +41,7 @@ export type GrantEntitlementOptions = {
 
 /**
  * Entitlements are the SoT for content access.
- * User.subscription / membershipTier must not be used for authorization (D-06, R-13).
+ * membershipTier must not be used for authorization (D-06, R-13).
  */
 @Injectable()
 export class EntitlementsService implements OnModuleInit {

@@ -3,8 +3,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { Gender } from '../../common/enums/gender.enum';
 import { MembershipTier } from '../../common/enums/membership-tier.enum';
-import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../../common/enums/subscription-status.enum';
 import { StudyTimePreference } from '../../common/enums/study-time-preference.enum';
 
 // ─── Nested response types ────────────────────────────────────────────────────
@@ -14,15 +12,6 @@ export class LocationResponseDto {
   @Expose() state?: string;
   @Expose() country?: string;
   @Expose() timezone?: string;
-}
-
-export class SubscriptionResponseDto {
-  @Expose() plan: SubscriptionPlan;
-  @Expose() status: SubscriptionStatus;
-  @Expose() startedAt?: Date;
-  @Expose() expiresAt?: Date;
-  @Expose() trialEndsAt?: Date;
-  @Expose() autoRenew: boolean;
 }
 
 export class NotificationPreferencesResponseDto {
@@ -145,16 +134,7 @@ export class UserResponseDto {
   @Expose()
   targetExamRemainingDays?: number;
 
-  // ── Group 3: Subscription ──────────────────────────────────────────────────
-  @ApiPropertyOptional({
-    description: 'Subscription summary',
-    type: SubscriptionResponseDto,
-  })
-  @Expose()
-  @Type(() => SubscriptionResponseDto)
-  subscription?: SubscriptionResponseDto;
-
-  // ── Group 4: Achievement ───────────────────────────────────────────────────
+  // ── Achievement ────────────────────────────────────────────────────────────
   @ApiPropertyOptional({ description: 'Membership tier', enum: MembershipTier })
   @Expose()
   membershipTier?: MembershipTier;

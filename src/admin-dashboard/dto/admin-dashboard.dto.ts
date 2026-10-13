@@ -46,14 +46,6 @@ export class NamedCountDto {
   count: number;
 }
 
-export class PlanCountDto {
-  @ApiProperty()
-  plan: string;
-
-  @ApiProperty()
-  count: number;
-}
-
 export class AdminDashboardUsersDto {
   @ApiProperty()
   totalLearners: number;
@@ -69,9 +61,6 @@ export class AdminDashboardUsersDto {
 
   @ApiProperty()
   newLast30Days: number;
-
-  @ApiProperty({ type: [PlanCountDto] })
-  byPlan: PlanCountDto[];
 }
 
 export class QuestionSubjectTopicRowDto {

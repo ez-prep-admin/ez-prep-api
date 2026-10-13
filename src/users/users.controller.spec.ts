@@ -19,7 +19,6 @@ describe('UsersController', () => {
     updateMe: jest.fn(),
     updatePreferences: jest.fn(),
     update: jest.fn(),
-    updateSubscription: jest.fn(),
     toggleUserStatus: jest.fn(),
     softDelete: jest.fn(),
     softDeleteMe: jest.fn(),
@@ -119,13 +118,6 @@ describe('UsersController', () => {
         data: user,
       },
     );
-  });
-
-  it('updateSubscription wraps the service result', async () => {
-    mockUsersService.updateSubscription.mockResolvedValue(user);
-    await expect(
-      controller.updateSubscription('u1', {} as any),
-    ).resolves.toMatchObject({ data: user });
   });
 
   it('toggleStatus uses activated/deactivated message', async () => {

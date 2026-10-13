@@ -44,7 +44,7 @@ export class AdminEntitlementsController {
     summary: 'Grant entitlement to a user (Admin)',
     description:
       'Creates an ADMIN_GRANT entitlement. durationPreset is converted to expiresAt server-side. ' +
-      'User.subscription is not used for access (entitlements are SoT).',
+      'Entitlements are the source of truth for access.',
   })
   @ApiOkResponse({ type: EntitlementApiResponseDto })
   async grant(

@@ -8,8 +8,7 @@ import { EntitlementStatus } from '../../common/enums/entitlement-status.enum';
 export type EntitlementDocument = Entitlement & Document;
 
 /**
- * Commerce entitlement — source of truth for content access (D-06).
- * Do not use User.subscription for authorization (R-13).
+ * Commerce entitlement — source of truth for content access (D-06, R-13).
  */
 @Schema({
   timestamps: true,

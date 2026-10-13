@@ -15,8 +15,6 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
 import { Gender } from '../common/enums/gender.enum';
 import { StudyTimePreference } from '../common/enums/study-time-preference.enum';
-import { SubscriptionPlan } from '../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../common/enums/subscription-status.enum';
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -611,31 +609,6 @@ describe('UsersService', () => {
         service.updatePreferences(OID, {
           studyTime: StudyTimePreference.NIGHT,
         }),
-      ).rejects.toThrow(NotFoundException);
-    });
-  });
-
-  describe('updateSubscription', () => {
-    it('should update subscription fields', async () => {
-      mockUserModel.findByIdAndUpdate.mockReturnValue(
-        chain(mockUserDocument({ name: 'John' })),
-      );
-      await expect(
-        service.updateSubscription(OID, {
-          plan: SubscriptionPlan.PREMIUM,
-          status: SubscriptionStatus.ACTIVE,
-          autoRenew: true,
-          startedAt: '2026-01-01',
-          expiresAt: '2027-01-01',
-          trialEndsAt: '2026-02-01',
-        } as any),
-      ).resolves.toBeDefined();
-    });
-
-    it('should throw NotFoundException', async () => {
-      mockUserModel.findByIdAndUpdate.mockReturnValue(chain(null));
-      await expect(
-        service.updateSubscription(OID, { plan: SubscriptionPlan.FREE }),
       ).rejects.toThrow(NotFoundException);
     });
   });

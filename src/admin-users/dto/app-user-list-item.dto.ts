@@ -1,8 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { MembershipTier } from '../../common/enums/membership-tier.enum';
-import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
-import { SubscriptionStatus } from '../../common/enums/subscription-status.enum';
 import { Gender } from '../../common/enums/gender.enum';
 
 export class AppUserLocationDto {
@@ -19,12 +17,28 @@ export class AppUserLocationDto {
   timezone?: string;
 }
 
-export class AppUserSubscriptionDto {
-  @ApiProperty({ enum: SubscriptionPlan, example: SubscriptionPlan.FREE })
-  plan: SubscriptionPlan;
+/**
+ * Paid access matches accounting: at least one usable entitlement.
+ */
+export class AppUserAccessDto {
+  @ApiProperty({
+    example: false,
+    description:
+      'True when the learner has a grant that is active, already started, and not past its end. A null end date is lifetime.',
+  })
+  paid: boolean;
 
-  @ApiProperty({ enum: SubscriptionStatus, example: SubscriptionStatus.ACTIVE })
-  status: SubscriptionStatus;
+  @ApiProperty({
+    example: 0,
+    description: 'How many of those usable grants the learner has.',
+  })
+  usableCount: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Soonest end among usable grants. Omitted when any usable grant does not expire.',
+  })
+  expiresAt?: Date;
 }
 
 export class AppUserTargetExamDto {
@@ -116,8 +130,8 @@ export class AppUserListItemDto {
   @ApiPropertyOptional({ type: AppUserLocationDto })
   location?: AppUserLocationDto;
 
-  @ApiPropertyOptional({ type: AppUserSubscriptionDto })
-  subscription?: AppUserSubscriptionDto;
+  @ApiProperty({ type: AppUserAccessDto })
+  access: AppUserAccessDto;
 
   @ApiPropertyOptional({ enum: MembershipTier })
   membershipTier?: MembershipTier;
