@@ -75,9 +75,7 @@ export class MockTest {
   })
   paperType: PaperType;
 
-  /**
-   * FREE until phase 15 / deliberate ENTITLED flip. Existing papers backfilled FREE.
-   */
+  /** FREE unless an admin marks the paper ENTITLED. */
   @Prop({
     type: String,
     enum: Object.values(AccessMode),

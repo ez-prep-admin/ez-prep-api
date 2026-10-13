@@ -60,7 +60,7 @@ export class InstanceSeller {
   @Prop({ trim: true })
   stateCode?: string;
 
-  /** Printed on new invoices only. TODO(golive): U-GST-08 */
+  /** Printed on new invoices only. */
   @Prop({ trim: true })
   signatoryName?: string;
 

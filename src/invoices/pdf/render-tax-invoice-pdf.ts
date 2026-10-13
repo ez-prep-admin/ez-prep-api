@@ -10,8 +10,7 @@ import { TaxInvoicePdfModel } from './tax-invoice-pdf.model';
  * B2C tax invoice PDF.
  * Drawn with the standard PDF fonts and no images, so the file stays small.
  * The rupee sign is the Noto Sans Bold outline; Helvetica has no ₹ glyph.
- * TODO(golive): U-GST-08 — computer-generated invoice; CA may still require a signatory or e-sign.
- * TODO(golive): U-GST-10 — place of supply is the buyer state collected at checkout.
+ * Computer-generated invoice. Place of supply is the buyer state collected at checkout.
  * TODO(golive): U-GST-07 — no IRN / e-invoice payload in this PDF.
  */
 
