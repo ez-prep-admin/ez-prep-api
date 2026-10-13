@@ -61,7 +61,9 @@ export class UpdateSellerDto {
   @MaxLength(8)
   stateCode?: string;
 
-  @ApiPropertyOptional({ description: 'Optional. TODO(golive): U-GST-08' })
+  @ApiPropertyOptional({
+    description: 'Optional signatory name printed on new invoices.',
+  })
   @Transform(trimString)
   @IsOptional()
   @IsString()

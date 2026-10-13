@@ -93,9 +93,9 @@ Date: YYYY-MM-DD
 
 | Script / command | When | Record in session log |
 | --- | --- | --- |
-| `npm run commerce:backfill-access-mode-free` | Phase 01 — each DB (local, later prod) | Counts updated (`matchedCount` / `modifiedCount`) |
-| `npm run commerce:report-exam-category-mismatches` | Phase 01 | Zero mismatches or fixes applied |
-| `npm run commerce:seed-local-tax-config` | Phase 07 local; phase 15 prod | `matchedCount` / `modifiedCount`. Same owner-confirmed payload. From 14E, `npm run commerce:seed-tax-config` reads `scripts/commerce-seed/<INSTANCE_ID>.json`, dry run by default (the old name stays as an alias) |
+| `npm run commerce:seed-tax-config` | Phase 07 local; phase 15 prod | Dry run, then `--apply --confirm-db`. Reads `scripts/commerce-seed/<INSTANCE_ID>.json` |
+
+The FREE backfill and the exam-category mismatch report already ran on both production databases. Those commands were removed after go-live.
 | Optional ENTITLED manifest | Phase 15 only if used | Manifest path |
 
 ### B. Instance config (Mongo)

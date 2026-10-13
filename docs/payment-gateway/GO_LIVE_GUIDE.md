@@ -315,17 +315,9 @@ Keep PM2 in **fork** mode with a single process. Cluster mode would run the paym
 
 ### Step 14 — Paper access backfill
 
-Make sure every paper has an explicit access mode (`FREE` unless set otherwise). Run this on the droplet, in the API directory:
+The FREE backfill and the exam-category mismatch report already ran on both production databases. Those commands were removed after go-live. New papers default to `accessMode: FREE`. Exam create and update still require the exam category to match its exam group.
 
-```bash
-npm run commerce:backfill-access-mode-free
-npm run commerce:report-exam-category-mismatches
-```
-
-**Check:**
-
-- The backfill prints `matchedCount` and `modifiedCount`. A second run prints `modifiedCount: 0`.
-- Read the mismatch report. Fix any listed paper in admin before you sell a product that covers its exam.
+**Check:** papers that should be paid are `ENTITLED` in admin. Everything else stays `FREE`.
 
 
 

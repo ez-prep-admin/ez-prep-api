@@ -36,7 +36,10 @@ export class Product {
   @Prop({ type: [ProductGrantSchema], default: [] })
   grants: ProductGrant[];
 
-  /** Frozen grants from the last publish. Absent until backfill or publish. */
+  /**
+   * Frozen grants from the last publish.
+   * Set on publish; boot copy fills older published rows.
+   */
   @Prop({ type: [ProductGrantSchema] })
   publishedGrants?: ProductGrant[];
 
