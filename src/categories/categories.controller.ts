@@ -33,8 +33,10 @@ import { CategoryResponseDto } from './dto/category-response.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('categories')
 @Controller('categories')
@@ -59,11 +61,17 @@ export class CategoriesController {
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiConflictResponse({ description: 'Category already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async create(@Body() createCategoryDto: CreateCategoryDto): Promise<{
+  async create(
+    @Body() createCategoryDto: CreateCategoryDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: CategoryResponseDto;
   }> {
-    const category = await this.categoriesService.create(createCategoryDto);
+    const category = await this.categoriesService.create(
+      createCategoryDto,
+      admin.id,
+    );
     return {
       message: 'Category created successfully',
       data: category,
@@ -203,11 +211,16 @@ export class CategoriesController {
   async update(
     @Param('id') id: string,
     @Body() updateCategoryDto: UpdateCategoryDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: CategoryResponseDto;
   }> {
-    const category = await this.categoriesService.update(id, updateCategoryDto);
+    const category = await this.categoriesService.update(
+      id,
+      updateCategoryDto,
+      admin.id,
+    );
     return {
       message: 'Category updated successfully',
       data: category,
@@ -230,11 +243,14 @@ export class CategoriesController {
   })
   @ApiNotFoundResponse({ description: 'Category not found' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: CategoryResponseDto;
   }> {
-    const category = await this.categoriesService.remove(id);
+    const category = await this.categoriesService.remove(id, admin.id);
     return {
       message: 'Category deleted successfully',
       data: category,

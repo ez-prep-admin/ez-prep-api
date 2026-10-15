@@ -384,12 +384,14 @@ Error codes: \`DRAFT_NOT_EDITABLE\`, \`SUBJECT_MISMATCH\`, \`EXAM_MISMATCH\`, \`
     @Param('id') id: string,
     @Param('position', ParseIntPipe) position: number,
     @Body() dto: ReplaceQuestionDto,
+    @GetUser() user: UserResponseDto,
   ): Promise<{ message: string; data: DraftResponseDto }> {
     const draft = await this.fullMockTestsService.replaceQuestion(
       id,
       position,
       dto.questionId,
       dto.allowCrossSubject,
+      user.id,
     );
     return {
       message: 'Question replaced successfully',
@@ -466,8 +468,11 @@ Published drafts cannot be discarded (delete the mock test instead if needed).
   })
   @ApiNotFoundResponse({ description: 'Draft not found' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
-  async discardDraft(@Param('id') id: string): Promise<{ message: string }> {
-    await this.fullMockTestsService.discardDraft(id);
+  async discardDraft(
+    @Param('id') id: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string }> {
+    await this.fullMockTestsService.discardDraft(id, user.id);
     return { message: 'Draft discarded successfully' };
   }
 

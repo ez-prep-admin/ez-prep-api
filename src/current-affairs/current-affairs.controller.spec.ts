@@ -27,6 +27,8 @@ describe('CurrentAffairsController', () => {
     remove: jest.fn(),
   };
 
+  const admin = { id: 'admin-1' } as never;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CurrentAffairsController],
@@ -52,11 +54,11 @@ describe('CurrentAffairsController', () => {
       description: ['ISRO launch'],
       date: '2026-08-14',
     };
-    await expect(controller.create(dto as any)).resolves.toEqual({
+    await expect(controller.create(dto as any, admin)).resolves.toEqual({
       message: 'Current affair created successfully',
       data: item,
     });
-    expect(service.create).toHaveBeenCalledWith(dto);
+    expect(service.create).toHaveBeenCalledWith(dto, 'admin-1');
   });
 
   it('findAll uses the default message when date is omitted', async () => {
@@ -102,7 +104,7 @@ describe('CurrentAffairsController', () => {
   it('update wraps the result', async () => {
     service.update.mockResolvedValue(item);
     await expect(
-      controller.update('ca1', { title: 'Updated' } as any),
+      controller.update('ca1', { title: 'Updated' } as any, admin),
     ).resolves.toEqual({
       message: 'Current affair updated successfully',
       data: item,
@@ -111,7 +113,7 @@ describe('CurrentAffairsController', () => {
 
   it('remove wraps the result', async () => {
     service.remove.mockResolvedValue(item);
-    await expect(controller.remove('ca1')).resolves.toEqual({
+    await expect(controller.remove('ca1', admin)).resolves.toEqual({
       message: 'Current affair deleted successfully',
       data: item,
     });

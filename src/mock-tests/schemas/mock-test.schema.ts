@@ -166,6 +166,9 @@ export class MockTest {
   @Prop({ type: Types.ObjectId, ref: 'User' })
   createdBy?: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
+
   @Prop({ type: DifficultyDistributionSchema, default: () => ({}) })
   difficultyDistribution: DifficultyDistribution;
 

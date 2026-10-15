@@ -34,8 +34,10 @@ import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('exams')
 @Controller('exams')
@@ -140,11 +142,14 @@ export class ExamsController {
   })
   @ApiConflictResponse({ description: 'Exam already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async create(@Body() createExamDto: CreateExamDto): Promise<{
+  async create(
+    @Body() createExamDto: CreateExamDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: ExamResponseDto;
   }> {
-    const exam = await this.examsService.create(createExamDto);
+    const exam = await this.examsService.create(createExamDto, admin.id);
     return {
       message: 'Exam created successfully',
       data: exam,
@@ -320,11 +325,12 @@ export class ExamsController {
   async update(
     @Param('id') id: string,
     @Body() updateExamDto: UpdateExamDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: ExamResponseDto;
   }> {
-    const exam = await this.examsService.update(id, updateExamDto);
+    const exam = await this.examsService.update(id, updateExamDto, admin.id);
     return {
       message: 'Exam updated successfully',
       data: exam,
@@ -347,11 +353,14 @@ export class ExamsController {
   })
   @ApiNotFoundResponse({ description: 'Exam not found' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: ExamResponseDto;
   }> {
-    const exam = await this.examsService.remove(id);
+    const exam = await this.examsService.remove(id, admin.id);
     return {
       message: 'Exam deleted successfully',
       data: exam,

@@ -6,6 +6,7 @@ import {
   QuestionDocument,
 } from '../../mock-test-attempts/schemas/question.schema';
 import { ImportQuestion } from '../types/import-question';
+import { createdByFields } from '../../common/types/to-actor-object-id';
 
 @Injectable()
 export class QuestionPersistenceService {
@@ -16,8 +17,14 @@ export class QuestionPersistenceService {
     private readonly questionModel: Model<QuestionDocument>,
   ) {}
 
-  async saveOne(question: ImportQuestion): Promise<QuestionDocument> {
-    const payload = this.toDocumentPayload(question);
+  async saveOne(
+    question: ImportQuestion,
+    actorUserId?: string,
+  ): Promise<QuestionDocument> {
+    const payload = {
+      ...this.toDocumentPayload(question),
+      ...createdByFields(actorUserId),
+    };
 
     try {
       const created = await this.questionModel.create(payload);

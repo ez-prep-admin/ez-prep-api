@@ -20,6 +20,11 @@ import {
   ExamGroup,
   ExamGroupDocument,
 } from '../exam-groups/schemas/exam-group.schema';
+import {
+  createdByFields,
+  omitActorFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class ExamsService {
@@ -35,7 +40,10 @@ export class ExamsService {
   /**
    * Create a new exam
    */
-  async create(createExamDto: CreateExamDto): Promise<ExamResponseDto> {
+  async create(
+    createExamDto: CreateExamDto,
+    actorUserId?: string,
+  ): Promise<ExamResponseDto> {
     // Verify category exists
     const category = await this.categoryModel
       .findById(createExamDto.category)
@@ -75,9 +83,10 @@ export class ExamsService {
       );
     }
 
-    const exam = await this.examModel.create(
-      this.withComputedTotals(createExamDto),
-    );
+    const exam = await this.examModel.create({
+      ...this.withComputedTotals(createExamDto),
+      ...createdByFields(actorUserId),
+    });
     return this.toResponseDto(exam);
   }
 
@@ -262,6 +271,7 @@ export class ExamsService {
   async update(
     id: string,
     updateExamDto: UpdateExamDto,
+    actorUserId?: string,
   ): Promise<ExamResponseDto> {
     // If category is being updated, verify it exists
     if (updateExamDto.category) {
@@ -350,9 +360,16 @@ export class ExamsService {
     }
 
     const exam = await this.examModel
-      .findByIdAndUpdate(id, this.withComputedTotals(updateExamDto), {
-        new: true,
-      })
+      .findByIdAndUpdate(
+        id,
+        {
+          ...this.withComputedTotals(updateExamDto),
+          ...updatedByFields(actorUserId),
+        },
+        {
+          new: true,
+        },
+      )
       .populate('category')
       .populate('examGroup')
       .exec();
@@ -367,11 +384,11 @@ export class ExamsService {
   /**
    * Soft delete exam
    */
-  async remove(id: string): Promise<ExamResponseDto> {
+  async remove(id: string, actorUserId?: string): Promise<ExamResponseDto> {
     const exam = await this.examModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .populate('category')
@@ -480,7 +497,7 @@ export class ExamsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(exam: ExamDocument): ExamResponseDto {
-    const obj = exam.toObject();
+    const obj = omitActorFields(exam.toObject());
     return new ExamResponseDto({
       ...obj,
       id: obj.id || exam._id.toString(),

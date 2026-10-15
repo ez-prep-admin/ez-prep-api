@@ -1156,7 +1156,10 @@ export class ImportService {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  async persistQuestions(uploadId: string): Promise<
+  async persistQuestions(
+    uploadId: string,
+    actorUserId?: string,
+  ): Promise<
     PersistQuestionsResult & {
       uploadId: string;
       uploadStatus?: string;
@@ -1172,7 +1175,7 @@ export class ImportService {
     this.activePersistJobs.add(uploadId);
 
     try {
-      return await this.executePersistQuestions(uploadId);
+      return await this.executePersistQuestions(uploadId, actorUserId);
     } finally {
       this.activePersistJobs.delete(uploadId);
     }
@@ -1183,7 +1186,10 @@ export class ImportService {
    * removed from enrichedQuestions immediately so a crash, timeout, or retry
    * cannot re-insert questions that already landed in the questions collection.
    */
-  private async executePersistQuestions(uploadId: string): Promise<
+  private async executePersistQuestions(
+    uploadId: string,
+    actorUserId?: string,
+  ): Promise<
     PersistQuestionsResult & {
       uploadId: string;
       uploadStatus?: string;
@@ -1236,8 +1242,10 @@ export class ImportService {
           { ...withImages, uploadId },
           sourceIndex,
         );
-        const created =
-          await this.questionPersistenceService.saveOne(validated);
+        const created = await this.questionPersistenceService.saveOne(
+          validated,
+          actorUserId,
+        );
 
         questions.splice(queueIndex, 1);
         await this.syncEnrichedQuestionsCache(uploadId, questions);
@@ -1439,6 +1447,7 @@ export class ImportService {
   async importFailedQuestion(
     failedQuestionId: string,
     questionPayload: unknown,
+    actorUserId?: string,
   ): Promise<{ questionId: string; failedQuestionId: string }> {
     const failed =
       await this.failedQuestionService.findByIdOrThrow(failedQuestionId);
@@ -1461,7 +1470,10 @@ export class ImportService {
         { ...withImages, uploadId: failed.uploadId.toString() },
         0,
       );
-      const created = await this.questionPersistenceService.saveOne(validated);
+      const created = await this.questionPersistenceService.saveOne(
+        validated,
+        actorUserId,
+      );
       await this.failedQuestionService.deleteById(failedQuestionId);
 
       this.logger.log(

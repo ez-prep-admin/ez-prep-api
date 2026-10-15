@@ -9,6 +9,11 @@ import { Topic, TopicDocument } from './schemas/topic.schema';
 import { CreateTopicDto } from './dto/create-topic.dto';
 import { UpdateTopicDto } from './dto/update-topic.dto';
 import { TopicResponseDto } from './dto/topic-response.dto';
+import {
+  createdByFields,
+  omitActorFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class TopicsService {
@@ -20,7 +25,10 @@ export class TopicsService {
   /**
    * Create a new topic
    */
-  async create(createTopicDto: CreateTopicDto): Promise<TopicResponseDto> {
+  async create(
+    createTopicDto: CreateTopicDto,
+    actorUserId?: string,
+  ): Promise<TopicResponseDto> {
     // Check for duplicate name
     const existing = await this.topicModel
       .findOne({ name: createTopicDto.name })
@@ -30,7 +38,10 @@ export class TopicsService {
       throw new ConflictException('Topic with this name already exists');
     }
 
-    const topic = await this.topicModel.create(createTopicDto);
+    const topic = await this.topicModel.create({
+      ...createTopicDto,
+      ...createdByFields(actorUserId),
+    });
     return this.toResponseDto(topic);
   }
 
@@ -61,6 +72,7 @@ export class TopicsService {
   async update(
     id: string,
     updateTopicDto: UpdateTopicDto,
+    actorUserId?: string,
   ): Promise<TopicResponseDto> {
     // Check for duplicate name if name is being updated
     if (updateTopicDto.name) {
@@ -77,10 +89,14 @@ export class TopicsService {
     }
 
     const topic = await this.topicModel
-      .findByIdAndUpdate(id, updateTopicDto, {
-        new: true,
-        runValidators: true,
-      })
+      .findByIdAndUpdate(
+        id,
+        { ...updateTopicDto, ...updatedByFields(actorUserId) },
+        {
+          new: true,
+          runValidators: true,
+        },
+      )
       .exec();
 
     if (!topic) {
@@ -93,11 +109,11 @@ export class TopicsService {
   /**
    * Soft delete topic
    */
-  async remove(id: string): Promise<TopicResponseDto> {
+  async remove(id: string, actorUserId?: string): Promise<TopicResponseDto> {
     const topic = await this.topicModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .exec();
@@ -113,7 +129,7 @@ export class TopicsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(topic: TopicDocument): TopicResponseDto {
-    const obj = topic.toObject();
+    const obj = omitActorFields(topic.toObject());
     return new TopicResponseDto({
       ...obj,
       id: obj._id?.toString() || obj.id,

@@ -23,6 +23,8 @@ describe('QuestionsController', () => {
     remove: jest.fn(),
   };
 
+  const admin = { id: 'admin-1' } as never;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [QuestionsController],
@@ -39,7 +41,7 @@ describe('QuestionsController', () => {
 
   it('create wraps data', async () => {
     service.create.mockResolvedValue(question);
-    await expect(controller.create({} as any)).resolves.toEqual({
+    await expect(controller.create({} as any, admin)).resolves.toEqual({
       message: 'Question created successfully',
       data: question,
     });
@@ -61,7 +63,9 @@ describe('QuestionsController', () => {
 
   it('update wraps data', async () => {
     service.update.mockResolvedValue(question);
-    await expect(controller.update('q1', {} as any)).resolves.toMatchObject({
+    await expect(
+      controller.update('q1', {} as any, admin),
+    ).resolves.toMatchObject({
       data: question,
     });
   });
@@ -70,7 +74,7 @@ describe('QuestionsController', () => {
     service.remove.mockResolvedValue({
       message: 'Question deleted successfully',
     });
-    await expect(controller.remove('q1')).resolves.toEqual({
+    await expect(controller.remove('q1', admin)).resolves.toEqual({
       message: 'Question deleted successfully',
     });
   });

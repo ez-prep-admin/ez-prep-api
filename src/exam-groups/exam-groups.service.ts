@@ -15,6 +15,11 @@ import {
   CategoryWithExamGroupsDto,
   ExamGroupInCategoryDto,
 } from './dto/category-with-exam-groups.dto';
+import {
+  createdByFields,
+  omitActorFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class ExamGroupsService {
@@ -28,6 +33,7 @@ export class ExamGroupsService {
    */
   async create(
     createExamGroupDto: CreateExamGroupDto,
+    actorUserId?: string,
   ): Promise<ExamGroupResponseDto> {
     // Check for duplicate name
     const existing = await this.examGroupModel
@@ -43,7 +49,10 @@ export class ExamGroupsService {
       );
     }
 
-    const examGroup = await this.examGroupModel.create(createExamGroupDto);
+    const examGroup = await this.examGroupModel.create({
+      ...createExamGroupDto,
+      ...createdByFields(actorUserId),
+    });
     return this.toResponseDto(examGroup);
   }
 
@@ -135,6 +144,7 @@ export class ExamGroupsService {
   async update(
     id: string,
     updateExamGroupDto: UpdateExamGroupDto,
+    actorUserId?: string,
   ): Promise<ExamGroupResponseDto> {
     // Check for duplicate if name is being updated
     if (updateExamGroupDto.name) {
@@ -151,7 +161,11 @@ export class ExamGroupsService {
     }
 
     const examGroup = await this.examGroupModel
-      .findByIdAndUpdate(id, updateExamGroupDto, { new: true })
+      .findByIdAndUpdate(
+        id,
+        { ...updateExamGroupDto, ...updatedByFields(actorUserId) },
+        { new: true },
+      )
       .populate('category')
       .exec();
 
@@ -165,11 +179,14 @@ export class ExamGroupsService {
   /**
    * Soft delete exam group
    */
-  async remove(id: string): Promise<ExamGroupResponseDto> {
+  async remove(
+    id: string,
+    actorUserId?: string,
+  ): Promise<ExamGroupResponseDto> {
     const examGroup = await this.examGroupModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .populate('category')
@@ -246,6 +263,6 @@ export class ExamGroupsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(examGroup: ExamGroupDocument): ExamGroupResponseDto {
-    return new ExamGroupResponseDto(examGroup.toObject());
+    return new ExamGroupResponseDto(omitActorFields(examGroup.toObject()));
   }
 }

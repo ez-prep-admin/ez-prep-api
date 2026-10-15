@@ -64,6 +64,9 @@ export class SprintTestDraft {
   @Prop({ type: Types.ObjectId, ref: 'User', index: true })
   createdBy?: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
+
   @Prop({
     type: String,
     enum: SPRINT_DRAFT_STATUSES,

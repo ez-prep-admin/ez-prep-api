@@ -23,6 +23,10 @@ import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
 import { FullMockSelectionService } from './full-mock-selection.service';
 import {
+  assignUpdatedBy,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
+import {
   DraftQuestion,
   FullMockTestDraft,
   FullMockTestDraftDocument,
@@ -388,6 +392,7 @@ export class FullMockTestsService {
     position: number,
     questionId: string,
     allowCrossSubject = false,
+    actorUserId?: string,
   ): Promise<DraftResponseDto> {
     const draft = await this.loadDraft(draftId);
     assertDraftEditable(draft.status);
@@ -415,6 +420,7 @@ export class FullMockTestsService {
     slot.question = incoming._id as Types.ObjectId;
     slot.topic = incoming.topic;
     slot.difficultyLevel = incoming.difficultyLevel;
+    assignUpdatedBy(draft, actorUserId);
     await draft.save();
 
     return this.toDraftResponse(draft);
@@ -431,7 +437,7 @@ export class FullMockTestsService {
 
     const draft = await this.draftModel.findOneAndUpdate(
       { _id: draftId, status: 'REVIEW' },
-      { $set: { status: 'PUBLISHING' } },
+      { $set: { status: 'PUBLISHING', ...updatedByFields(userId) } },
       { new: true },
     );
     if (!draft) {
@@ -447,7 +453,7 @@ export class FullMockTestsService {
       await this.draftModel
         .updateOne(
           { _id: draft._id, status: 'PUBLISHING' },
-          { $set: { status: 'REVIEW' } },
+          { $set: { status: 'REVIEW', ...updatedByFields(userId) } },
         )
         .exec();
       throw error;
@@ -557,6 +563,7 @@ export class FullMockTestsService {
 
     draft.status = 'PUBLISHED';
     draft.publishedMockTestId = mockTest._id as Types.ObjectId;
+    assignUpdatedBy(draft, userId);
     await draft.save();
 
     return {
@@ -565,7 +572,7 @@ export class FullMockTestsService {
     };
   }
 
-  async discardDraft(draftId: string): Promise<void> {
+  async discardDraft(draftId: string, actorUserId?: string): Promise<void> {
     const draft = await this.loadDraft(draftId);
     if (draft.status === 'PUBLISHED' || draft.status === 'PUBLISHING') {
       throw new BadRequestException({
@@ -574,6 +581,7 @@ export class FullMockTestsService {
       });
     }
     draft.status = 'DISCARDED';
+    assignUpdatedBy(draft, actorUserId);
     await draft.save();
   }
 

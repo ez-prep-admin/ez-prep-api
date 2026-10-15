@@ -20,6 +20,10 @@ import {
   assertAllowedBucket,
   assertSafeImageKey,
 } from '../aws/s3/s3-access.util';
+import {
+  createdByFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 const VISIBLE_QUESTION: FilterQuery<Question> = {
   isDeleted: { $ne: true },
@@ -33,13 +37,17 @@ export class QuestionsService {
     private readonly awsConfig: AwsConfigService,
   ) {}
 
-  async create(dto: CreateQuestionDto): Promise<QuestionResponseDto> {
+  async create(
+    dto: CreateQuestionDto,
+    actorUserId?: string,
+  ): Promise<QuestionResponseDto> {
     this.assertCorrectAnswer(dto);
     const question = await this.questionModel.create({
       ...this.toDocument(dto),
       source: DEFAULT_QUESTION_SOURCE,
       isActive: true,
       isDeleted: false,
+      ...createdByFields(actorUserId),
     });
 
     return this.findOne(question.id);
@@ -123,6 +131,7 @@ export class QuestionsService {
   async update(
     id: string,
     dto: UpdateQuestionDto,
+    actorUserId?: string,
   ): Promise<QuestionResponseDto> {
     if (dto.options && dto.options.length !== 4) {
       throw new BadRequestException('Exactly 4 options are required');
@@ -132,7 +141,7 @@ export class QuestionsService {
     const question = await this.questionModel
       .findOneAndUpdate(
         { _id: id, ...VISIBLE_QUESTION },
-        { $set: this.toDocument(dto) },
+        { $set: { ...this.toDocument(dto), ...updatedByFields(actorUserId) } },
         { new: true },
       )
       .populate('subject', 'name')
@@ -147,11 +156,11 @@ export class QuestionsService {
     return this.toResponseDto(question);
   }
 
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(id: string, actorUserId?: string): Promise<{ message: string }> {
     const question = await this.questionModel
       .findOneAndUpdate(
         { _id: id, isDeleted: { $ne: true } },
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .exec();

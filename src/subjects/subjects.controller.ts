@@ -28,8 +28,10 @@ import { SubjectResponseDto } from './dto/subject-response.dto';
 import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('subjects')
 @Controller('subjects')
@@ -54,11 +56,17 @@ export class SubjectsController {
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiConflictResponse({ description: 'Subject already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async create(@Body() createSubjectDto: CreateSubjectDto): Promise<{
+  async create(
+    @Body() createSubjectDto: CreateSubjectDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: SubjectResponseDto;
   }> {
-    const subject = await this.subjectsService.create(createSubjectDto);
+    const subject = await this.subjectsService.create(
+      createSubjectDto,
+      admin.id,
+    );
     return {
       message: 'Subject created successfully',
       data: subject,
@@ -162,11 +170,16 @@ export class SubjectsController {
   async update(
     @Param('id') id: string,
     @Body() updateSubjectDto: UpdateSubjectDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: SubjectResponseDto;
   }> {
-    const subject = await this.subjectsService.update(id, updateSubjectDto);
+    const subject = await this.subjectsService.update(
+      id,
+      updateSubjectDto,
+      admin.id,
+    );
     return {
       message: 'Subject updated successfully',
       data: subject,
@@ -190,11 +203,14 @@ export class SubjectsController {
   })
   @ApiNotFoundResponse({ description: 'Subject not found' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: SubjectResponseDto;
   }> {
-    const subject = await this.subjectsService.remove(id);
+    const subject = await this.subjectsService.remove(id, admin.id);
     return {
       message: 'Subject deleted successfully',
       data: subject,

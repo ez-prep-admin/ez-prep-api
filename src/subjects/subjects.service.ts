@@ -14,6 +14,11 @@ import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { SubjectResponseDto } from './dto/subject-response.dto';
 import { SubjectForExamResponseDto } from './dto/subject-for-exam-response.dto';
 import { PopulatedDocument } from '../common/types/populated-document.interface';
+import {
+  createdByFields,
+  omitActorFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class SubjectsService {
@@ -31,6 +36,7 @@ export class SubjectsService {
    */
   async create(
     createSubjectDto: CreateSubjectDto,
+    actorUserId?: string,
   ): Promise<SubjectResponseDto> {
     // Check for duplicate name
     const existing = await this.subjectModel
@@ -52,7 +58,10 @@ export class SubjectsService {
       }
     }
 
-    const subject = await this.subjectModel.create(createSubjectDto);
+    const subject = await this.subjectModel.create({
+      ...createSubjectDto,
+      ...createdByFields(actorUserId),
+    });
     return this.toResponseDto(await subject.populate('topics', 'name'));
   }
 
@@ -90,6 +99,7 @@ export class SubjectsService {
   async update(
     id: string,
     updateSubjectDto: UpdateSubjectDto,
+    actorUserId?: string,
   ): Promise<SubjectResponseDto> {
     // Check for duplicate name if name is being updated
     if (updateSubjectDto.name) {
@@ -117,10 +127,14 @@ export class SubjectsService {
     }
 
     const subject = await this.subjectModel
-      .findByIdAndUpdate(id, updateSubjectDto, {
-        new: true,
-        runValidators: true,
-      })
+      .findByIdAndUpdate(
+        id,
+        { ...updateSubjectDto, ...updatedByFields(actorUserId) },
+        {
+          new: true,
+          runValidators: true,
+        },
+      )
       .populate('topics', 'name')
       .exec();
 
@@ -134,11 +148,11 @@ export class SubjectsService {
   /**
    * Soft delete subject
    */
-  async remove(id: string): Promise<SubjectResponseDto> {
+  async remove(id: string, actorUserId?: string): Promise<SubjectResponseDto> {
     const subject = await this.subjectModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .populate('topics', 'name')
@@ -236,7 +250,7 @@ export class SubjectsService {
    * Helper to convert document to DTO
    */
   private toResponseDto(subject: SubjectDocument): SubjectResponseDto {
-    const obj = subject.toObject();
+    const obj = omitActorFields(subject.toObject());
     return new SubjectResponseDto({
       ...obj,
       id: obj._id?.toString() || obj.id,

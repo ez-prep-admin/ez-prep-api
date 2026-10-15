@@ -15,6 +15,8 @@ describe('TopicsController', () => {
     remove: jest.fn(),
   };
 
+  const admin = { id: 'admin-1' } as never;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TopicsController],
@@ -31,7 +33,7 @@ describe('TopicsController', () => {
 
   it('create wraps data', async () => {
     service.create.mockResolvedValue(topic);
-    await expect(controller.create({} as any)).resolves.toMatchObject({
+    await expect(controller.create({} as any, admin)).resolves.toMatchObject({
       data: topic,
     });
   });
@@ -50,14 +52,16 @@ describe('TopicsController', () => {
 
   it('update wraps data', async () => {
     service.update.mockResolvedValue(topic);
-    await expect(controller.update('t1', {} as any)).resolves.toMatchObject({
+    await expect(
+      controller.update('t1', {} as any, admin),
+    ).resolves.toMatchObject({
       data: topic,
     });
   });
 
   it('remove wraps data', async () => {
     service.remove.mockResolvedValue(topic);
-    await expect(controller.remove('t1')).resolves.toMatchObject({
+    await expect(controller.remove('t1', admin)).resolves.toMatchObject({
       data: topic,
     });
   });

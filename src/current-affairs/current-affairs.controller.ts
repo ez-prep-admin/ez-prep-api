@@ -30,8 +30,10 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CurrentAffairsService } from './current-affairs.service';
 import { CreateCurrentAffairDto } from './dto/create-current-affair.dto';
 import { CurrentAffairResponseDto } from './dto/current-affair-response.dto';
@@ -77,11 +79,14 @@ Requires admin JWT.
     description: 'Missing or invalid JWT',
   })
   @ApiForbiddenResponse({ description: 'Admin role required' })
-  async create(@Body() dto: CreateCurrentAffairDto): Promise<{
+  async create(
+    @Body() dto: CreateCurrentAffairDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: CurrentAffairResponseDto;
   }> {
-    const item = await this.currentAffairsService.create(dto);
+    const item = await this.currentAffairsService.create(dto, admin.id);
     return {
       message: 'Current affair created successfully',
       data: item,
@@ -241,11 +246,12 @@ Requires admin JWT.
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateCurrentAffairDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: CurrentAffairResponseDto;
   }> {
-    const item = await this.currentAffairsService.update(id, dto);
+    const item = await this.currentAffairsService.update(id, dto, admin.id);
     return {
       message: 'Current affair updated successfully',
       data: item,
@@ -278,11 +284,14 @@ Requires admin JWT.
   @ApiNotFoundResponse({ description: 'Current affair not found' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: CurrentAffairResponseDto;
   }> {
-    const item = await this.currentAffairsService.remove(id);
+    const item = await this.currentAffairsService.remove(id, admin.id);
     return {
       message: 'Current affair deleted successfully',
       data: item,

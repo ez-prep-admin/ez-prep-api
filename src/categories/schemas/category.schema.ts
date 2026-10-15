@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Query } from 'mongoose';
+import { Document, Query, Types } from 'mongoose';
 
 export type CategoryDocument = Category & Document;
 
@@ -26,6 +26,12 @@ export class Category {
 
   @Prop({ default: false })
   isDeleted: boolean;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
 
   createdAt?: Date;
   updatedAt?: Date;

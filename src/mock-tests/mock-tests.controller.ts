@@ -526,7 +526,10 @@ export class MockTestsController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Soft delete a topic-wise mock test (Admin only)' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    return this.mockTestsService.removeTopicWise(id);
+  async remove(
+    @Param('id') id: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string }> {
+    return this.mockTestsService.removeTopicWise(id, user.id);
   }
 }

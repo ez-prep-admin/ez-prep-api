@@ -26,6 +26,8 @@ describe('ExamGroupsController', () => {
     remove: jest.fn(),
   };
 
+  const admin = { id: 'admin-1' } as never;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ExamGroupsController],
@@ -42,7 +44,7 @@ describe('ExamGroupsController', () => {
 
   it('create wraps data', async () => {
     service.create.mockResolvedValue(group);
-    await expect(controller.create({} as any)).resolves.toMatchObject({
+    await expect(controller.create({} as any, admin)).resolves.toMatchObject({
       data: group,
     });
   });
@@ -83,14 +85,16 @@ describe('ExamGroupsController', () => {
 
   it('update wraps data', async () => {
     service.update.mockResolvedValue(group);
-    await expect(controller.update('g1', {} as any)).resolves.toMatchObject({
+    await expect(
+      controller.update('g1', {} as any, admin),
+    ).resolves.toMatchObject({
       data: group,
     });
   });
 
   it('remove wraps data', async () => {
     service.remove.mockResolvedValue(group);
-    await expect(controller.remove('g1')).resolves.toMatchObject({
+    await expect(controller.remove('g1', admin)).resolves.toMatchObject({
       data: group,
     });
   });

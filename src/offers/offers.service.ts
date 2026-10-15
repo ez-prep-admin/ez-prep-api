@@ -15,6 +15,10 @@ import { CreateOfferDto } from './dto/create-offer.dto';
 import { OfferResponseDto } from './dto/offer-response.dto';
 import { UpdateOfferDto } from './dto/update-offer.dto';
 import { Offer, OfferDocument } from './schemas/offer.schema';
+import {
+  assignUpdatedBy,
+  createdByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class OffersService {
@@ -70,6 +74,7 @@ export class OffersService {
           ? new Date(dto.saleValidUntil)
           : undefined,
         status,
+        ...createdByFields(actorUserId),
       });
       const response = this.toResponse(offer);
       await this.commerceAuditService.log({
@@ -166,6 +171,8 @@ export class OffersService {
       }
       offer.status = dto.status;
     }
+
+    assignUpdatedBy(offer, actorUserId);
 
     try {
       await offer.save();

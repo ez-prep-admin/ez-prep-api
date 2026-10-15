@@ -44,7 +44,7 @@ describe('ImportController', () => {
       summary: 'done',
       saved: [],
     });
-    const result = await controller.persistQuestions('upload-1');
+    const result = await controller.persistQuestions('upload-1', user);
     expect(result.message).toBe('done');
     expect(result.data).toMatchObject({ saved: [] });
   });
@@ -135,9 +135,13 @@ describe('ImportController', () => {
       data: { id: 'f1' },
     });
     await expect(
-      controller.importFailedQuestion('f1', {
-        question: { stem: 'x' },
-      } as never),
+      controller.importFailedQuestion(
+        'f1',
+        {
+          question: { stem: 'x' },
+        } as never,
+        user,
+      ),
     ).resolves.toMatchObject({
       data: { questionId: 'q1' },
     });

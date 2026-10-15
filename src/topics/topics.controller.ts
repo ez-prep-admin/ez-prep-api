@@ -27,8 +27,10 @@ import { UpdateTopicDto } from './dto/update-topic.dto';
 import { TopicResponseDto } from './dto/topic-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('topics')
 @Controller('topics')
@@ -53,11 +55,14 @@ export class TopicsController {
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiConflictResponse({ description: 'Topic already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async create(@Body() createTopicDto: CreateTopicDto): Promise<{
+  async create(
+    @Body() createTopicDto: CreateTopicDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: TopicResponseDto;
   }> {
-    const topic = await this.topicsService.create(createTopicDto);
+    const topic = await this.topicsService.create(createTopicDto, admin.id);
     return {
       message: 'Topic created successfully',
       data: topic,
@@ -131,11 +136,12 @@ export class TopicsController {
   async update(
     @Param('id') id: string,
     @Body() updateTopicDto: UpdateTopicDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: TopicResponseDto;
   }> {
-    const topic = await this.topicsService.update(id, updateTopicDto);
+    const topic = await this.topicsService.update(id, updateTopicDto, admin.id);
     return {
       message: 'Topic updated successfully',
       data: topic,
@@ -159,11 +165,14 @@ export class TopicsController {
   })
   @ApiNotFoundResponse({ description: 'Topic not found' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: TopicResponseDto;
   }> {
-    const topic = await this.topicsService.remove(id);
+    const topic = await this.topicsService.remove(id, admin.id);
     return {
       message: 'Topic deleted successfully',
       data: topic,

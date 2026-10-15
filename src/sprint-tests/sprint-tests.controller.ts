@@ -264,12 +264,14 @@ Usage counts are not incremented.
     @Param('id') id: string,
     @Param('position', ParseIntPipe) position: number,
     @Body() dto: ReplaceSprintQuestionDto,
+    @GetUser() user: UserResponseDto,
   ): Promise<{ message: string; data: SprintDraftResponseDto }> {
     const draft = await this.sprintTestsService.replaceQuestion(
       id,
       position,
       dto.questionId,
       dto.allowCrossSubject,
+      user.id,
     );
     return { message: 'Question replaced successfully', data: draft };
   }
@@ -323,8 +325,11 @@ Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test
   })
   @ApiNotFoundResponse({ description: 'Draft not found' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
-  async discardDraft(@Param('id') id: string): Promise<{ message: string }> {
-    await this.sprintTestsService.discardDraft(id);
+  async discardDraft(
+    @Param('id') id: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string }> {
+    await this.sprintTestsService.discardDraft(id, user.id);
     return { message: 'Draft discarded successfully' };
   }
 
@@ -408,7 +413,10 @@ Students then see it on \`GET /sprint-tests\` and take it with \`POST /mock-test
   @ApiNotFoundResponse({ description: 'Not a published sprint paper' })
   @ApiBadRequestResponse({ description: 'Invalid ID' })
   @ApiForbiddenResponse({ description: 'Admin role required' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    return this.sprintTestsService.removePublished(id);
+  async remove(
+    @Param('id') id: string,
+    @GetUser() user: UserResponseDto,
+  ): Promise<{ message: string }> {
+    return this.sprintTestsService.removePublished(id, user.id);
   }
 }

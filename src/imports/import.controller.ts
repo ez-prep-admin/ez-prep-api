@@ -104,8 +104,9 @@ export class ImportController {
   })
   async persistQuestions(
     @Param('uploadId') uploadId: string,
+    @GetUser() user: UserResponseDto,
   ): Promise<{ message: string; data: PersistQuestionsResponseDto }> {
-    const result = await this.importService.persistQuestions(uploadId);
+    const result = await this.importService.persistQuestions(uploadId, user.id);
 
     return {
       message: result.summary,
@@ -470,6 +471,7 @@ export class ImportController {
   async importFailedQuestion(
     @Param('failedQuestionId') failedQuestionId: string,
     @Body() body: ImportFailedQuestionDto,
+    @GetUser() user: UserResponseDto,
   ): Promise<{
     message: string;
     data: ImportFailedQuestionResponseDto;
@@ -477,6 +479,7 @@ export class ImportController {
     const result = await this.importService.importFailedQuestion(
       failedQuestionId,
       body.question,
+      user.id,
     );
 
     return {
