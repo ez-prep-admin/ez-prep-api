@@ -7,6 +7,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, UpdateQuery } from 'mongoose';
 import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
+import {
+  createdByFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 import { ImageMetadataDto } from '../questions/dto/image-metadata.dto';
 import { CreateCurrentAffairDto } from './dto/create-current-affair.dto';
 import { CurrentAffairResponseDto } from './dto/current-affair-response.dto';
@@ -31,7 +35,10 @@ export class CurrentAffairsService {
     private readonly imageUrlResolver: ImageUrlResolver,
   ) {}
 
-  async create(dto: CreateCurrentAffairDto): Promise<CurrentAffairResponseDto> {
+  async create(
+    dto: CreateCurrentAffairDto,
+    actorUserId?: string,
+  ): Promise<CurrentAffairResponseDto> {
     const sortOrder = await this.nextSortOrder(dto.date);
     const storedImage = this.toStoredImage(dto.image);
     const item = await this.currentAffairModel.create({
@@ -41,6 +48,7 @@ export class CurrentAffairsService {
       dateKey: dto.date,
       ...(storedImage ? { image: storedImage } : {}),
       sortOrder,
+      ...createdByFields(actorUserId),
     });
 
     return this.toResponseDto(item);
@@ -123,13 +131,16 @@ export class CurrentAffairsService {
   async update(
     id: string,
     dto: UpdateCurrentAffairDto,
+    actorUserId?: string,
   ): Promise<CurrentAffairResponseDto> {
     const existing = await this.currentAffairModel.findById(id).exec();
     if (!existing) {
       throw new NotFoundException(`Current affair with ID "${id}" not found`);
     }
 
-    const $set: Record<string, unknown> = {};
+    const $set: Record<string, unknown> = {
+      ...updatedByFields(actorUserId),
+    };
     const $unset: Record<string, 1> = {};
 
     if (dto.title !== undefined) {
@@ -196,11 +207,14 @@ export class CurrentAffairsService {
     return this.toResponseDto(item);
   }
 
-  async remove(id: string): Promise<CurrentAffairResponseDto> {
+  async remove(
+    id: string,
+    actorUserId?: string,
+  ): Promise<CurrentAffairResponseDto> {
     const item = await this.currentAffairModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .exec();

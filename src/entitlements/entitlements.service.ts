@@ -17,6 +17,10 @@ import { EntitlementSourceType } from '../common/enums/entitlement-source-type.e
 import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import {
+  assignUpdatedBy,
+  createdByFields,
+} from '../common/types/to-actor-object-id';
+import {
   ExamGroup,
   ExamGroupDocument,
 } from '../exam-groups/schemas/exam-group.schema';
@@ -132,6 +136,7 @@ export class EntitlementsService implements OnModuleInit {
       productId: dto.productId ? new Types.ObjectId(dto.productId) : undefined,
       provisioningKey,
       metadata: dto.reason ? { reason: dto.reason } : undefined,
+      ...createdByFields(options.actorUserId),
     });
 
     try {
@@ -194,6 +199,7 @@ export class EntitlementsService implements OnModuleInit {
     entitlement.status = EntitlementStatus.REVOKED;
     entitlement.revokedAt = new Date();
     entitlement.revokeReason = reason ?? 'admin_revoke';
+    assignUpdatedBy(entitlement, actorUserId);
     await entitlement.save();
 
     const response = this.toResponseDto(entitlement);

@@ -13,6 +13,10 @@ import { CreateTagDto } from './dto/create-tag.dto';
 import { UpdateTagDto } from './dto/update-tag.dto';
 import { TagResponseDto } from './dto/tag-response.dto';
 import { PaginatedTagsResponseDto } from './dto/paginated-tags-response.dto';
+import {
+  createdByFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class TagsService {
@@ -27,7 +31,10 @@ export class TagsService {
    * @param createTagDto - Tag creation data
    * @returns Created tag
    */
-  async create(createTagDto: CreateTagDto): Promise<TagResponseDto> {
+  async create(
+    createTagDto: CreateTagDto,
+    actorUserId?: string,
+  ): Promise<TagResponseDto> {
     // Validate subject exists
     const subject = await this.subjectModel.findById(createTagDto.subject);
     if (!subject) {
@@ -62,6 +69,7 @@ export class TagsService {
       ...createTagDto,
       subject: new Types.ObjectId(createTagDto.subject),
       topic: new Types.ObjectId(createTagDto.topic),
+      ...createdByFields(actorUserId),
     });
 
     await tag.save();
@@ -147,6 +155,7 @@ export class TagsService {
   async update(
     id: string,
     updateTagDto: UpdateTagDto,
+    actorUserId?: string,
   ): Promise<TagResponseDto> {
     // If subject is being updated, validate it exists
     if (updateTagDto.subject) {
@@ -198,7 +207,9 @@ export class TagsService {
       }
     }
 
-    const updateData: Record<string, unknown> = {};
+    const updateData: Record<string, unknown> = {
+      ...updatedByFields(actorUserId),
+    };
     if (updateTagDto.subject) {
       updateData.subject = new Types.ObjectId(updateTagDto.subject);
     }
@@ -223,9 +234,13 @@ export class TagsService {
    * @returns Success message
    * @throws NotFoundException if tag not found
    */
-  async remove(id: string): Promise<{ message: string }> {
+  async remove(id: string, actorUserId?: string): Promise<{ message: string }> {
     const tag = await this.tagModel
-      .findByIdAndUpdate(id, { isDeleted: true }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        { isDeleted: true, ...updatedByFields(actorUserId) },
+        { new: true },
+      )
       .exec();
 
     if (!tag) {

@@ -30,8 +30,10 @@ import { TagResponseDto } from './dto/tag-response.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('tags')
 @Controller('tags')
@@ -68,8 +70,9 @@ export class TagsController {
   })
   async create(
     @Body() createTagDto: CreateTagDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{ message: string; data: TagResponseDto }> {
-    const tag = await this.tagsService.create(createTagDto);
+    const tag = await this.tagsService.create(createTagDto, admin.id);
     return {
       message: 'Tag created successfully',
       data: tag,
@@ -238,8 +241,9 @@ export class TagsController {
   async update(
     @Param('id') id: string,
     @Body() updateTagDto: UpdateTagDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{ message: string; data: TagResponseDto }> {
-    const tag = await this.tagsService.update(id, updateTagDto);
+    const tag = await this.tagsService.update(id, updateTagDto, admin.id);
     return {
       message: 'Tag updated successfully',
       data: tag,
@@ -278,8 +282,11 @@ export class TagsController {
   @ApiUnauthorizedResponse({
     description: 'Authentication required or insufficient privileges',
   })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    const result = await this.tagsService.remove(id);
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{ message: string }> {
+    const result = await this.tagsService.remove(id, admin.id);
     return result;
   }
 }

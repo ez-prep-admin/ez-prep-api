@@ -39,6 +39,10 @@ import { SprintTestListItemDto } from './dto/sprint-test-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
 import {
+  assignUpdatedBy,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
+import {
   ELIGIBLE_DIFFICULTY_LEVELS,
   assertDraftEditable,
   assertIncomingEligible,
@@ -311,6 +315,7 @@ export class SprintTestsService {
     position: number,
     questionId: string,
     allowCrossSubject = false,
+    actorUserId?: string,
   ): Promise<SprintDraftResponseDto> {
     const draft = await this.loadDraft(draftId);
     assertDraftEditable(draft.status);
@@ -341,6 +346,7 @@ export class SprintTestsService {
     slot.question = incoming._id as Types.ObjectId;
     slot.topic = incoming.topic;
     slot.difficultyLevel = incoming.difficultyLevel;
+    assignUpdatedBy(draft, actorUserId);
     await draft.save();
 
     return this.toDraftResponse(draft);
@@ -357,7 +363,7 @@ export class SprintTestsService {
 
     const draft = await this.draftModel.findOneAndUpdate(
       { _id: draftId, status: 'REVIEW' },
-      { $set: { status: 'PUBLISHING' } },
+      { $set: { status: 'PUBLISHING', ...updatedByFields(userId) } },
       { new: true },
     );
     if (!draft) {
@@ -373,14 +379,14 @@ export class SprintTestsService {
       await this.draftModel
         .updateOne(
           { _id: draft._id, status: 'PUBLISHING' },
-          { $set: { status: 'REVIEW' } },
+          { $set: { status: 'REVIEW', ...updatedByFields(userId) } },
         )
         .exec();
       throw error;
     }
   }
 
-  async discardDraft(draftId: string): Promise<void> {
+  async discardDraft(draftId: string, actorUserId?: string): Promise<void> {
     const draft = await this.loadDraft(draftId);
     if (draft.status === 'PUBLISHED' || draft.status === 'PUBLISHING') {
       throw new BadRequestException({
@@ -389,6 +395,7 @@ export class SprintTestsService {
       });
     }
     draft.status = 'DISCARDED';
+    assignUpdatedBy(draft, actorUserId);
     await draft.save();
   }
 
@@ -507,7 +514,10 @@ export class SprintTestsService {
     return item;
   }
 
-  async removePublished(id: string): Promise<{ message: string }> {
+  async removePublished(
+    id: string,
+    actorUserId?: string,
+  ): Promise<{ message: string }> {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Invalid mock test ID');
     }
@@ -515,7 +525,11 @@ export class SprintTestsService {
     const test = await this.mockTestModel
       .findOneAndUpdate(
         { _id: id, paperType: PaperType.SPRINT },
-        { isDeleted: true, isActive: false },
+        {
+          isDeleted: true,
+          isActive: false,
+          ...updatedByFields(actorUserId),
+        },
         { new: true },
       )
       .exec();
@@ -724,6 +738,7 @@ export class SprintTestsService {
     draft.showResultsImmediately =
       dto.showResultsImmediately ?? draft.showResultsImmediately;
     draft.accessMode = dto.accessMode ?? draft.accessMode ?? AccessMode.FREE;
+    assignUpdatedBy(draft, userId);
     await draft.save();
 
     return {

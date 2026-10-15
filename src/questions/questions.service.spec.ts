@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { QuestionsService } from './questions.service';
 import { Question } from '../mock-test-attempts/schemas/question.schema';
 import { AwsConfigService } from '../aws/config/aws.config';
@@ -113,6 +114,30 @@ describe('QuestionsService', () => {
       });
     });
 
+    it('stamps createdBy and still creates when the actor id is missing', async () => {
+      questionModel.create.mockResolvedValue({ id: OID });
+      questionModel.findOne.mockReturnValue(chain(questionDoc()));
+
+      await service.create(baseDto as any, OID);
+      expect(questionModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          createdBy: new Types.ObjectId(OID),
+        }),
+      );
+      expect(questionModel.create.mock.calls[0][0]).not.toHaveProperty(
+        'updatedBy',
+      );
+
+      await service.create(baseDto as any);
+      expect(questionModel.create.mock.calls[1][0]).not.toHaveProperty(
+        'createdBy',
+      );
+      await service.create(baseDto as any, 'not-an-id');
+      expect(questionModel.create.mock.calls[2][0]).not.toHaveProperty(
+        'createdBy',
+      );
+    });
+
     it('throws when correctAnswer does not match an option', async () => {
       await expect(
         service.create({ ...baseDto, correctAnswer: 'z' } as any),
@@ -195,6 +220,21 @@ describe('QuestionsService', () => {
           tag: null,
         } as any),
       ).resolves.toBeDefined();
+    });
+
+    it('stamps updatedBy without replacing createdBy', async () => {
+      questionModel.findOneAndUpdate.mockReturnValue(chain(questionDoc()));
+
+      await service.update(OID, { explanation: { en: 'x' } }, OID2);
+
+      const update = questionModel.findOneAndUpdate.mock.calls[0][1].$set;
+      expect(update.updatedBy).toEqual(new Types.ObjectId(OID2));
+      expect(update).not.toHaveProperty('createdBy');
+
+      await service.update(OID, { explanation: { en: 'x' } });
+      expect(
+        questionModel.findOneAndUpdate.mock.calls[1][1].$set,
+      ).not.toHaveProperty('updatedBy');
     });
 
     it('throws when options length is not 4', async () => {

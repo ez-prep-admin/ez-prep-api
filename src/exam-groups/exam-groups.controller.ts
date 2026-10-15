@@ -34,8 +34,10 @@ import { CategoryWithExamGroupsDto } from './dto/category-with-exam-groups.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('exam-groups')
 @Controller('exam-groups')
@@ -59,11 +61,17 @@ export class ExamGroupsController {
   @ApiBadRequestResponse({ description: 'Validation failed' })
   @ApiConflictResponse({ description: 'Exam group already exists' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async create(@Body() createExamGroupDto: CreateExamGroupDto): Promise<{
+  async create(
+    @Body() createExamGroupDto: CreateExamGroupDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: ExamGroupResponseDto;
   }> {
-    const examGroup = await this.examGroupsService.create(createExamGroupDto);
+    const examGroup = await this.examGroupsService.create(
+      createExamGroupDto,
+      admin.id,
+    );
     return {
       message: 'Exam group created successfully',
       data: examGroup,
@@ -263,6 +271,7 @@ export class ExamGroupsController {
   async update(
     @Param('id') id: string,
     @Body() updateExamGroupDto: UpdateExamGroupDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: ExamGroupResponseDto;
@@ -270,6 +279,7 @@ export class ExamGroupsController {
     const examGroup = await this.examGroupsService.update(
       id,
       updateExamGroupDto,
+      admin.id,
     );
     return {
       message: 'Exam group updated successfully',
@@ -293,11 +303,14 @@ export class ExamGroupsController {
   })
   @ApiNotFoundResponse({ description: 'Exam group not found' })
   @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
-  async remove(@Param('id') id: string): Promise<{
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: ExamGroupResponseDto;
   }> {
-    const examGroup = await this.examGroupsService.remove(id);
+    const examGroup = await this.examGroupsService.remove(id, admin.id);
     return {
       message: 'Exam group deleted successfully',
       data: examGroup,

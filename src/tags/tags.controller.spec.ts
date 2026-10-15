@@ -23,6 +23,8 @@ describe('TagsController', () => {
     remove: jest.fn(),
   };
 
+  const admin = { id: 'admin-1' } as never;
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [TagsController],
@@ -39,7 +41,7 @@ describe('TagsController', () => {
 
   it('create wraps data', async () => {
     service.create.mockResolvedValue(tag);
-    await expect(controller.create({} as any)).resolves.toEqual({
+    await expect(controller.create({} as any, admin)).resolves.toEqual({
       message: 'Tag created successfully',
       data: tag,
     });
@@ -61,14 +63,16 @@ describe('TagsController', () => {
 
   it('update wraps data', async () => {
     service.update.mockResolvedValue(tag);
-    await expect(controller.update('t1', {} as any)).resolves.toMatchObject({
+    await expect(
+      controller.update('t1', {} as any, admin),
+    ).resolves.toMatchObject({
       data: tag,
     });
   });
 
   it('remove returns service message', async () => {
     service.remove.mockResolvedValue({ message: 'Tag deleted successfully' });
-    await expect(controller.remove('t1')).resolves.toEqual({
+    await expect(controller.remove('t1', admin)).resolves.toEqual({
       message: 'Tag deleted successfully',
     });
   });

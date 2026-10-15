@@ -22,7 +22,9 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserResponseDto } from '../users/dto/user-response.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -45,11 +47,14 @@ export class QuestionsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a question (Admin only)' })
   @ApiResponse({ status: 201, type: QuestionResponseDto })
-  async create(@Body() dto: CreateQuestionDto): Promise<{
+  async create(
+    @Body() dto: CreateQuestionDto,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{
     message: string;
     data: QuestionResponseDto;
   }> {
-    const question = await this.questionsService.create(dto);
+    const question = await this.questionsService.create(dto, admin.id);
     return {
       message: 'Question created successfully',
       data: question,
@@ -109,11 +114,12 @@ export class QuestionsController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateQuestionDto,
+    @GetUser() admin: UserResponseDto,
   ): Promise<{
     message: string;
     data: QuestionResponseDto;
   }> {
-    const question = await this.questionsService.update(id, dto);
+    const question = await this.questionsService.update(id, dto, admin.id);
     return {
       message: 'Question updated successfully',
       data: question,
@@ -123,7 +129,10 @@ export class QuestionsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Soft delete a question (Admin only)' })
   @ApiParam({ name: 'id' })
-  async remove(@Param('id') id: string): Promise<{ message: string }> {
-    return this.questionsService.remove(id);
+  async remove(
+    @Param('id') id: string,
+    @GetUser() admin: UserResponseDto,
+  ): Promise<{ message: string }> {
+    return this.questionsService.remove(id, admin.id);
   }
 }

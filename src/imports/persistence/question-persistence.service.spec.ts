@@ -76,6 +76,11 @@ describe('QuestionPersistenceService', () => {
     expect(payload.uploadId.toString()).toBe(uploadId);
     expect(payload.explanation.images).toHaveLength(1);
     expect(payload.source).toBe(PDF_IMPORT_QUESTION_SOURCE);
+    expect(payload).not.toHaveProperty('createdBy');
+
+    await service.saveOne(makeQuestion({ uploadId }), subjectId);
+    expect(create.mock.calls[1][0].createdBy.toString()).toBe(subjectId);
+    expect(create.mock.calls[1][0]).not.toHaveProperty('updatedBy');
   });
 
   it('omits uploadId when not present and wraps DB errors', async () => {

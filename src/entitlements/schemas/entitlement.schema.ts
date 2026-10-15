@@ -91,6 +91,12 @@ export class Entitlement {
   @Prop({ type: Object })
   metadata?: Record<string, unknown>;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

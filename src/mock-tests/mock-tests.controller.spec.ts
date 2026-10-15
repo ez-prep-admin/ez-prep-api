@@ -104,7 +104,7 @@ describe('MockTestsController', () => {
     await expect(
       controller.update('t1', {} as any, admin as any),
     ).resolves.toMatchObject({ data: { id: 't1' } });
-    await expect(controller.remove('t1')).resolves.toEqual({
+    await expect(controller.remove('t1', admin as any)).resolves.toEqual({
       message: 'Mock test deleted successfully',
     });
   });

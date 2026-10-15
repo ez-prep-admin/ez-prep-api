@@ -78,16 +78,27 @@ describe('FullMockTestsController', () => {
       data: { id: 'd1' },
     });
     await expect(
-      controller.replaceQuestion('d1', 0, {
-        questionId: 'q1',
-        allowCrossSubject: true,
-      }),
+      controller.replaceQuestion(
+        'd1',
+        0,
+        {
+          questionId: 'q1',
+          allowCrossSubject: true,
+        },
+        admin as any,
+      ),
     ).resolves.toMatchObject({ data: { id: 'd1' } });
-    expect(service.replaceQuestion).toHaveBeenCalledWith('d1', 0, 'q1', true);
+    expect(service.replaceQuestion).toHaveBeenCalledWith(
+      'd1',
+      0,
+      'q1',
+      true,
+      'a1',
+    );
     await expect(
       controller.publishDraft('d1', { title: 'P' }, admin as any),
     ).resolves.toMatchObject({ data: { mockTestId: 't1' } });
-    await expect(controller.discardDraft('d1')).resolves.toEqual({
+    await expect(controller.discardDraft('d1', admin as any)).resolves.toEqual({
       message: 'Draft discarded successfully',
     });
     await expect(

@@ -36,6 +36,7 @@ import {
 import { AccessControlService } from '../access/access-control.service';
 import { AccessDto, toAccessDto } from '../access/to-access-dto';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
+import { updatedByFields } from '../common/types/to-actor-object-id';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
   ...TOPIC_WISE_PAPER_MATCH,
@@ -299,6 +300,7 @@ export class MockTestsService {
             allowRetake: dto.allowRetake,
             shuffleOptions: dto.shuffleOptions,
             showResultsImmediately: dto.showResultsImmediately,
+            ...updatedByFields(userId),
           },
         },
         { new: true },
@@ -311,11 +313,18 @@ export class MockTestsService {
     } as UserResponseDto);
   }
 
-  async removeTopicWise(id: string): Promise<{ message: string }> {
+  async removeTopicWise(
+    id: string,
+    actorUserId?: string,
+  ): Promise<{ message: string }> {
     const mockTest = await this.mockTestModel
       .findOneAndUpdate(
         { _id: id, ...TOPIC_WISE_FILTER },
-        { isDeleted: true, isActive: false },
+        {
+          isDeleted: true,
+          isActive: false,
+          ...updatedByFields(actorUserId),
+        },
         { new: true },
       )
       .exec();

@@ -499,7 +499,12 @@ describe('SprintTestsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(draftModel.updateOne).toHaveBeenCalledWith(
       { _id: draft._id, status: 'PUBLISHING' },
-      { $set: { status: 'REVIEW' } },
+      {
+        $set: {
+          status: 'REVIEW',
+          updatedBy: new Types.ObjectId(USER_ID),
+        },
+      },
     );
     expect(mockTestModel.create).not.toHaveBeenCalled();
   });

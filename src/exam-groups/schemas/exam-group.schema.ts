@@ -32,6 +32,12 @@ export class ExamGroup {
   @Prop({ default: false })
   isDeleted: boolean;
 
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  createdBy?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  updatedBy?: Types.ObjectId;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -10,6 +10,11 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryResponseDto } from './dto/category-response.dto';
 import { PaginatedCategoriesResponseDto } from './dto/paginated-categories-response.dto';
+import {
+  createdByFields,
+  omitActorFields,
+  updatedByFields,
+} from '../common/types/to-actor-object-id';
 
 @Injectable()
 export class CategoriesService {
@@ -23,6 +28,7 @@ export class CategoriesService {
    */
   async create(
     createCategoryDto: CreateCategoryDto,
+    actorUserId?: string,
   ): Promise<CategoryResponseDto> {
     // Check for duplicate name or shortName
     const existing = await this.categoryModel
@@ -40,7 +46,10 @@ export class CategoriesService {
       );
     }
 
-    const category = await this.categoryModel.create(createCategoryDto);
+    const category = await this.categoryModel.create({
+      ...createCategoryDto,
+      ...createdByFields(actorUserId),
+    });
     return this.toResponseDto(category);
   }
 
@@ -128,6 +137,7 @@ export class CategoriesService {
   async update(
     id: string,
     updateCategoryDto: UpdateCategoryDto,
+    actorUserId?: string,
   ): Promise<CategoryResponseDto> {
     // Check for duplicate if name/shortName is being updated
     if (updateCategoryDto.name || updateCategoryDto.shortName) {
@@ -153,7 +163,11 @@ export class CategoriesService {
     }
 
     const category = await this.categoryModel
-      .findByIdAndUpdate(id, updateCategoryDto, { new: true })
+      .findByIdAndUpdate(
+        id,
+        { ...updateCategoryDto, ...updatedByFields(actorUserId) },
+        { new: true },
+      )
       .exec();
 
     if (!category) {
@@ -166,11 +180,11 @@ export class CategoriesService {
   /**
    * Soft delete category
    */
-  async remove(id: string): Promise<CategoryResponseDto> {
+  async remove(id: string, actorUserId?: string): Promise<CategoryResponseDto> {
     const category = await this.categoryModel
       .findByIdAndUpdate(
         id,
-        { isDeleted: true, isActive: false },
+        { isDeleted: true, isActive: false, ...updatedByFields(actorUserId) },
         { new: true },
       )
       .exec();
@@ -198,6 +212,6 @@ export class CategoriesService {
    * Helper to convert document to DTO
    */
   private toResponseDto(category: CategoryDocument): CategoryResponseDto {
-    return new CategoryResponseDto(category.toObject());
+    return new CategoryResponseDto(omitActorFields(category.toObject()));
   }
 }
