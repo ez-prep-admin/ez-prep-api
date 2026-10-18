@@ -20,6 +20,7 @@ import {
   omitActorFields,
   updatedByFields,
 } from '../common/types/to-actor-object-id';
+import { compareByDashboardPriority } from '../categories/category-priority';
 
 @Injectable()
 export class ExamGroupsService {
@@ -238,6 +239,7 @@ export class ExamGroupsService {
           shortName: catObj.shortName,
           imageUrl: catObj.imageUrl,
           description: catObj.description,
+          priority: catObj.priority ?? 0,
           examGroups: [],
         });
       }
@@ -256,7 +258,7 @@ export class ExamGroupsService {
       );
     }
 
-    return Array.from(categoryMap.values());
+    return Array.from(categoryMap.values()).sort(compareByDashboardPriority);
   }
 
   /**

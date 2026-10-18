@@ -1,6 +1,9 @@
 import {
   IsString,
   IsOptional,
+  IsInt,
+  Min,
+  Max,
   MinLength,
   MaxLength,
   IsUrl,
@@ -52,4 +55,18 @@ export class CreateCategoryDto {
   @MaxLength(500, { message: 'Description cannot exceed 500 characters' })
   @Transform(({ value }) => value?.trim())
   description?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Dashboard display priority. Higher values appear first in Popular Exams. Defaults to 0. Categories with the same priority are listed alphabetically.',
+    example: 10,
+    minimum: 0,
+    maximum: 9999,
+    default: 0,
+  })
+  @IsOptional()
+  @IsInt({ message: 'Priority must be a whole number' })
+  @Min(0, { message: 'Priority cannot be negative' })
+  @Max(9999, { message: 'Priority cannot exceed 9999' })
+  priority?: number;
 }

@@ -38,6 +38,14 @@ export class CategoryResponseDto {
   description?: string;
 
   @ApiProperty({
+    description:
+      'Dashboard display priority. Higher values appear first. Defaults to 0.',
+    example: 0,
+  })
+  @Expose()
+  priority: number;
+
+  @ApiProperty({
     description: 'Active status',
     example: true,
   })

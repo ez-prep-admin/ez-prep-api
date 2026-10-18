@@ -490,6 +490,8 @@ How to take the test:
 Also on each row: \`isSessionWise\`, \`subjectConfig\` (\`questionIds\`, \`numberOfQuestions\`). Topic-wise papers are not included (\`GET /mock-tests\`).
 
 Students only see active papers. Admins also see inactive ones. \`examId\` is optional.
+
+Ordered by free papers first (\`accessMode: FREE\` before \`ENTITLED\`), then earliest \`createdAt\`.
     `,
   })
   @ApiQuery({

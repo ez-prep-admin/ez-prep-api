@@ -181,7 +181,8 @@ export class ExamGroupsController {
     summary: 'Get all exam groups grouped by category',
     description:
       'Retrieves all active exam groups organized under their respective categories. ' +
-      'Returns an array of categories, each containing an array of its exam groups. ' +
+      'Returns an array of categories, each containing an array of its exam groups, ' +
+      'ordered by category priority (highest first), then name. ' +
       'For example, SSC will contain CGL, CHSL etc. Public endpoint.',
   })
   @ApiResponse({

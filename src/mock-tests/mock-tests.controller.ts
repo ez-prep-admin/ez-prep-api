@@ -252,6 +252,8 @@ export class MockTestsController {
     Returns populated exam, subject, and topic details (excludes questionIds and difficultyDistribution).
     
     Supports optional topic name search and subject filter, which can be used independently or together.
+
+    Ordered by free papers first (\`accessMode: FREE\` before \`ENTITLED\`), then earliest \`createdAt\`.
     `,
   })
   @ApiParam({

@@ -142,6 +142,13 @@ export class AppUserListItemDto {
   @ApiPropertyOptional({ type: AppUserTargetExamDto })
   targetExam?: AppUserTargetExamDto;
 
+  @ApiPropertyOptional({
+    type: [AppUserTargetExamDto],
+    description:
+      'Exams this learner is preparing for. The first one is the primary target and matches targetExam.',
+  })
+  targetExams?: AppUserTargetExamDto[];
+
   @ApiProperty({
     example: 3,
     description:

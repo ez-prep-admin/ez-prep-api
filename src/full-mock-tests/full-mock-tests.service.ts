@@ -617,7 +617,7 @@ export class FullMockTestsService {
       this.mockTestModel
         .find(query)
         .populate('exam', '_id name description')
-        .sort({ createdAt: -1 })
+        .sort({ accessMode: -1, createdAt: 1 })
         .skip(skip)
         .limit(validLimit)
         .exec(),

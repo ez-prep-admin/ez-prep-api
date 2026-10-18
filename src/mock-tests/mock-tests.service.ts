@@ -574,7 +574,7 @@ export class MockTestsService {
         .populate('exam', '_id name description')
         .populate('subject', '_id name description')
         .populate('topic', '_id name')
-        .sort({ createdAt: -1 })
+        .sort({ accessMode: -1, createdAt: 1 })
         .skip(skip)
         .limit(validLimit)
         .exec(),

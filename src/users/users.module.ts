@@ -4,6 +4,7 @@ import { MeBillingProfileController } from './me-billing-profile.controller';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { User, UserSchema } from './schemas/user.schema';
+import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
 import { Order, OrderSchema } from '../orders/schemas/order.schema';
 import {
   TaxInvoice,
@@ -14,6 +15,7 @@ import {
   imports: [
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
+      { name: Exam.name, schema: ExamSchema },
       { name: Order.name, schema: OrderSchema },
       { name: TaxInvoice.name, schema: TaxInvoiceSchema },
     ]),

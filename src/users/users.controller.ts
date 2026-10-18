@@ -6,6 +6,7 @@
   Patch,
   Param,
   Delete,
+  Put,
   HttpStatus,
   HttpCode,
   Query,
@@ -28,6 +29,10 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+import {
+  SetTargetExamsDto,
+  TargetExamPromptQueryDto,
+} from './dto/set-target-exams.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -249,6 +254,126 @@ export class UsersController {
   ): Promise<{ message: string; data: UserResponseDto }> {
     const user = await this.usersService.updatePreferences(currentUser.id, dto);
     return { message: 'Preferences updated successfully', data: user };
+  }
+
+  @Put('me/target-exams')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Replace own target exams',
+    description:
+      'Sets the ordered list of exams the learner is preparing for. The first exam is the primary target. Send an empty list to clear them. At most 5 exams.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Target exams updated',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid exam id, unknown exam, or more than 5 exams',
+  })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async setMyTargetExams(
+    @GetUser() currentUser: UserResponseDto,
+    @Body() dto: SetTargetExamsDto,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.setTargetExams(
+      currentUser.id,
+      dto.examIds,
+    );
+    return { message: 'Target exams updated', data: user };
+  }
+
+  @Get('me/target-exams/prompt')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Whether to ask the learner to target this exam',
+    description:
+      'False when the exam is already a target, the list is full, the exam is inactive, it was dismissed in the last 14 days, or it has been dismissed 3 times.',
+  })
+  @ApiQuery({ name: 'examId', required: true, description: 'Exam id' })
+  @ApiResponse({ status: 200, description: 'Prompt decision' })
+  @ApiBadRequestResponse({ description: 'examId is not a valid id' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async shouldPromptForTargetExam(
+    @GetUser() currentUser: UserResponseDto,
+    @Query() query: TargetExamPromptQueryDto,
+  ): Promise<{ shouldPrompt: boolean }> {
+    return this.usersService.shouldPromptForTargetExam(
+      currentUser.id,
+      query.examId,
+    );
+  }
+
+  @Post('me/target-exams/:examId/dismiss-prompt')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Remember that the learner skipped the target-exam prompt',
+  })
+  @ApiResponse({ status: 200, description: 'Prompt dismissed' })
+  @ApiBadRequestResponse({ description: 'Invalid exam id' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async dismissTargetExamPrompt(
+    @GetUser() currentUser: UserResponseDto,
+    @Param('examId') examId: string,
+  ): Promise<{ message: string }> {
+    await this.usersService.dismissTargetExamPrompt(currentUser.id, examId);
+    return { message: 'Target exam prompt dismissed' };
+  }
+
+  @Post('me/target-exams/:examId')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Add one target exam',
+    description:
+      'Appends the exam. Adding an exam that is already targeted does nothing. Returns 409 when the learner already has 5 target exams.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Target exam added',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid or inactive exam' })
+  @ApiConflictResponse({ description: 'Target exam list is full' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async addMyTargetExam(
+    @GetUser() currentUser: UserResponseDto,
+    @Param('examId') examId: string,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.addTargetExam(currentUser.id, examId);
+    return { message: 'Target exam added', data: user };
+  }
+
+  @Delete('me/target-exams/:examId')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Remove one target exam',
+    description:
+      'Removes the exam from the ordered list. The new first exam becomes the primary target.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Target exam removed',
+    type: UserResponseDto,
+  })
+  @ApiBadRequestResponse({ description: 'Invalid exam id' })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  async removeMyTargetExam(
+    @GetUser() currentUser: UserResponseDto,
+    @Param('examId') examId: string,
+  ): Promise<{ message: string; data: UserResponseDto }> {
+    const user = await this.usersService.removeTargetExam(
+      currentUser.id,
+      examId,
+    );
+    return { message: 'Target exam removed', data: user };
   }
 
   // -- Admin: individual user operations -------------------------------------

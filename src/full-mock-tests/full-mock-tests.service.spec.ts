@@ -1363,7 +1363,8 @@ describe('FullMockTestsService', () => {
       await expect(service.listPublished('bad')).rejects.toThrow(
         BadRequestException,
       );
-      mockTestModel.find.mockReturnValue(chainable([published]));
+      const query = chainable([published]);
+      mockTestModel.find.mockReturnValue(query);
       mockTestsService.getUserAttemptActions.mockResolvedValue(
         new Map([
           [
@@ -1381,6 +1382,10 @@ describe('FullMockTestsService', () => {
         false,
       );
       expect(result.data[0].userAttemptAction).toBe(UserAttemptAction.RESUME);
+      expect(query.sort).toHaveBeenCalledWith({
+        accessMode: -1,
+        createdAt: 1,
+      });
     });
 
     it('should find one published paper', async () => {

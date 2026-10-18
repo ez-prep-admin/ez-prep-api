@@ -32,6 +32,15 @@ export class PreferencesResponseDto {
   notifications: NotificationPreferencesResponseDto;
 }
 
+export class FeedbackResponseDto {
+  @Expose() text?: string;
+  @Expose() userInterface?: number;
+  @Expose() questions?: number;
+  @Expose() fullMockTests?: number;
+  @Expose() topicWisePractice?: number;
+  @Expose() easeOfUse?: number;
+}
+
 export class TargetExamResponseDto {
   @Expose() id: string;
   @Expose() name: string;
@@ -117,9 +126,26 @@ export class UserResponseDto {
   @Type(() => LocationResponseDto)
   location?: LocationResponseDto;
 
+  @ApiPropertyOptional({
+    description: 'Saved support feedback',
+    type: FeedbackResponseDto,
+  })
+  @Expose()
+  @Type(() => FeedbackResponseDto)
+  feedback?: FeedbackResponseDto;
+
   // ── Group 2: Target exam ───────────────────────────────────────────────────
   @ApiPropertyOptional({
-    description: 'Target exam (id and name)',
+    description:
+      'Exams the learner is preparing for, in order. The first exam is the primary target.',
+    type: [TargetExamResponseDto],
+  })
+  @Expose()
+  @Type(() => TargetExamResponseDto)
+  targetExams?: TargetExamResponseDto[];
+
+  @ApiPropertyOptional({
+    description: 'Primary target exam (id and name). Same as targetExams[0].',
     type: TargetExamResponseDto,
   })
   @Expose()

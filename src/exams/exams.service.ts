@@ -11,6 +11,7 @@ import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
+import { compareByDashboardPriority } from '../categories/category-priority';
 import { PaginatedExamsResponseDto } from './dto/paginated-exams-response.dto';
 import {
   Category,
@@ -156,12 +157,14 @@ export class ExamsService {
       showInApp: true,
     };
 
-    // Get all active categories
-    const categories = await this.categoryModel
-      .find(categoryQuery)
-      .sort({ name: 1 })
-      .lean()
-      .exec();
+    // Get all active categories, highest dashboard priority first
+    const categories = (
+      await this.categoryModel
+        .find(categoryQuery)
+        .sort({ priority: -1, name: 1 })
+        .lean()
+        .exec()
+    ).sort(compareByDashboardPriority);
 
     // Get all active exams
     const exams = await this.examModel.find(examQuery).lean().exec();
@@ -218,6 +221,7 @@ export class ExamsService {
         shortName: category.shortName,
         imageUrl: category.imageUrl,
         description: category.description,
+        priority: category.priority ?? 0,
         exams: categoryExams.map(exam => ({
           id: exam._id.toString(),
           title: exam.name,
