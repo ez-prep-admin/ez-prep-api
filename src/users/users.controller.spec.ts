@@ -18,6 +18,11 @@ describe('UsersController', () => {
     findOne: jest.fn(),
     updateMe: jest.fn(),
     updatePreferences: jest.fn(),
+    setTargetExams: jest.fn(),
+    addTargetExam: jest.fn(),
+    removeTargetExam: jest.fn(),
+    shouldPromptForTargetExam: jest.fn(),
+    dismissTargetExamPrompt: jest.fn(),
     update: jest.fn(),
     toggleUserStatus: jest.fn(),
     softDelete: jest.fn(),
@@ -150,6 +155,36 @@ describe('UsersController', () => {
     await expect(controller.restore('u1')).resolves.toMatchObject({
       data: user,
     });
+  });
+
+  it('setMyTargetExams replaces the ordered list', async () => {
+    mockUsersService.setTargetExams.mockResolvedValue(user);
+    await expect(
+      controller.setMyTargetExams(user as any, { examIds: ['exam-1'] }),
+    ).resolves.toEqual({ message: 'Target exams updated', data: user });
+    expect(mockUsersService.setTargetExams).toHaveBeenCalledWith('u1', [
+      'exam-1',
+    ]);
+  });
+
+  it('shouldPromptForTargetExam returns the service decision', async () => {
+    mockUsersService.shouldPromptForTargetExam.mockResolvedValue({
+      shouldPrompt: true,
+    });
+    await expect(
+      controller.shouldPromptForTargetExam(user as any, { examId: 'exam-1' }),
+    ).resolves.toEqual({ shouldPrompt: true });
+  });
+
+  it('dismissTargetExamPrompt acknowledges the skip', async () => {
+    mockUsersService.dismissTargetExamPrompt.mockResolvedValue(undefined);
+    await expect(
+      controller.dismissTargetExamPrompt(user as any, 'exam-1'),
+    ).resolves.toEqual({ message: 'Target exam prompt dismissed' });
+    expect(mockUsersService.dismissTargetExamPrompt).toHaveBeenCalledWith(
+      'u1',
+      'exam-1',
+    );
   });
 
   it('hardDelete delegates to the service', async () => {

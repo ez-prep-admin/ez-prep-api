@@ -207,6 +207,41 @@ describe('ExamsService', () => {
       expect(result[0].exams[1].duration).toBe('45min');
       expect(result[0].exams[2].duration).toBe('1h');
     });
+
+    it('orders categories by priority, then name', async () => {
+      categoryModel.find.mockReturnValue(
+        chain([
+          {
+            _id: { toString: () => 'a' },
+            name: 'Zebra',
+            shortName: 'Z',
+            priority: 1,
+          },
+          {
+            _id: { toString: () => 'b' },
+            name: 'Alpha',
+            shortName: 'A',
+            priority: 5,
+          },
+          {
+            _id: { toString: () => 'c' },
+            name: 'Middle',
+            shortName: 'M',
+          },
+        ]),
+      );
+      examModel.find.mockReturnValue(chain([]));
+      examModel.aggregate.mockReturnValue(chain([]));
+
+      const result = await service.getExamsByCategory();
+
+      expect(result.map(category => category.name)).toEqual([
+        'Alpha',
+        'Zebra',
+        'Middle',
+      ]);
+      expect(result.map(category => category.priority)).toEqual([5, 1, 0]);
+    });
   });
 
   describe('findOne', () => {

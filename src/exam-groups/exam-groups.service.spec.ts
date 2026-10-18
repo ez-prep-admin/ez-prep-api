@@ -187,6 +187,40 @@ describe('ExamGroupsService', () => {
       const result = await service.findGroupedByCategory();
       expect(result).toHaveLength(1);
       expect(result[0].examGroups).toHaveLength(2);
+      expect(result[0].priority).toBe(0);
+    });
+
+    it('orders categories by priority, then name', async () => {
+      const category = (
+        id: string,
+        name: string,
+        priority?: number,
+      ) => ({
+        _id: { toString: () => id },
+        toObject: () => ({
+          name,
+          shortName: name,
+          priority,
+        }),
+      });
+      const low = groupDoc({
+        name: 'Low group',
+        category: category('low', 'Zebra', 1),
+      });
+      const high = groupDoc({
+        name: 'High group',
+        category: category('high', 'Alpha', 5),
+      });
+      const unset = groupDoc({
+        name: 'Unset group',
+        category: category('unset', 'Middle'),
+      });
+
+      model.find.mockReturnValue(chain([low, high, unset]));
+      const result = await service.findGroupedByCategory();
+
+      expect(result.map(row => row.name)).toEqual(['Alpha', 'Zebra', 'Middle']);
+      expect(result.map(row => row.priority)).toEqual([5, 1, 0]);
     });
   });
 });

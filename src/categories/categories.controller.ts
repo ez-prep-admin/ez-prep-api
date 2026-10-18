@@ -82,7 +82,7 @@ export class CategoriesController {
   @ApiOperation({
     summary: 'Get all categories with pagination',
     description:
-      'Retrieves all categories with optional search and filtering. Public endpoint.',
+      'Retrieves all categories with optional search and filtering. Ordered by dashboard priority (highest first), then name. Public endpoint.',
   })
   @ApiQuery({
     name: 'page',
@@ -147,7 +147,7 @@ export class CategoriesController {
   @ApiOperation({
     summary: 'Get all active categories',
     description:
-      'Retrieves all active categories without pagination. Public endpoint.',
+      'Retrieves all active categories without pagination, ordered by dashboard priority (highest first), then name. Public endpoint.',
   })
   @ApiResponse({
     status: 200,

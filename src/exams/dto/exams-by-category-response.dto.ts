@@ -89,6 +89,13 @@ export class CategoryGroupDto {
   description?: string;
 
   @ApiProperty({
+    description:
+      'Dashboard display priority. Higher values appear first. Defaults to 0.',
+    example: 0,
+  })
+  priority: number;
+
+  @ApiProperty({
     description: 'List of exams under this category',
     type: [ExamsByCategoryItemDto],
   })

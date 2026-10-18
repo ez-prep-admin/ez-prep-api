@@ -73,6 +73,7 @@ export class AdminUsersService {
       this.userModel
         .find(filter)
         .populate('targetExam', 'name')
+        .populate('targetExams', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -137,6 +138,7 @@ export class AdminUsersService {
         _id: userId,
       })
       .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
       .exec();
 
     if (!user || !isAppUserRole(user.role)) {
@@ -239,19 +241,19 @@ export class AdminUsersService {
     delete obj.dateOfBirth;
     delete obj.isDeleted;
 
-    let targetExam: AppUserListItemDto['targetExam'];
-    if (obj.targetExam != null && typeof obj.targetExam === 'object') {
-      const exam = obj.targetExam as Record<string, unknown>;
-      if ('name' in exam && exam.name) {
-        targetExam = {
-          id: String(exam.id ?? exam._id ?? ''),
-          name: String(exam.name),
-        };
-        if (!targetExam.id) {
-          targetExam = undefined;
-        }
-      }
-    }
+    const listedTargets = Array.isArray(obj.targetExams)
+      ? obj.targetExams
+          .map(item => mapAdminTargetExam(item))
+          .filter((item): item is NonNullable<typeof item> => item != null)
+      : [];
+    const primaryTarget = mapAdminTargetExam(obj.targetExam);
+    const targetExams =
+      listedTargets.length > 0
+        ? listedTargets
+        : primaryTarget
+          ? [primaryTarget]
+          : [];
+    const targetExam = primaryTarget ?? targetExams[0];
 
     const location = obj.location as AppUserListItemDto['location'] | undefined;
     const counts = normalizeAttemptActivity(activity);
@@ -272,6 +274,7 @@ export class AdminUsersService {
       badgesEarnedCount:
         typeof obj.badgesEarnedCount === 'number' ? obj.badgesEarnedCount : 0,
       targetExam,
+      targetExams,
       testsAttendedCount: totalAttempts(counts),
       testActivity: {
         fullExam: {
@@ -324,6 +327,23 @@ export class AdminUsersService {
     }
     return profile;
   }
+}
+
+function mapAdminTargetExam(
+  value: unknown,
+): { id: string; name: string } | undefined {
+  if (value == null || typeof value !== 'object') {
+    return undefined;
+  }
+  const exam = value as Record<string, unknown>;
+  if (!('name' in exam) || !exam.name) {
+    return undefined;
+  }
+  const id = String(exam.id ?? exam._id ?? '');
+  if (!id) {
+    return undefined;
+  }
+  return { id, name: String(exam.name) };
 }
 
 const EMPTY_USER_ACCESS: AppUserAccessDto = {

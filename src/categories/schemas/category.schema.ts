@@ -21,6 +21,10 @@ export class Category {
   @Prop({ trim: true })
   description?: string;
 
+  /** Higher values appear first in dashboard category sections. */
+  @Prop({ type: Number, default: 0, min: 0, index: true })
+  priority: number;
+
   @Prop({ default: true, index: true })
   isActive: boolean;
 
@@ -44,6 +48,9 @@ CategorySchema.index({ name: 'text', shortName: 'text' });
 
 // Compound index for filtering
 CategorySchema.index({ isActive: 1, isDeleted: 1 });
+
+// Dashboard and admin lists: higher priority first, then name
+CategorySchema.index({ priority: -1, name: 1 });
 
 // Virtual for id field
 CategorySchema.virtual('id').get(function () {

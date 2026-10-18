@@ -7,6 +7,9 @@ import {
   MinLength,
   MaxLength,
   IsMongoId,
+  IsInt,
+  Min,
+  Max,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -16,6 +19,53 @@ import { IsValidPhone } from '../../common/validators/is-valid-phone.validator';
 import { IsProperName } from '../../common/validators/is-proper-name.validator';
 import { Gender } from '../../common/enums/gender.enum';
 import { LocationDto } from './update-profile.dto';
+
+export class FeedbackDto {
+  @ApiPropertyOptional({
+    description: 'Free-text feedback and improvements',
+    maxLength: 1000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  text?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  userInterface?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  questions?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  fullMockTests?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  topicWisePractice?: number;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 5 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(5)
+  easeOfUse?: number;
+}
 
 /**
  * Unified DTO for the authenticated user to update their own profile.
@@ -113,6 +163,15 @@ export class UpdateMeDto {
   @ValidateNested()
   @Type(() => LocationDto)
   location?: LocationDto;
+
+  @ApiPropertyOptional({
+    description: 'Support feedback. Replaces the previous note.',
+    type: FeedbackDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FeedbackDto)
+  feedback?: FeedbackDto;
 
   @ApiPropertyOptional({
     description:

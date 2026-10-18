@@ -10,6 +10,12 @@ import * as bcrypt from 'bcryptjs';
 import { indianStateByCode } from '../common/commerce/indian-states';
 import { CheckoutBillingDto } from '../orders/dto/create-checkout-order.dto';
 import { User, UserBillingProfile, UserDocument } from './schemas/user.schema';
+import { Exam, ExamDocument } from '../exams/schemas/exam.schema';
+import {
+  MAX_TARGET_EXAM_PROMPT_DISMISSALS,
+  MAX_TARGET_EXAMS,
+  TARGET_EXAM_PROMPT_COOLDOWN_MS,
+} from './target-exams.constants';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CreateAdminDto } from '../auth/dto/create-admin.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -49,6 +55,7 @@ export class UsersService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(TaxInvoice.name)
     private invoiceModel: Model<TaxInvoiceDocument>,
+    @InjectModel(Exam.name) private examModel: Model<ExamDocument>,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<UserResponseDto> {
@@ -96,6 +103,7 @@ export class UsersService {
     const user = await this.userModel
       .findById(id)
       .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
       .exec();
     if (!user) {
       throw new NotFoundException(`User with ID "${id}" not found`);
@@ -505,6 +513,7 @@ export class UsersService {
       $set.dateOfBirth = new Date(dto.dateOfBirth);
     if (dto.gender !== undefined) $set.gender = dto.gender;
     if (dto.location !== undefined) $set.location = dto.location;
+    if (dto.feedback !== undefined) $set.feedback = dto.feedback;
     if (dto.targetExam !== undefined) {
       if (dto.targetExam === null) {
         $unset.targetExam = 1;
@@ -525,6 +534,8 @@ export class UsersService {
 
     const user = await this.userModel
       .findByIdAndUpdate(new Types.ObjectId(id), update, { new: true })
+      .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
       .exec();
 
     if (!user) {
@@ -559,6 +570,8 @@ export class UsersService {
         { $set: update },
         { new: true },
       )
+      .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
       .exec();
 
     if (!user) {
@@ -627,6 +640,8 @@ export class UsersService {
 
     const user = await this.userModel
       .findByIdAndUpdate(new Types.ObjectId(id), { $set }, { new: true })
+      .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
       .exec();
 
     if (!user) {
@@ -661,24 +676,191 @@ export class UsersService {
       .exec();
   }
 
+  // ── Target exams ──────────────────────────────────────────────────────────
+
+  async setTargetExams(
+    userId: string,
+    examIds: string[],
+  ): Promise<UserResponseDto> {
+    const ids = normalizeExamIds(examIds);
+    if (ids.length > MAX_TARGET_EXAMS) {
+      throw new BadRequestException(
+        `You can target at most ${MAX_TARGET_EXAMS} exams`,
+      );
+    }
+    await this.requireUser(userId);
+    await this.assertActiveExams(ids);
+    return this.writeTargetExams(userId, ids);
+  }
+
+  async addTargetExam(
+    userId: string,
+    examId: string,
+  ): Promise<UserResponseDto> {
+    const [id] = normalizeExamIds([examId]);
+    const user = await this.requireUser(userId);
+    const current = currentTargetExamIds(user);
+    if (current.includes(id)) {
+      return this.findOne(userId);
+    }
+    if (current.length >= MAX_TARGET_EXAMS) {
+      throw new ConflictException(
+        `You can target at most ${MAX_TARGET_EXAMS} exams`,
+      );
+    }
+    await this.assertActiveExams([id]);
+    return this.writeTargetExams(userId, [...current, id]);
+  }
+
+  async removeTargetExam(
+    userId: string,
+    examId: string,
+  ): Promise<UserResponseDto> {
+    const [id] = normalizeExamIds([examId]);
+    const user = await this.requireUser(userId);
+    const next = currentTargetExamIds(user).filter(existing => existing !== id);
+    return this.writeTargetExams(userId, next);
+  }
+
+  async shouldPromptForTargetExam(
+    userId: string,
+    examId: string,
+  ): Promise<{ shouldPrompt: boolean }> {
+    if (!Types.ObjectId.isValid(examId)) {
+      return { shouldPrompt: false };
+    }
+    const user = await this.requireUser(userId);
+    const current = currentTargetExamIds(user);
+    if (current.includes(examId) || current.length >= MAX_TARGET_EXAMS) {
+      return { shouldPrompt: false };
+    }
+    const dismissal = (user.targetExamPromptDismissals ?? []).find(
+      entry => String(entry.exam) === examId,
+    );
+    if (dismissal) {
+      if (dismissal.count >= MAX_TARGET_EXAM_PROMPT_DISMISSALS) {
+        return { shouldPrompt: false };
+      }
+      const dismissedAt = new Date(dismissal.lastDismissedAt).getTime();
+      if (
+        Number.isFinite(dismissedAt) &&
+        Date.now() - dismissedAt < TARGET_EXAM_PROMPT_COOLDOWN_MS
+      ) {
+        return { shouldPrompt: false };
+      }
+    }
+    const active = await this.findActiveExamIds([examId]);
+    return { shouldPrompt: active.length === 1 };
+  }
+
+  async dismissTargetExamPrompt(userId: string, examId: string): Promise<void> {
+    const [id] = normalizeExamIds([examId]);
+    const user = await this.requireUser(userId);
+    const dismissals = [...(user.targetExamPromptDismissals ?? [])];
+    const index = dismissals.findIndex(entry => String(entry.exam) === id);
+    const now = new Date();
+    if (index === -1) {
+      dismissals.push({
+        exam: new Types.ObjectId(id),
+        count: 1,
+        lastDismissedAt: now,
+      });
+    } else {
+      dismissals[index] = {
+        exam: new Types.ObjectId(id),
+        count: (dismissals[index].count ?? 0) + 1,
+        lastDismissedAt: now,
+      };
+    }
+
+    const updated = await this.userModel
+      .findByIdAndUpdate(
+        new Types.ObjectId(userId),
+        { $set: { targetExamPromptDismissals: dismissals } },
+        { new: true },
+      )
+      .exec();
+    if (!updated) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+  }
+
   // ── Private helpers ───────────────────────────────────────────────────────
+
+  private async assertActiveExams(examIds: string[]): Promise<void> {
+    if (examIds.length === 0) {
+      return;
+    }
+    const active = await this.findActiveExamIds(examIds);
+    if (active.length !== examIds.length) {
+      throw new BadRequestException('One or more exams are not available');
+    }
+  }
+
+  private async findActiveExamIds(examIds: string[]): Promise<string[]> {
+    const docs = await this.examModel
+      .find({
+        _id: { $in: examIds.map(id => new Types.ObjectId(id)) },
+        isActive: true,
+      })
+      .select('_id')
+      .exec();
+    return docs.map(doc => String(doc._id));
+  }
+
+  private async writeTargetExams(
+    userId: string,
+    examIds: string[],
+  ): Promise<UserResponseDto> {
+    const objectIds = examIds.map(id => new Types.ObjectId(id));
+    const update =
+      objectIds.length === 0
+        ? { $set: { targetExams: [] }, $unset: { targetExam: 1 as const } }
+        : {
+            $set: {
+              targetExams: objectIds,
+              targetExam: objectIds[0],
+            },
+          };
+
+    const user = await this.userModel
+      .findByIdAndUpdate(new Types.ObjectId(userId), update, { new: true })
+      .populate('targetExam', 'name')
+      .populate('targetExams', 'name')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User with ID "${userId}" not found`);
+    }
+    return this.toResponseDto(user);
+  }
 
   private toResponseDto(user: UserDocument): UserResponseDto {
     const obj = user.toObject() as Record<string, unknown>;
 
     // Map targetExam: if populated (has name), extract id + name; otherwise omit
-    if (obj.targetExam != null) {
-      const exam = obj.targetExam as Record<string, unknown>;
-      if (typeof exam === 'object' && 'name' in exam && exam.name) {
-        // Note: Use exam.id (virtual field), not exam._id (deleted by schema transform)
-        obj.targetExam = {
-          id: String(exam.id),
-          name: exam.name,
-        };
-      } else {
-        // Not populated or orphaned reference — omit the field
-        delete obj.targetExam;
+    const mappedPrimary = mapPopulatedExam(obj.targetExam);
+    if (mappedPrimary) {
+      obj.targetExam = mappedPrimary;
+    } else {
+      delete obj.targetExam;
+    }
+
+    const mappedTargets = Array.isArray(obj.targetExams)
+      ? obj.targetExams
+          .map(item => mapPopulatedExam(item))
+          .filter((item): item is { id: string; name: string } => item != null)
+      : [];
+    if (mappedTargets.length > 0) {
+      obj.targetExams = mappedTargets;
+      if (!obj.targetExam) {
+        obj.targetExam = mappedTargets[0];
       }
+    } else if (obj.targetExam) {
+      // Rows written before targetExams existed still have the single field.
+      obj.targetExams = [obj.targetExam];
+    } else {
+      obj.targetExams = [];
     }
 
     // Stringify ObjectId arrays in interactions
@@ -705,10 +887,12 @@ export class UsersService {
       obj.targetExamRemainingDays = Math.max(0, Math.ceil(diff / 86_400_000));
     }
 
-    // Never leak password hashes, the Google subject, or checkout billing
+    // Never leak password hashes, the Google subject, checkout billing,
+    // or the prompt-dismissal counters.
     delete obj.passwordHash;
     delete obj.googleSub;
     delete obj.billingProfile;
+    delete obj.targetExamPromptDismissals;
 
     return new UserResponseDto(obj);
   }
@@ -732,6 +916,54 @@ export class UsersService {
       googleSub,
     };
   }
+}
+
+function currentTargetExamIds(user: UserDocument): string[] {
+  const listed = (user.targetExams ?? [])
+    .map(id => String(id))
+    .filter(id => Types.ObjectId.isValid(id));
+  if (listed.length > 0) {
+    return listed;
+  }
+  const legacy = user.targetExam ? String(user.targetExam) : '';
+  if (Types.ObjectId.isValid(legacy)) {
+    return [legacy];
+  }
+  return [];
+}
+
+function normalizeExamIds(examIds: string[]): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const raw of examIds) {
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!Types.ObjectId.isValid(id)) {
+      throw new BadRequestException('Invalid exam id');
+    }
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function mapPopulatedExam(
+  value: unknown,
+): { id: string; name: string } | undefined {
+  if (value == null || typeof value !== 'object') {
+    return undefined;
+  }
+  const exam = value as Record<string, unknown>;
+  if (typeof exam.name !== 'string' || exam.name.length === 0) {
+    return undefined;
+  }
+  const rawId = exam.id ?? exam._id;
+  if (rawId == null || rawId === '') {
+    return undefined;
+  }
+  return { id: String(rawId), name: exam.name };
 }
 
 function toBillingProfileView(

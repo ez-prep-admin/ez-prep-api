@@ -81,6 +81,10 @@ describe('CategoriesService', () => {
       const result = await service.findAll(1, 10);
       expect(result.data).toHaveLength(1);
       expect(result.pagination.total).toBe(1);
+      expect(model.find.mock.results[0].value.sort).toHaveBeenCalledWith({
+        priority: -1,
+        name: 1,
+      });
     });
 
     it('applies search and activeOnly filters', async () => {
@@ -170,6 +174,23 @@ describe('CategoriesService', () => {
       );
       const result = await service.findActiveCategories();
       expect(result).toHaveLength(1);
+    });
+
+    it('orders by priority, then name', async () => {
+      model.find.mockReturnValue(
+        chain([
+          doc({ name: 'Zebra', priority: 1, isActive: true }),
+          doc({ name: 'Alpha', priority: 5, isActive: true }),
+          doc({ name: 'Middle', isActive: true }),
+        ]),
+      );
+      const result = await service.findActiveCategories();
+      expect(result.map(category => category.name)).toEqual([
+        'Alpha',
+        'Zebra',
+        'Middle',
+      ]);
+      expect(result.map(category => category.priority)).toEqual([5, 1, 0]);
     });
   });
 });

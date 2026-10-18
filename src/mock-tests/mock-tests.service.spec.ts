@@ -562,19 +562,22 @@ describe('MockTestsService', () => {
     });
 
     it('lists by exam with default pagination and no topic search', async () => {
-      mockTestModel.find.mockReturnValue(
-        chainable([
-          makeTest({
-            exam: undefined,
-            subject: undefined,
-            topic: undefined,
-          }),
-        ]),
-      );
+      const query = chainable([
+        makeTest({
+          exam: undefined,
+          subject: undefined,
+          topic: undefined,
+        }),
+      ]);
+      mockTestModel.find.mockReturnValue(query);
       const result = await service.findByExam(EXAM_ID);
       expect(result.pagination.page).toBe(1);
       expect(result.data[0].exam).toBeNull();
       expect(result.data[0].subject).toBeNull();
+      expect(query.sort).toHaveBeenCalledWith({
+        accessMode: -1,
+        createdAt: 1,
+      });
     });
   });
 

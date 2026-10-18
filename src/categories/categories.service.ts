@@ -15,6 +15,7 @@ import {
   omitActorFields,
   updatedByFields,
 } from '../common/types/to-actor-object-id';
+import { compareByDashboardPriority } from './category-priority';
 
 @Injectable()
 export class CategoriesService {
@@ -79,7 +80,7 @@ export class CategoriesService {
     const [categories, total] = await Promise.all([
       this.categoryModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort({ priority: -1, name: 1 })
         .skip(skip)
         .limit(validLimit)
         .exec(),
@@ -202,16 +203,22 @@ export class CategoriesService {
   async findActiveCategories(): Promise<CategoryResponseDto[]> {
     const categories = await this.categoryModel
       .find({ isActive: true })
-      .sort({ name: 1 })
+      .sort({ priority: -1, name: 1 })
       .exec();
 
-    return categories.map(cat => this.toResponseDto(cat));
+    return categories
+      .map(cat => this.toResponseDto(cat))
+      .sort(compareByDashboardPriority);
   }
 
   /**
    * Helper to convert document to DTO
    */
   private toResponseDto(category: CategoryDocument): CategoryResponseDto {
-    return new CategoryResponseDto(omitActorFields(category.toObject()));
+    const obj = omitActorFields(category.toObject());
+    return new CategoryResponseDto({
+      ...obj,
+      priority: obj.priority ?? 0,
+    });
   }
 }

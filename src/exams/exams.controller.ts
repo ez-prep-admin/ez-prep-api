@@ -56,6 +56,7 @@ export class ExamsController {
     - Includes all active exams per category
     - Includes topic-wise mock test counts per exam (full-exam papers are not counted)
     - Returns all data (no pagination or filtering needed)
+    - Categories are ordered by priority (highest first), then name
     - No authentication required
     
     Response structure: { message: "...", data: [{category1}, {category2}, ...] }

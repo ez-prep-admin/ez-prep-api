@@ -4,6 +4,7 @@ import { UserRole } from '../../common/enums/user-role.enum';
 import { Gender } from '../../common/enums/gender.enum';
 import { MembershipTier } from '../../common/enums/membership-tier.enum';
 import { StudyTimePreference } from '../../common/enums/study-time-preference.enum';
+import { MAX_TARGET_EXAMS } from '../target-exams.constants';
 
 export type UserDocument = User & Document;
 
@@ -25,6 +26,29 @@ export class UserLocation {
   timezone?: string;
 }
 export const UserLocationSchema = SchemaFactory.createForClass(UserLocation);
+
+/** One saved note from the learner. Replaced on the next save. */
+@Schema({ _id: false })
+export class UserFeedback {
+  @Prop({ trim: true, maxlength: 1000 })
+  text?: string;
+
+  @Prop({ min: 0, max: 5 })
+  userInterface?: number;
+
+  @Prop({ min: 0, max: 5 })
+  questions?: number;
+
+  @Prop({ min: 0, max: 5 })
+  fullMockTests?: number;
+
+  @Prop({ min: 0, max: 5 })
+  topicWisePractice?: number;
+
+  @Prop({ min: 0, max: 5 })
+  easeOfUse?: number;
+}
+export const UserFeedbackSchema = SchemaFactory.createForClass(UserFeedback);
 
 @Schema({ _id: false })
 export class NotificationPreferences {
@@ -113,6 +137,22 @@ export class UserBillingProfile {
 export const UserBillingProfileSchema =
   SchemaFactory.createForClass(UserBillingProfile);
 
+/** How many times the learner closed the "add this exam?" prompt. */
+@Schema({ _id: false })
+export class TargetExamPromptDismissal {
+  @Prop({ type: Types.ObjectId, ref: 'Exam', required: true })
+  exam: Types.ObjectId;
+
+  @Prop({ required: true, min: 0, default: 1 })
+  count: number;
+
+  @Prop({ required: true })
+  lastDismissedAt: Date;
+}
+export const TargetExamPromptDismissalSchema = SchemaFactory.createForClass(
+  TargetExamPromptDismissal,
+);
+
 // ─── Main User schema ──────────────────────────────────────────────────────────
 
 @Schema({
@@ -184,12 +224,29 @@ export class User {
   @Prop({ type: UserLocationSchema })
   location?: UserLocation;
 
-  // ── Group 2: Target exam ──────────────────────────────────────────────────
+  @Prop({ type: UserFeedbackSchema })
+  feedback?: UserFeedback;
+
+  // ── Group 2: Target exams ─────────────────────────────────────────────────
+  /**
+   * Exams the learner is preparing for, from any category.
+   * Order matters: the first entry is the primary exam and is mirrored in `targetExam`.
+   */
+  @Prop({
+    type: [{ type: Types.ObjectId, ref: 'Exam' }],
+    default: [],
+  })
+  targetExams: Types.ObjectId[];
+
+  /** Primary target. Kept equal to `targetExams[0]` so older clients keep working. */
   @Prop({ type: Types.ObjectId, ref: 'Exam' })
   targetExam?: Types.ObjectId;
 
   @Prop()
   targetExamDate?: Date;
+
+  @Prop({ type: [TargetExamPromptDismissalSchema], default: [] })
+  targetExamPromptDismissals: TargetExamPromptDismissal[];
 
   // ── Achievement / gamification ────────────────────────────────────────────
   @Prop({
@@ -231,7 +288,15 @@ UserSchema.index({ googleSub: 1 }, { unique: true, sparse: true });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
 UserSchema.index({ membershipTier: 1 });
 UserSchema.index({ targetExam: 1 }, { sparse: true });
+UserSchema.index({ targetExams: 1 }, { sparse: true });
 UserSchema.index({ 'interactions.interestedExams': 1 }, { sparse: true });
+
+UserSchema.path('targetExams').validate(function (value: unknown) {
+  if (!Array.isArray(value)) {
+    return true;
+  }
+  return value.length <= MAX_TARGET_EXAMS;
+}, `A learner can target at most ${MAX_TARGET_EXAMS} exams`);
 
 // Virtual for id field (removes _id and adds id)
 UserSchema.virtual('id').get(function () {

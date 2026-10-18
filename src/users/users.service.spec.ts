@@ -4,6 +4,9 @@ import { UsersService } from './users.service';
 import { User } from './schemas/user.schema';
 import { Order } from '../orders/schemas/order.schema';
 import { TaxInvoice } from '../invoices/schemas/tax-invoice.schema';
+import { Exam } from '../exams/schemas/exam.schema';
+import { MAX_TARGET_EXAMS } from './target-exams.constants';
+import { Types } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import {
@@ -73,6 +76,10 @@ describe('UsersService', () => {
   mockUserModel.countDocuments = jest.fn();
   mockUserModel.updateOne = jest.fn();
 
+  const mockExamModel = {
+    find: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -92,6 +99,10 @@ describe('UsersService', () => {
           useValue: {
             countDocuments: jest.fn().mockReturnValue(chain(0)),
           },
+        },
+        {
+          provide: getModelToken(Exam.name),
+          useValue: mockExamModel,
         },
       ],
     }).compile();
@@ -535,6 +546,29 @@ describe('UsersService', () => {
       );
     });
 
+    it('stores feedback text and ratings on the user', async () => {
+      const feedback = {
+        text: 'The timer feels jumpy',
+        userInterface: 4,
+        questions: 5,
+        fullMockTests: 3,
+        topicWisePractice: 4,
+        easeOfUse: 5,
+      };
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ name: 'Ada', feedback })),
+      );
+
+      const result = await service.updateMe(OID, { feedback });
+
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        { $set: { feedback } },
+        { new: true },
+      );
+      expect(result.feedback).toEqual(feedback);
+    });
+
     it('should $unset targetExam when null is sent', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(
         chain(mockUserDocument({ name: 'Ada' })),
@@ -762,6 +796,318 @@ describe('UsersService', () => {
       await expect(
         service.updateEmailIfAvailable(OID, 'next@gmail.com'),
       ).rejects.toThrow('db down');
+    });
+  });
+
+  describe('target exams', () => {
+    const EXAM_A = '507f1f77bcf86cd799439012';
+    const EXAM_B = '507f1f77bcf86cd799439013';
+    const EXAM_C = '507f1f77bcf86cd799439014';
+    const EXAM_D = '507f1f77bcf86cd799439015';
+    const EXAM_E = '507f1f77bcf86cd799439016';
+    const EXAM_F = '507f1f77bcf86cd799439017';
+    const five = [EXAM_A, EXAM_B, EXAM_C, EXAM_D, EXAM_E];
+
+    function learner(data: Record<string, unknown> = {}) {
+      return mockUserDocument({ _id: OID, targetExams: [], ...data });
+    }
+
+    function activeExams(ids: string[]) {
+      mockExamModel.find.mockReturnValue(
+        chain(ids.map(id => ({ _id: new Types.ObjectId(id) }))),
+      );
+    }
+
+    it('falls back to the legacy targetExam when the list has not been migrated', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExam: { id: EXAM_A, name: 'SSC CGL' },
+            targetExams: [],
+          }),
+        ),
+      );
+
+      const result = await service.findOne(OID);
+
+      expect(result.targetExams).toEqual([{ id: EXAM_A, name: 'SSC CGL' }]);
+      expect(result.targetExam).toEqual({ id: EXAM_A, name: 'SSC CGL' });
+    });
+
+    it('uses the populated list and fills a missing primary from the first exam', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExam: EXAM_A,
+            targetExams: [
+              { id: EXAM_A, name: 'SSC CGL' },
+              { id: EXAM_B, name: 'IBPS PO' },
+            ],
+          }),
+        ),
+      );
+
+      const result = await service.findOne(OID);
+
+      expect(result.targetExams).toEqual([
+        { id: EXAM_A, name: 'SSC CGL' },
+        { id: EXAM_B, name: 'IBPS PO' },
+      ]);
+      expect(result.targetExam).toEqual({ id: EXAM_A, name: 'SSC CGL' });
+    });
+
+    it('replaces the ordered list and keeps the first exam as the primary', async () => {
+      mockUserModel.findById.mockReturnValue(chain(learner()));
+      activeExams([EXAM_B, EXAM_A]);
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(
+          learner({
+            targetExam: { id: EXAM_B, name: 'IBPS PO' },
+            targetExams: [
+              { id: EXAM_B, name: 'IBPS PO' },
+              { id: EXAM_A, name: 'SSC CGL' },
+            ],
+          }),
+        ),
+      );
+
+      const result = await service.setTargetExams(OID, [EXAM_B, EXAM_A, EXAM_B]);
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([EXAM_B, EXAM_A]);
+      expect(String(update.$set.targetExam)).toBe(EXAM_B);
+      expect(result.targetExams?.map(exam => exam.id)).toEqual([EXAM_B, EXAM_A]);
+    });
+
+    it('clears the primary exam when the replacement list is empty', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: [EXAM_A] })),
+      );
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(learner({ targetExams: [] })),
+      );
+
+      await service.setTargetExams(OID, []);
+
+      expect(mockExamModel.find).not.toHaveBeenCalled();
+      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
+        expect.any(Types.ObjectId),
+        { $set: { targetExams: [] }, $unset: { targetExam: 1 } },
+        { new: true },
+      );
+    });
+
+    it('rejects a replacement list that includes an inactive exam', async () => {
+      mockUserModel.findById.mockReturnValue(chain(learner()));
+      activeExams([]);
+
+      await expect(service.setTargetExams(OID, [EXAM_A])).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('appends an exam and leaves an existing target untouched', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: [EXAM_A] })),
+      );
+      activeExams([EXAM_B]);
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(
+          learner({
+            targetExams: [
+              { id: EXAM_A, name: 'SSC CGL' },
+              { id: EXAM_B, name: 'IBPS PO' },
+            ],
+          }),
+        ),
+      );
+
+      await service.addTargetExam(OID, EXAM_B);
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([EXAM_A, EXAM_B]);
+    });
+
+    it('does not write when the exam is already targeted', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExams: [EXAM_A],
+            targetExam: { id: EXAM_A, name: 'SSC CGL' },
+          }),
+        ),
+      );
+
+      await service.addTargetExam(OID, EXAM_A);
+
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+      expect(mockExamModel.find).not.toHaveBeenCalled();
+    });
+
+    it('rejects a sixth target exam', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: five })),
+      );
+
+      await expect(service.addTargetExam(OID, EXAM_F)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(five).toHaveLength(MAX_TARGET_EXAMS);
+      expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('carries the legacy single target into the list when adding another exam', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExam: new Types.ObjectId(EXAM_A), targetExams: [] })),
+      );
+      activeExams([EXAM_B]);
+      mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
+
+      await service.addTargetExam(OID, EXAM_B);
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([EXAM_A, EXAM_B]);
+    });
+
+    it('removes an exam and promotes the next one', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: [EXAM_A, EXAM_B] })),
+      );
+      mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
+
+      await service.removeTargetExam(OID, EXAM_A);
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([EXAM_B]);
+      expect(String(update.$set.targetExam)).toBe(EXAM_B);
+    });
+
+    it('asks after a mock when the exam is active and has not been dismissed', async () => {
+      mockUserModel.findById.mockReturnValue(chain(learner()));
+      activeExams([EXAM_A]);
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: true });
+    });
+
+    it('does not ask when the exam is already a target', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: [EXAM_A] })),
+      );
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: false });
+      expect(mockExamModel.find).not.toHaveBeenCalled();
+    });
+
+    it('does not ask when the target list is full', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: five })),
+      );
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_F),
+      ).resolves.toEqual({ shouldPrompt: false });
+    });
+
+    it('does not ask during the 14 day cooldown', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExamPromptDismissals: [
+              { exam: EXAM_A, count: 1, lastDismissedAt: new Date() },
+            ],
+          }),
+        ),
+      );
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: false });
+      expect(mockExamModel.find).not.toHaveBeenCalled();
+    });
+
+    it('asks again after the cooldown when the learner has skipped fewer than 3 times', async () => {
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExamPromptDismissals: [
+              { exam: EXAM_A, count: 2, lastDismissedAt: fifteenDaysAgo },
+            ],
+          }),
+        ),
+      );
+      activeExams([EXAM_A]);
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: true });
+    });
+
+    it('stops asking after 3 dismissals even when the cooldown has passed', async () => {
+      const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExamPromptDismissals: [
+              { exam: EXAM_A, count: 3, lastDismissedAt: fifteenDaysAgo },
+            ],
+          }),
+        ),
+      );
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: false });
+      expect(mockExamModel.find).not.toHaveBeenCalled();
+    });
+
+    it('does not ask for an inactive exam', async () => {
+      mockUserModel.findById.mockReturnValue(chain(learner()));
+      activeExams([]);
+
+      await expect(
+        service.shouldPromptForTargetExam(OID, EXAM_A),
+      ).resolves.toEqual({ shouldPrompt: false });
+    });
+
+    it('records the first dismissal and increments later ones', async () => {
+      mockUserModel.findById.mockReturnValue(chain(learner()));
+      mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
+
+      await service.dismissTargetExamPrompt(OID, EXAM_A);
+
+      const created =
+        mockUserModel.findByIdAndUpdate.mock.calls[0][1].$set
+          .targetExamPromptDismissals;
+      expect(created).toHaveLength(1);
+      expect(String(created[0].exam)).toBe(EXAM_A);
+      expect(created[0].count).toBe(1);
+
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          learner({
+            targetExamPromptDismissals: [
+              {
+                exam: EXAM_A,
+                count: 1,
+                lastDismissedAt: new Date('2026-01-01'),
+              },
+            ],
+          }),
+        ),
+      );
+
+      await service.dismissTargetExamPrompt(OID, EXAM_A);
+
+      const incremented =
+        mockUserModel.findByIdAndUpdate.mock.calls[1][1].$set
+          .targetExamPromptDismissals;
+      expect(incremented[0].count).toBe(2);
     });
   });
 });
