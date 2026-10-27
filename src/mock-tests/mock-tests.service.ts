@@ -37,6 +37,8 @@ import { AccessControlService } from '../access/access-control.service';
 import { AccessDto, toAccessDto } from '../access/to-access-dto';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { updatedByFields } from '../common/types/to-actor-object-id';
+import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { sampleTopicWiseQuestionIds } from './topic-wise-question-sampler';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
   ...TOPIC_WISE_PAPER_MATCH,
@@ -57,6 +59,7 @@ export class MockTestsService {
     @InjectModel(Question.name) private questionModel: Model<QuestionDocument>,
     @Inject(forwardRef(() => AccessControlService))
     private readonly accessControlService: AccessControlService,
+    private readonly imageUrlResolver: ImageUrlResolver,
   ) {}
 
   /**
@@ -190,8 +193,11 @@ export class MockTestsService {
         .populate('topic', 'name')
         .populate({
           path: 'questionIds',
-          select: 'questionText subject',
-          populate: { path: 'subject', select: 'name' },
+          select: 'questionText subject topic options optionType',
+          populate: [
+            { path: 'subject', select: 'name' },
+            { path: 'topic', select: 'name' },
+          ],
         });
     } else {
       query = query.select('-questionIds');
@@ -205,7 +211,7 @@ export class MockTestsService {
 
     if (isAdmin) {
       const accessMap = await this.buildAccessMap(user?.id, [mockTest]);
-      return this.toAdminDetailDto(
+      return await this.toAdminDetailDto(
         mockTest,
         accessMap.get(mockTest._id.toString()),
       );
@@ -373,61 +379,84 @@ export class MockTestsService {
   private async sampleQuestionIds(
     dto: CreateTopicWiseMockTestDto,
   ): Promise<Types.ObjectId[]> {
-    const baseMatch: Record<string, unknown> = {
-      subject: new Types.ObjectId(dto.subject),
-      exams: new Types.ObjectId(dto.exam),
-      isActive: true,
-      isDeleted: { $ne: true },
-    };
-    if (dto.topic) {
-      baseMatch.topic = new Types.ObjectId(dto.topic);
-    }
-
-    const levels = (['easy', 'medium', 'hard'] as const).filter(
-      level => dto.difficultyDistribution[level] > 0,
-    );
-
-    const sampledGroups = await Promise.all(
-      levels.map(async level => {
-        const count = dto.difficultyDistribution[level];
-        const questions = await this.questionModel.aggregate([
-          { $match: { ...baseMatch, difficultyLevel: level } },
-          { $sample: { size: count } },
-        ]);
-
-        if (questions.length < count) {
-          throw new BadRequestException(
-            `Not enough ${level} questions available. Found ${questions.length}, need ${count}`,
-          );
-        }
-
-        return questions.map(question => question._id as Types.ObjectId);
-      }),
-    );
-
-    return sampledGroups.flat();
+    const sampled = await sampleTopicWiseQuestionIds(this.questionModel, {
+      exam: dto.exam,
+      subject: dto.subject,
+      topic: dto.topic,
+      difficultyDistribution: dto.difficultyDistribution,
+    });
+    return sampled.map(question => question._id);
   }
 
-  private toAdminDetailDto(
+  private async toAdminDetailDto(
     mockTest: MockTestDocument,
     access?: AccessDto,
-  ): MockTestResponseDto {
+  ): Promise<MockTestResponseDto> {
     const examDoc = mockTest.exam as unknown as PopulatedDocument;
     const subjectDoc = mockTest.subject as unknown as PopulatedDocument;
     const topicDoc = mockTest.topic as unknown as PopulatedDocument;
-    const questions = (mockTest.questionIds || []).map(question => {
-      const q = question as unknown as PopulatedDocument & {
-        questionText?: unknown;
+    const populated = (mockTest.questionIds || []).map(question => {
+      return question as unknown as PopulatedDocument & {
+        questionText?: {
+          en?: { text?: string | null; image?: ImageLike };
+          ml?: { text?: string | null; image?: ImageLike };
+        };
+        optionType?: string;
+        options?: Array<{
+          id?: string;
+          type?: string;
+          en?: string | null;
+          ml?: string | null;
+          image?: ImageLike;
+        }>;
         subject?: PopulatedDocument;
+        topic?: PopulatedDocument;
         id?: string;
       };
+    });
+    const images: ImageLike[] = [];
+    for (const question of populated) {
+      images.push(
+        question.questionText?.en?.image,
+        question.questionText?.ml?.image,
+        ...(question.options || []).map(option => option.image),
+      );
+    }
+    const urls = await this.imageUrlResolver.resolveMany(images);
+    let cursor = 0;
+    const questions = populated.map(question => {
+      const enUrl = urls[cursor++];
+      const mlUrl = urls[cursor++];
       return {
-        id: q.id || q._id?.toString(),
-        questionText: q.questionText,
-        subject: q.subject
+        id: question.id || question._id?.toString(),
+        questionText: {
+          en: {
+            text: question.questionText?.en?.text ?? null,
+            imageUrl: enUrl,
+          },
+          ml: {
+            text: question.questionText?.ml?.text ?? null,
+            imageUrl: mlUrl,
+          },
+        },
+        optionType: question.optionType,
+        options: (question.options || []).map(option => ({
+          id: option.id,
+          type: option.type,
+          en: option.en ?? null,
+          ml: option.ml ?? null,
+          imageUrl: urls[cursor++],
+        })),
+        subject: question.subject
           ? {
-              id: q.subject._id?.toString() || q.subject.id,
-              name: q.subject.name,
+              id: question.subject._id?.toString() || question.subject.id,
+              name: question.subject.name,
+            }
+          : null,
+        topic: question.topic
+          ? {
+              id: question.topic._id?.toString() || question.topic.id,
+              name: question.topic.name,
             }
           : null,
       };

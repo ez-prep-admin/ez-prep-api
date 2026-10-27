@@ -112,7 +112,7 @@ async function bootstrap() {
       .addTag('auth', 'Authentication endpoints')
       .addTag(
         'mock-tests',
-        'Topic-wise papers only (paperType TOPIC_WISE). Sprint and full-exam papers are never returned here — use /sprint-tests and /full-mock-tests. Start an attempt with POST /mock-test-attempts/start.',
+        'Topic-wise papers only (paperType TOPIC_WISE). Admins draft at POST /mock-tests/drafts, replace questions, then publish. POST /mock-tests still creates a paper immediately. Sprint and full-exam papers are never returned here — use /sprint-tests and /full-mock-tests. Start an attempt with POST /mock-test-attempts/start.',
       )
       .addTag(
         'full-mock-tests',
