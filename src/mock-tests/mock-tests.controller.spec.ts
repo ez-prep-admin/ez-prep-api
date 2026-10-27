@@ -50,11 +50,22 @@ describe('MockTestsController', () => {
       1,
       10,
       undefined,
+      undefined,
+      undefined,
+      undefined,
       user as any,
     );
     expect(withoutSearch.message).toBe('Mock tests retrieved successfully');
 
-    const withSearch = await controller.findAll(1, 10, 'NEET', admin as any);
+    const withSearch = await controller.findAll(
+      1,
+      10,
+      'NEET',
+      'exam-1',
+      undefined,
+      undefined,
+      admin as any,
+    );
     expect(withSearch.message).toContain('NEET');
     expect(mockTestsService.findAll).toHaveBeenLastCalledWith(
       1,
@@ -62,6 +73,7 @@ describe('MockTestsController', () => {
       'NEET',
       'a1',
       true,
+      { examId: 'exam-1', subjectId: undefined, topicId: undefined },
     );
   });
 

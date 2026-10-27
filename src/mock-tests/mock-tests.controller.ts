@@ -73,6 +73,21 @@ export class MockTestsController {
     description: 'Search term to filter by title or description',
     example: 'NEET',
   })
+  @ApiQuery({
+    name: 'examId',
+    required: false,
+    description: 'Only topic-wise papers for this exam',
+  })
+  @ApiQuery({
+    name: 'subjectId',
+    required: false,
+    description: 'Only topic-wise papers for this subject',
+  })
+  @ApiQuery({
+    name: 'topicId',
+    required: false,
+    description: 'Only topic-wise papers for this topic',
+  })
   @ApiResponse({
     status: 200,
     description: 'Mock tests retrieved successfully',
@@ -108,6 +123,9 @@ export class MockTestsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('search') search?: string,
+    @Query('examId') examId?: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('topicId') topicId?: string,
     @GetUser() user?: UserResponseDto,
   ): Promise<{
     message: string;
@@ -120,6 +138,7 @@ export class MockTestsController {
       search,
       user?.id,
       user?.role === UserRole.ADMIN,
+      { examId, subjectId, topicId },
     );
     return {
       message: search

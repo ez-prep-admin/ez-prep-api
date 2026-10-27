@@ -76,6 +76,7 @@ export class MockTestsService {
     search?: string,
     userId?: string,
     isAdmin = false,
+    filters?: { examId?: string; subjectId?: string; topicId?: string },
   ): Promise<PaginatedMockTestsResponseDto> {
     // Validate and normalize pagination parameters
     const validPage = Math.max(1, page);
@@ -87,6 +88,12 @@ export class MockTestsService {
       ...TOPIC_WISE_FILTER,
       ...(isAdmin ? {} : { isActive: true }),
     };
+    const examId = this.filterObjectId(filters?.examId, 'exam ID');
+    const subjectId = this.filterObjectId(filters?.subjectId, 'subject ID');
+    const topicId = this.filterObjectId(filters?.topicId, 'topic ID');
+    if (examId) query.exam = examId;
+    if (subjectId) query.subject = subjectId;
+    if (topicId) query.topic = topicId;
 
     // Add search filter if search term is provided
     if (search && search.trim()) {
@@ -167,6 +174,17 @@ export class MockTestsService {
         hasPrevPage,
       },
     };
+  }
+
+  private filterObjectId(
+    value: string | undefined,
+    label: string,
+  ): Types.ObjectId | undefined {
+    if (!value) return undefined;
+    if (!Types.ObjectId.isValid(value)) {
+      throw new BadRequestException(`Invalid ${label}`);
+    }
+    return new Types.ObjectId(value);
   }
 
   /**
