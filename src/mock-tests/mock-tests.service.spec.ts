@@ -257,6 +257,27 @@ describe('MockTestsService', () => {
       );
     });
 
+    it('filters the list by exam, subject, and topic', async () => {
+      mockTestModel.find.mockReturnValue(chainable([makeTest()]));
+
+      await service.findAll(1, 10, undefined, undefined, true, {
+        examId: EXAM_ID,
+        subjectId: SUB_ID,
+        topicId: TOP_ID,
+      });
+
+      const query = mockTestModel.find.mock.calls[0][0];
+      expect(query.exam.toString()).toBe(EXAM_ID);
+      expect(query.subject.toString()).toBe(SUB_ID);
+      expect(query.topic.toString()).toBe(TOP_ID);
+    });
+
+    it('rejects an invalid exam filter', async () => {
+      await expect(
+        service.findAll(1, 10, undefined, undefined, true, { examId: 'nope' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('uses default pagination arguments', async () => {
       mockTestModel.find.mockReturnValue(chainable([makeTest()]));
       const result = await service.findAll();
