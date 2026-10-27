@@ -12,6 +12,7 @@ import { MockTestAttempt } from '../mock-test-attempts/schemas/mock-test-attempt
 import { UserRole } from '../common/enums/user-role.enum';
 import { UserAttemptAction } from '../common/enums/user-attempt-action.enum';
 import { CreateTopicWiseMockTestDto } from './dto/create-topic-wise-mock-test.dto';
+import { ImageUrlResolver } from '../aws/s3/image-url.resolver';
 
 const TEST_ID = '507f1f77bcf86cd799439011';
 const EXAM_ID = '507f1f77bcf86cd799439012';
@@ -126,6 +127,9 @@ describe('MockTestsService', () => {
   const attemptModel: any = { find: jest.fn() };
   const topicModel: any = { find: jest.fn() };
   const questionModel: any = { aggregate: jest.fn() };
+  const imageUrlResolver = {
+    resolveMany: jest.fn(async (images: unknown[]) => images.map(() => null)),
+  };
   const accessControlService = {
     resolveAccessForMockTests: jest.fn(
       async (
@@ -160,6 +164,7 @@ describe('MockTestsService', () => {
         { provide: getModelToken(Topic.name), useValue: topicModel },
         { provide: getModelToken(Question.name), useValue: questionModel },
         { provide: AccessControlService, useValue: accessControlService },
+        { provide: ImageUrlResolver, useValue: imageUrlResolver },
       ],
     }).compile();
 
@@ -174,6 +179,10 @@ describe('MockTestsService', () => {
     attemptModel.find.mockReset();
     topicModel.find.mockReset();
     questionModel.aggregate.mockReset();
+    imageUrlResolver.resolveMany.mockReset();
+    imageUrlResolver.resolveMany.mockImplementation(async (images: unknown[]) =>
+      images.map(() => null),
+    );
     mockTestModel.countDocuments.mockReturnValue({
       exec: jest.fn().mockResolvedValue(1),
     });
@@ -304,7 +313,10 @@ describe('MockTestsService', () => {
             id: Q1,
             _id: { toString: () => Q1 },
             questionText: { en: { text: 'Q' } },
+            optionType: 'text',
+            options: [{ id: 'a', type: 'text', en: 'Alpha', ml: null }],
             subject: { _id: { toString: () => SUB_ID }, name: 'Physics' },
+            topic: { _id: { toString: () => TOP_ID }, name: 'Mechanics' },
           },
         ],
       });
@@ -316,6 +328,17 @@ describe('MockTestsService', () => {
       } as any);
 
       expect((result as any).questions[0].id).toBe(Q1);
+      expect((result as any).questions[0].topic).toEqual({
+        id: TOP_ID,
+        name: 'Mechanics',
+      });
+      expect((result as any).questions[0].questionText.en).toEqual({
+        text: 'Q',
+        imageUrl: null,
+      });
+      expect((result as any).questions[0].options).toEqual([
+        { id: 'a', type: 'text', en: 'Alpha', ml: null, imageUrl: null },
+      ]);
       expect((result as any).exam).toEqual({ id: EXAM_ID, name: 'NEET' });
     });
 
@@ -349,7 +372,64 @@ describe('MockTestsService', () => {
       } as any);
 
       expect((result as any).questions[0].subject).toBeNull();
+      expect((result as any).questions[0].topic).toBeNull();
+      expect((result as any).questions[0].options).toEqual([]);
+      expect((result as any).questions[0].questionText.en.imageUrl).toBeNull();
       expect((result as any).questions[0].id).toBe(Q1);
+    });
+
+    it('signs question and option images for the admin preview', async () => {
+      imageUrlResolver.resolveMany.mockImplementation(
+        async (images: Array<{ key?: string } | null | undefined>) =>
+          images.map(image =>
+            image?.key ? `https://signed.example/${image.key}` : null,
+          ),
+      );
+      const test = makeTest({
+        questionIds: [
+          {
+            id: Q1,
+            _id: { toString: () => Q1 },
+            questionText: {
+              en: {
+                text: 'Identify',
+                image: {
+                  key: 'question-imports/q.png',
+                  bucket: 'ez-prep-image-bucket',
+                },
+              },
+            },
+            optionType: 'image',
+            options: [
+              {
+                id: 'a',
+                type: 'image',
+                en: null,
+                ml: null,
+                image: {
+                  key: 'question-imports/a.png',
+                  bucket: 'ez-prep-image-bucket',
+                },
+              },
+            ],
+            subject: { _id: { toString: () => SUB_ID }, name: 'Physics' },
+            topic: { _id: { toString: () => TOP_ID }, name: 'Mechanics' },
+          },
+        ],
+      });
+      mockTestModel.findOne.mockReturnValue(chainable(test));
+
+      const result = await service.findOne(TEST_ID, {
+        id: USER_ID,
+        role: UserRole.ADMIN,
+      } as any);
+
+      expect((result as any).questions[0].questionText.en.imageUrl).toBe(
+        'https://signed.example/question-imports/q.png',
+      );
+      expect((result as any).questions[0].options[0].imageUrl).toBe(
+        'https://signed.example/question-imports/a.png',
+      );
     });
   });
 

@@ -871,12 +871,19 @@ describe('UsersService', () => {
         ),
       );
 
-      const result = await service.setTargetExams(OID, [EXAM_B, EXAM_A, EXAM_B]);
+      const result = await service.setTargetExams(OID, [
+        EXAM_B,
+        EXAM_A,
+        EXAM_B,
+      ]);
 
       const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
       expect(update.$set.targetExams.map(String)).toEqual([EXAM_B, EXAM_A]);
       expect(String(update.$set.targetExam)).toBe(EXAM_B);
-      expect(result.targetExams?.map(exam => exam.id)).toEqual([EXAM_B, EXAM_A]);
+      expect(result.targetExams?.map(exam => exam.id)).toEqual([
+        EXAM_B,
+        EXAM_A,
+      ]);
     });
 
     it('clears the primary exam when the replacement list is empty', async () => {
@@ -959,7 +966,9 @@ describe('UsersService', () => {
 
     it('carries the legacy single target into the list when adding another exam', async () => {
       mockUserModel.findById.mockReturnValue(
-        chain(learner({ targetExam: new Types.ObjectId(EXAM_A), targetExams: [] })),
+        chain(
+          learner({ targetExam: new Types.ObjectId(EXAM_A), targetExams: [] }),
+        ),
       );
       activeExams([EXAM_B]);
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));

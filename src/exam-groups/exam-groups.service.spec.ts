@@ -191,11 +191,7 @@ describe('ExamGroupsService', () => {
     });
 
     it('orders categories by priority, then name', async () => {
-      const category = (
-        id: string,
-        name: string,
-        priority?: number,
-      ) => ({
+      const category = (id: string, name: string, priority?: number) => ({
         _id: { toString: () => id },
         toObject: () => ({
           name,
