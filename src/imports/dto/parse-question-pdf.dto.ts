@@ -189,6 +189,13 @@ export class GetUploadDetailsResponseDto {
 
   @ApiPropertyOptional({
     description:
+      'Tag IDs selected for this PDF. Empty when none were selected.',
+    type: [String],
+  })
+  tagIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
       'S3 key for markdown file (if parsed). To retrieve markdown content, download from S3 using this key.',
   })
   markdownS3Key?: string;
@@ -296,6 +303,13 @@ export class UploadMetadataDto {
     type: [String],
   })
   examIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Tag IDs selected for this PDF. Empty when none were selected.',
+    type: [String],
+  })
+  tagIds?: string[];
 
   @ApiPropertyOptional({
     description: 'S3 key for PDF',

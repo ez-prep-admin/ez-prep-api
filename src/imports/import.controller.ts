@@ -161,6 +161,13 @@ export class ImportController {
           description: 'Array of Exam IDs',
           example: ['507f1f77bcf86cd799439013'],
         },
+        tagIds: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Optional tag IDs applied to every question imported from this PDF. Omit when no tag is selected.',
+          example: ['507f1f77bcf86cd799439016'],
+        },
         metadata: {
           type: 'object',
           description: 'Additional metadata as key-value pairs',

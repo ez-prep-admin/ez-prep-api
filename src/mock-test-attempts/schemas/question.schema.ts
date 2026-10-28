@@ -136,8 +136,13 @@ export class Question {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Exam' }] })
   exams?: Types.ObjectId[];
 
-  @Prop({ type: Types.ObjectId, ref: 'Tag' })
-  tag?: Types.ObjectId;
+  /**
+   * Tags selected for this question. Absent when none were selected.
+   * `default: undefined` stops Mongoose from storing an empty array on questions
+   * that were saved without a tag.
+   */
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Tag' }], default: undefined })
+  tags?: Types.ObjectId[];
 
   @Prop({ type: String, enum: ['easy', 'medium', 'hard'] })
   difficultyLevel?: string;

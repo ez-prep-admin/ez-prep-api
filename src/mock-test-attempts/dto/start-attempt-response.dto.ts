@@ -112,6 +112,13 @@ export class SafeQuestionDto {
 
   @ApiPropertyOptional({
     description:
+      'Tag names on this question. Empty when the question has no tag.',
+    type: [String],
+  })
+  tags?: string[];
+
+  @ApiPropertyOptional({
+    description:
       'Present on full-exam papers that have subject blocks. Same number as sessions[].order on session-wise papers. Omitted for topic-wise papers. Do not group by live question.subject.',
     example: 0,
   })

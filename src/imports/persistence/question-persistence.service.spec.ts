@@ -76,11 +76,29 @@ describe('QuestionPersistenceService', () => {
     expect(payload.uploadId.toString()).toBe(uploadId);
     expect(payload.explanation.images).toHaveLength(1);
     expect(payload.source).toBe(PDF_IMPORT_QUESTION_SOURCE);
+    expect(payload).not.toHaveProperty('tag');
+    expect(payload).not.toHaveProperty('tags');
     expect(payload).not.toHaveProperty('createdBy');
 
     await service.saveOne(makeQuestion({ uploadId }), subjectId);
     expect(create.mock.calls[1][0].createdBy.toString()).toBe(subjectId);
     expect(create.mock.calls[1][0]).not.toHaveProperty('updatedBy');
+  });
+
+  it('stores selected tags and omits them when none are provided', async () => {
+    create.mockResolvedValue({ _id: new Types.ObjectId() });
+    const tagId = '507f1f77bcf86cd799439016';
+
+    await service.saveOne(makeQuestion({ tags: [tagId] }));
+    const tagged = create.mock.calls[0][0];
+    expect(tagged).not.toHaveProperty('tag');
+    expect(
+      tagged.tags.map((id: { toString(): string }) => id.toString()),
+    ).toEqual([tagId]);
+
+    await service.saveOne(makeQuestion({ tags: [] }));
+    expect(create.mock.calls[1][0]).not.toHaveProperty('tag');
+    expect(create.mock.calls[1][0]).not.toHaveProperty('tags');
   });
 
   it('omits uploadId when not present and wraps DB errors', async () => {

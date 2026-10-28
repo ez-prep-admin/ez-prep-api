@@ -8,6 +8,7 @@ import {
 } from '../../subjects/schemas/subject.schema';
 import { Topic, TopicDocument } from '../../topics/schemas/topic.schema';
 import { Exam, ExamDocument } from '../../exams/schemas/exam.schema';
+import { Tag, TagDocument } from '../../tags/schemas/tag.schema';
 import { ImportQuestion, ImportQuestionInput } from '../types/import-question';
 import { ImportQuestionSchema } from './import-question.schema';
 import { NEET_BUSINESS_VALIDATOR_CONFIG } from '../config/business-validator.config';
@@ -36,6 +37,8 @@ export class PersistQuestionValidator {
     private readonly topicModel: Model<TopicDocument>,
     @InjectModel(Exam.name)
     private readonly examModel: Model<ExamDocument>,
+    @InjectModel(Tag.name)
+    private readonly tagModel: Model<TagDocument>,
   ) {}
 
   async validateQuestion(
@@ -124,6 +127,20 @@ export class PersistQuestionValidator {
       if (!examExists) {
         throw new NotFoundException(
           `Question at index ${index}: exam ${examId} was not found.`,
+        );
+      }
+    }
+
+    const tagIds = [...new Set(question.tags ?? [])];
+
+    for (const tagId of tagIds) {
+      const tagExists = await this.tagModel.exists({
+        _id: new Types.ObjectId(tagId),
+      });
+
+      if (!tagExists) {
+        throw new NotFoundException(
+          `Question at index ${index}: tag ${tagId} was not found.`,
         );
       }
     }

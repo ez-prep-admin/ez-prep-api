@@ -41,6 +41,7 @@ import { AiQuestionBatchItem } from './types/ai-question-output';
 import {
   ImportQuestion,
   PDF_IMPORT_QUESTION_SOURCE,
+  tagFieldsFromIds,
 } from './types/import-question';
 import { PersistQuestionValidator } from './validators/persist-question.validator';
 import { PersistQuestionValidationError } from './validators/persist-question.validator';
@@ -670,6 +671,7 @@ export class ImportService {
       subjectId: upload.subject.toString(),
       topicId: upload.topic.toString(),
       examIds: upload.exams?.map(id => id.toString()) ?? [],
+      tagIds: upload.tags?.map(id => id.toString()) ?? [],
     };
   }
 
@@ -686,6 +688,7 @@ export class ImportService {
       subjectId: dto.subjectId,
       topicId: dto.topicId,
       examIds: dto.examIds ?? [],
+      tagIds: [],
     };
   }
 
@@ -1405,6 +1408,7 @@ export class ImportService {
           subjectId: '',
           topicId: '',
           examIds: [],
+          tagIds: [],
         },
       );
     });
@@ -1625,6 +1629,7 @@ export class ImportService {
       subject: metadata.subjectId,
       topic: metadata.topicId,
       exams: [...metadata.examIds],
+      ...tagFieldsFromIds(metadata.tagIds),
       difficultyLevel: options?.difficultyLevel ?? 'medium',
       isActive: true,
       isDeleted: false,
@@ -1750,6 +1755,7 @@ export class ImportService {
       subject: draft.subject || shell.subject,
       topic: draft.topic || shell.topic,
       exams: draft.exams?.length ? draft.exams : shell.exams,
+      tags: draft.tags !== undefined ? draft.tags : shell.tags,
       difficultyLevel: draft.difficultyLevel || shell.difficultyLevel,
     };
   }
@@ -1961,6 +1967,7 @@ export class ImportService {
         subject: dto.subjectId ? new Types.ObjectId(dto.subjectId) : undefined,
         topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
         exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
+        tags: dto.tagIds?.map(id => new Types.ObjectId(id)) ?? [],
         metadata: dto.metadata
           ? new Map(Object.entries(dto.metadata))
           : undefined,
@@ -2259,6 +2266,7 @@ export class ImportService {
       subjectId: upload.subject?.toString(),
       topicId: upload.topic?.toString(),
       examIds: upload.exams?.map(id => id.toString()),
+      tagIds: upload.tags?.map(id => id.toString()) ?? [],
       markdownS3Key: upload.markdownS3Key,
       errorMessage: upload.errorMessage,
       enrichedAt: upload.enrichedAt,
@@ -2303,6 +2311,7 @@ export class ImportService {
         subjectId: upload.subject?.toString(),
         topicId: upload.topic?.toString(),
         examIds: upload.exams?.map(id => id.toString()),
+        tagIds: upload.tags?.map(id => id.toString()) ?? [],
         s3Key: upload.s3Key,
         markdownS3Key: upload.markdownS3Key,
         errorMessage: upload.errorMessage,

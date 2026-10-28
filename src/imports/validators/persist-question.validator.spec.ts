@@ -155,6 +155,7 @@ describe('PersistQuestionValidator', () => {
   const subjectModel = { exists: jest.fn() };
   const topicModel = { exists: jest.fn() };
   const examModel = { exists: jest.fn() };
+  const tagModel = { exists: jest.fn() };
 
   let validator: PersistQuestionValidator;
 
@@ -162,13 +163,16 @@ describe('PersistQuestionValidator', () => {
     subjectModel.exists.mockReset();
     topicModel.exists.mockReset();
     examModel.exists.mockReset();
+    tagModel.exists.mockReset();
     subjectModel.exists.mockResolvedValue({ _id: 's' });
     topicModel.exists.mockResolvedValue({ _id: 't' });
     examModel.exists.mockResolvedValue({ _id: 'e' });
+    tagModel.exists.mockResolvedValue({ _id: 'tag' });
     validator = new PersistQuestionValidator(
       subjectModel as never,
       topicModel as never,
       examModel as never,
+      tagModel as never,
     );
   });
 
@@ -243,6 +247,21 @@ describe('PersistQuestionValidator', () => {
     topicModel.exists.mockResolvedValue(null);
     await expect(validator.validateQuestion(validQuestion, 4)).rejects.toThrow(
       /topic .* was not found/,
+    );
+  });
+
+  it('keeps optional tags and rejects a missing tag', async () => {
+    const tagged = {
+      ...validQuestion,
+      tags: ['507f1f77bcf86cd799439016'],
+    };
+    await expect(validator.validateQuestion(tagged, 0)).resolves.toMatchObject({
+      tags: ['507f1f77bcf86cd799439016'],
+    });
+
+    tagModel.exists.mockResolvedValue(null);
+    await expect(validator.validateQuestion(tagged, 6)).rejects.toThrow(
+      /tag .* was not found/,
     );
   });
 

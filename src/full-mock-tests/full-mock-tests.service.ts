@@ -43,6 +43,7 @@ import { DraftListItemDto } from './dto/draft-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { SearchQuestionItemDto } from './dto/search-question-item.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { questionTagNames } from '../questions/question-tag-names';
 import { AccessControlService } from '../access/access-control.service';
 import { AccessDto, toAccessDto } from '../access/to-access-dto';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
@@ -355,6 +356,7 @@ export class FullMockTestsService {
       this.questionModel
         .find(query)
         .select('-correctAnswer -explanation')
+        .populate('tags', 'name')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -726,6 +728,7 @@ export class FullMockTestsService {
       ? await this.questionModel
           .find({ _id: { $in: questionIds } })
           .select('-correctAnswer -explanation')
+          .populate('tags', 'name')
           .lean()
           .exec()
       : [];
@@ -752,6 +755,7 @@ export class FullMockTestsService {
                   subject: q.subject.toString(),
                   topic: q.topic?.toString(),
                   difficultyLevel: q.difficultyLevel,
+                  tags: [],
                 };
             return {
               ...safe,
@@ -803,6 +807,7 @@ export class FullMockTestsService {
       ? await this.questionModel
           .find({ _id: { $in: questionIds } })
           .select('-correctAnswer -explanation')
+          .populate('tags', 'name')
           .lean()
           .exec()
       : [];
@@ -828,6 +833,7 @@ export class FullMockTestsService {
                   },
                   options: [],
                   subject: row.subject.toString(),
+                  tags: [],
                 };
             return {
               ...safe,
@@ -973,6 +979,7 @@ export class FullMockTestsService {
     subject?: { toString(): string };
     topic?: { toString(): string };
     difficultyLevel?: string;
+    tags?: unknown;
   }): Promise<SafeQuestionDto> {
     const images: ImageLike[] = [
       q.questionText?.en?.image,
@@ -1008,6 +1015,7 @@ export class FullMockTestsService {
       subject: q.subject?.toString(),
       topic: q.topic?.toString(),
       difficultyLevel: q.difficultyLevel,
+      tags: questionTagNames(q),
     };
   }
 

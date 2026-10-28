@@ -38,6 +38,7 @@ import { AccessDto, toAccessDto } from '../access/to-access-dto';
 import { AccessDecisionReason } from '../common/enums/access-decision-reason.enum';
 import { updatedByFields } from '../common/types/to-actor-object-id';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { questionTagNames } from '../questions/question-tag-names';
 import { sampleTopicWiseQuestionIds } from './topic-wise-question-sampler';
 
 const TOPIC_WISE_FILTER: FilterQuery<MockTestDocument> = {
@@ -211,10 +212,11 @@ export class MockTestsService {
         .populate('topic', 'name')
         .populate({
           path: 'questionIds',
-          select: 'questionText subject topic options optionType',
+          select: 'questionText subject topic options optionType tags',
           populate: [
             { path: 'subject', select: 'name' },
             { path: 'topic', select: 'name' },
+            { path: 'tags', select: 'name' },
           ],
         });
     } else {
@@ -429,6 +431,7 @@ export class MockTestsService {
         }>;
         subject?: PopulatedDocument;
         topic?: PopulatedDocument;
+        tags?: unknown;
         id?: string;
       };
     });
@@ -477,6 +480,7 @@ export class MockTestsService {
               name: question.topic.name,
             }
           : null,
+        tags: questionTagNames(question),
       };
     });
 

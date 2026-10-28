@@ -79,8 +79,19 @@ export class QuestionResponseDto {
   @ApiPropertyOptional({ type: [NamedRefDto] })
   exams?: Array<NamedRefDto | string>;
 
-  @ApiPropertyOptional()
-  tag?: string | null;
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Tag ids on this question, in selection order. Empty when the question has no tag.',
+  })
+  tagIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Tag names on this question. Empty when the question has no tag.',
+  })
+  tags?: string[];
 
   @ApiPropertyOptional()
   difficultyLevel?: string;
