@@ -38,6 +38,7 @@ import {
 import { SprintTestListItemDto } from './dto/sprint-test-list-item.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { questionTagNames } from '../questions/question-tag-names';
 import {
   assignUpdatedBy,
   updatedByFields,
@@ -278,6 +279,7 @@ export class SprintTestsService {
       this.questionModel
         .find(query)
         .select('-correctAnswer -explanation')
+        .populate('tags', 'name')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -850,6 +852,7 @@ export class SprintTestsService {
       ? await this.questionModel
           .find({ _id: { $in: questionIds } })
           .select('-correctAnswer -explanation')
+          .populate('tags', 'name')
           .lean()
           .exec()
       : [];
@@ -954,6 +957,7 @@ export class SprintTestsService {
           subject: slot.subject.toString(),
           topic: slot.topic?.toString(),
           difficultyLevel: slot.difficultyLevel,
+          tags: [],
         };
 
     return {
@@ -975,6 +979,7 @@ export class SprintTestsService {
     const docs = await this.questionModel
       .find({ _id: { $in: ids } })
       .select('-correctAnswer -explanation')
+      .populate('tags', 'name')
       .lean()
       .exec();
     const byId = new Map(
@@ -993,6 +998,7 @@ export class SprintTestsService {
                 ml: { text: null, imageUrl: null },
               },
               options: [],
+              tags: [],
             };
         return {
           ...safe,
@@ -1109,6 +1115,7 @@ export class SprintTestsService {
     subject?: { toString(): string };
     topic?: { toString(): string };
     difficultyLevel?: string;
+    tags?: unknown;
   }): Promise<SafeQuestionDto> {
     const images: ImageLike[] = [
       question.questionText?.en?.image,
@@ -1144,6 +1151,7 @@ export class SprintTestsService {
       subject: question.subject?.toString(),
       topic: question.topic?.toString(),
       difficultyLevel: question.difficultyLevel,
+      tags: questionTagNames(question),
     };
   }
 }

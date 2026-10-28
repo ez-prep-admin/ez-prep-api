@@ -94,6 +94,27 @@ export class UploadQuestionPdfDto {
   examIds?: string[];
 
   @ApiPropertyOptional({
+    description:
+      'Optional tag IDs applied to every question imported from this PDF. Omit when no tag is selected.',
+    example: ['507f1f77bcf86cd799439016'],
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    const parsed = parseOptionalJsonField(value);
+    if (parsed === undefined) {
+      return undefined;
+    }
+    return Array.isArray(parsed) ? parsed : [parsed];
+  })
+  @IsArray({ message: 'Tag IDs must be an array' })
+  @IsMongoId({
+    each: true,
+    message: 'Each tag ID must be a valid MongoDB ObjectId',
+  })
+  tagIds?: string[];
+
+  @ApiPropertyOptional({
     description: 'Additional metadata as key-value pairs',
     example: { examYear: '2023', testSeries: 'NEET Mock Test' },
     type: 'object',

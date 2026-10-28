@@ -24,6 +24,7 @@ import {
   createdByFields,
   updatedByFields,
 } from '../common/types/to-actor-object-id';
+import { questionTagIds, questionTagNames } from './question-tag-names';
 
 const VISIBLE_QUESTION: FilterQuery<Question> = {
   isDeleted: { $ne: true },
@@ -94,6 +95,7 @@ export class QuestionsService {
         .populate('subject', 'name')
         .populate('topic', 'name')
         .populate('exams', 'name')
+        .populate('tags', 'name')
         .exec(),
       this.questionModel.countDocuments(query).exec(),
     ]);
@@ -119,6 +121,7 @@ export class QuestionsService {
       .populate('subject', 'name')
       .populate('topic', 'name')
       .populate('exams', 'name')
+      .populate('tags', 'name')
       .exec();
 
     if (!question) {
@@ -138,15 +141,26 @@ export class QuestionsService {
     }
     this.assertCorrectAnswer(dto);
 
+    const document = this.toDocument(dto);
+    const patch = {
+      ...document,
+      ...updatedByFields(actorUserId),
+    };
+    const clearTags = dto.tagIds !== undefined && !('tags' in document);
+
     const question = await this.questionModel
       .findOneAndUpdate(
         { _id: id, ...VISIBLE_QUESTION },
-        { $set: { ...this.toDocument(dto), ...updatedByFields(actorUserId) } },
+        {
+          $set: patch,
+          ...(clearTags ? { $unset: { tags: '' } } : {}),
+        },
         { new: true },
       )
       .populate('subject', 'name')
       .populate('topic', 'name')
       .populate('exams', 'name')
+      .populate('tags', 'name')
       .exec();
 
     if (!question) {
@@ -232,10 +246,17 @@ export class QuestionsService {
     if (dto.exams) {
       document.exams = dto.exams.map(id => new Types.ObjectId(id));
     }
-    if (dto.tag) {
-      document.tag = new Types.ObjectId(dto.tag);
-    } else if (dto.tag === null) {
-      document.tag = null;
+    if (dto.tagIds !== undefined) {
+      const ids = [
+        ...new Set(
+          dto.tagIds
+            .map(id => (typeof id === 'string' ? id.trim() : ''))
+            .filter(id => id.length > 0),
+        ),
+      ];
+      if (ids.length > 0) {
+        document.tags = ids.map(id => new Types.ObjectId(id));
+      }
     }
     if (dto.difficultyLevel) {
       document.difficultyLevel = dto.difficultyLevel;
@@ -315,7 +336,8 @@ export class QuestionsService {
             .map(exam => this.toNamedRef(exam))
             .filter((exam): exam is NamedRefDto | string => Boolean(exam))
         : [],
-      tag: obj.tag?.toString?.() || obj.tag || null,
+      tagIds: questionTagIds(obj),
+      tags: questionTagNames(obj),
       difficultyLevel: obj.difficultyLevel,
       source: obj.source,
       isActive: obj.isActive,

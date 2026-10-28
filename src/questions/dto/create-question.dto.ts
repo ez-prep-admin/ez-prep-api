@@ -140,11 +140,15 @@ export class CreateQuestionDto {
   @IsMongoId({ each: true })
   exams?: string[];
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Every tag on this question, in selection order. Empty when the question has no tag.',
+  })
   @IsOptional()
-  @ValidateIf((_, value) => value != null && value !== '')
-  @IsMongoId()
-  tag?: string | null;
+  @IsArray()
+  @IsMongoId({ each: true })
+  tagIds?: string[];
 
   @ApiPropertyOptional({ enum: ['easy', 'medium', 'hard'] })
   @IsOptional()

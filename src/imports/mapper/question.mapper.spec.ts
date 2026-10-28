@@ -55,6 +55,7 @@ describe('QuestionMapper', () => {
     expect(mapped.options).toHaveLength(4);
     expect(mapped.options.every(option => option.type === 'text')).toBe(true);
     expect(mapped.source).toBe(PDF_IMPORT_QUESTION_SOURCE);
+    expect(mapped.tags).toBeUndefined();
     expect(mapped.explanation.images).toBeUndefined();
     expect(extractor.extractOptionContent).not.toHaveBeenCalled();
   });
@@ -272,5 +273,33 @@ describe('QuestionMapper', () => {
 
     expect(mapped.options[0].en).toBe('');
     expect(mapped.options[0].type).toBe('text');
+  });
+
+  it('copies selected upload tags and omits them when none are selected', () => {
+    const extractor = {
+      extractOptionContent: jest.fn(),
+      buildQuestionContent: jest.fn().mockReturnValue({
+        text: 'What is 2+2?',
+        image: null,
+        images: [],
+      }),
+      buildExplanationContent: jest.fn().mockReturnValue({
+        text: 'Because 2+2=4',
+        image: null,
+        images: [],
+      }),
+    };
+    const mapper = new QuestionMapper(
+      extractor as unknown as MarkdownImageExtractorService,
+    );
+    const tagId = '507f1f77bcf86cd799439016';
+
+    const tagged = mapper.map(output, { ...metadata, tagIds: [tagId] });
+    expect(tagged).not.toHaveProperty('tag');
+    expect(tagged.tags).toEqual([tagId]);
+
+    const untagged = mapper.map(output, { ...metadata, tagIds: [] });
+    expect(untagged).not.toHaveProperty('tag');
+    expect(untagged.tags).toBeUndefined();
   });
 });

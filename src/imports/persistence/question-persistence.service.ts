@@ -69,6 +69,7 @@ export class QuestionPersistenceService {
       subject: new Types.ObjectId(question.subject),
       topic: new Types.ObjectId(question.topic),
       exams: question.exams.map(examId => new Types.ObjectId(examId)),
+      ...this.tagDocumentFields(question),
       difficultyLevel: question.difficultyLevel,
       isActive: true,
       isDeleted: false,
@@ -76,6 +77,28 @@ export class QuestionPersistenceService {
       ...(question.uploadId
         ? { uploadId: new Types.ObjectId(question.uploadId) }
         : {}),
+    };
+  }
+
+  /**
+   * Writes tags only when at least one was selected. A question with no tag
+   * omits the field instead of storing an empty array.
+   */
+  private tagDocumentFields(question: ImportQuestion) {
+    const ids = [
+      ...new Set(
+        (question.tags ?? []).filter(
+          id => typeof id === 'string' && id.length > 0,
+        ),
+      ),
+    ];
+
+    if (ids.length === 0) {
+      return {};
+    }
+
+    return {
+      tags: ids.map(id => new Types.ObjectId(id)),
     };
   }
 }

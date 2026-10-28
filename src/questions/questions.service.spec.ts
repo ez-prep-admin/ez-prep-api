@@ -51,7 +51,6 @@ const questionDoc = (data: any = {}) => ({
       { _id: { toString: () => OID2 }, name: 'SBI PO' },
       null,
     ],
-    tag: data.tag || { toString: () => OID },
     difficultyLevel: 'easy',
     source: 'MANUAL_INPUT',
     isActive: true,
@@ -88,7 +87,6 @@ describe('QuestionsService', () => {
     subject: OID,
     topic: OID2,
     exams: [OID],
-    tag: OID,
     difficultyLevel: 'easy' as const,
   };
 
@@ -112,6 +110,33 @@ describe('QuestionsService', () => {
         id: OID,
         correctAnswer: 'a',
       });
+    });
+
+    it('stores every selected tag in selection order', async () => {
+      questionModel.create.mockResolvedValue({ id: OID });
+      questionModel.findOne.mockReturnValue(chain(questionDoc()));
+
+      await service.create({
+        ...baseDto,
+        tagIds: [OID2, OID, OID2],
+      } as any);
+
+      const created = questionModel.create.mock.calls.at(-1)[0];
+      expect(created).not.toHaveProperty('tag');
+      expect(
+        created.tags.map((id: { toString(): string }) => id.toString()),
+      ).toEqual([OID2, OID]);
+    });
+
+    it('omits tags when none are selected', async () => {
+      questionModel.create.mockResolvedValue({ id: OID });
+      questionModel.findOne.mockReturnValue(chain(questionDoc()));
+
+      await service.create({ ...baseDto, tagIds: [] } as any);
+
+      const created = questionModel.create.mock.calls.at(-1)[0];
+      expect(created).not.toHaveProperty('tag');
+      expect(created).not.toHaveProperty('tags');
     });
 
     it('stamps createdBy and still creates when the actor id is missing', async () => {
@@ -211,15 +236,31 @@ describe('QuestionsService', () => {
   });
 
   describe('update', () => {
-    it('updates a question including null topic/tag', async () => {
+    it('clears every stored tag when the editor sends an empty list', async () => {
       questionModel.findOneAndUpdate.mockReturnValue(chain(questionDoc()));
-      await expect(
-        service.update(OID, {
-          ...baseDto,
-          topic: null,
-          tag: null,
-        } as any),
-      ).resolves.toBeDefined();
+      await service.update(OID, {
+        ...baseDto,
+        topic: null,
+        tagIds: [],
+      } as any);
+
+      const updateOp = questionModel.findOneAndUpdate.mock.calls[0][1];
+      expect(updateOp.$set).not.toHaveProperty('tag');
+      expect(updateOp.$set).not.toHaveProperty('tags');
+      expect(updateOp.$unset).toEqual({ tags: '' });
+    });
+
+    it('replaces the stored tags with the editor list', async () => {
+      questionModel.findOneAndUpdate.mockReturnValue(chain(questionDoc()));
+
+      await service.update(OID, { ...baseDto, tagIds: [OID2, OID] } as any);
+
+      const update = questionModel.findOneAndUpdate.mock.calls[0][1].$set;
+      expect(update).not.toHaveProperty('tag');
+      expect(
+        update.tags.map((tagId: { toString(): string }) => tagId.toString()),
+      ).toEqual([OID2, OID]);
+      expect(questionModel.findOne).not.toHaveBeenCalled();
     });
 
     it('stamps updatedBy without replacing createdBy', async () => {

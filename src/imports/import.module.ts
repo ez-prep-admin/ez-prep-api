@@ -27,6 +27,7 @@ import {
 import { Subject, SubjectSchema } from '../subjects/schemas/subject.schema';
 import { Topic, TopicSchema } from '../topics/schemas/topic.schema';
 import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
+import { Tag, TagSchema } from '../tags/schemas/tag.schema';
 import {
   QuestionUpload,
   QuestionUploadSchema,
@@ -46,6 +47,7 @@ import { ImportQueueModule } from '../queues/import-queue.module';
       { name: Subject.name, schema: SubjectSchema },
       { name: Topic.name, schema: TopicSchema },
       { name: Exam.name, schema: ExamSchema },
+      { name: Tag.name, schema: TagSchema },
       { name: QuestionUpload.name, schema: QuestionUploadSchema },
       { name: FailedQuestion.name, schema: FailedQuestionSchema },
     ]),

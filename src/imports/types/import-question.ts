@@ -38,12 +38,33 @@ export interface ImportQuestion {
   subject: string;
   topic: string;
   exams: string[];
+  /** Tags selected on the PDF upload. Omitted when none were selected. */
+  tags?: string[];
   difficultyLevel: DifficultyLevel;
   isActive: boolean;
   isDeleted: boolean;
   source: typeof PDF_IMPORT_QUESTION_SOURCE;
   /** Reference to the question_uploads document this question was imported from. */
   uploadId?: string;
+}
+
+/** Copies selected upload tags onto an import question. Empty selection adds nothing. */
+export function tagFieldsFromIds(
+  tagIds?: readonly (string | null | undefined)[] | null,
+): Pick<ImportQuestion, 'tags'> {
+  const ids = [
+    ...new Set(
+      (tagIds ?? [])
+        .map(id => (typeof id === 'string' ? id.trim() : ''))
+        .filter(id => id.length > 0),
+    ),
+  ];
+
+  if (ids.length === 0) {
+    return {};
+  }
+
+  return { tags: ids };
 }
 
 /** Payload shape before persist validation; source is applied by Zod default. */

@@ -36,6 +36,7 @@ import { AccessMode } from '../common/enums/access-mode.enum';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { SafeQuestionDto } from '../mock-test-attempts/dto/start-attempt-response.dto';
 import { ImageLike, ImageUrlResolver } from '../aws/s3/image-url.resolver';
+import { questionTagNames } from '../questions/question-tag-names';
 import {
   assignUpdatedBy,
   updatedByFields,
@@ -202,6 +203,7 @@ export class TopicWiseDraftsService {
       this.questionModel
         .find(query)
         .select('-correctAnswer -explanation')
+        .populate('tags', 'name')
         .sort({ updatedAt: -1, createdAt: -1 })
         .skip(skip)
         .limit(validLimit)
@@ -874,6 +876,7 @@ export class TopicWiseDraftsService {
       ? await this.questionModel
           .find({ _id: { $in: questionIds } })
           .select('-correctAnswer -explanation')
+          .populate('tags', 'name')
           .lean()
           .exec()
       : [];
@@ -978,6 +981,7 @@ export class TopicWiseDraftsService {
           subject: slot.subject.toString(),
           topic: slot.topic?.toString(),
           difficultyLevel: slot.difficultyLevel,
+          tags: [],
         };
 
     return {
@@ -1006,6 +1010,7 @@ export class TopicWiseDraftsService {
     subject?: { toString(): string };
     topic?: { toString(): string };
     difficultyLevel?: string;
+    tags?: unknown;
   }): Promise<SafeQuestionDto> {
     const images: ImageLike[] = [
       question.questionText?.en?.image,
@@ -1041,6 +1046,7 @@ export class TopicWiseDraftsService {
       subject: question.subject?.toString(),
       topic: question.topic?.toString(),
       difficultyLevel: question.difficultyLevel,
+      tags: questionTagNames(question),
     };
   }
 }

@@ -42,7 +42,6 @@ describe('ImportFailedQuestionDto', () => {
         subject: '67bcc447003af8ad9fae358f',
         topic: '67bbc4b3822f6d33b7fb0912',
         exams: ['69d74d04008016a2ac4e9edd'],
-        tag: null,
         difficultyLevel: 'medium',
         isActive: true,
         isDeleted: false,

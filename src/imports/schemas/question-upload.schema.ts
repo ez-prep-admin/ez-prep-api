@@ -97,6 +97,13 @@ export class QuestionUpload {
   exams: Types.ObjectId[];
 
   /**
+   * Optional tags applied to every question imported from this PDF.
+   * Empty when the admin did not select a tag.
+   */
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'Tag' }], default: [] })
+  tags: Types.ObjectId[];
+
+  /**
    * Difficulty level (metadata)
    */
   @Prop({ type: String, enum: ['easy', 'medium', 'hard'] })

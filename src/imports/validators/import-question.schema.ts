@@ -85,6 +85,7 @@ export const ImportQuestionSchema = z
     subject: objectIdSchema,
     topic: objectIdSchema,
     exams: z.array(objectIdSchema).min(1),
+    tags: z.array(objectIdSchema).optional(),
     difficultyLevel: z.enum(['easy', 'medium', 'hard']),
     isActive: z.boolean().default(true),
     isDeleted: z.boolean().default(false),

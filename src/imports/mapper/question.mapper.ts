@@ -5,6 +5,7 @@ import {
   ImportQuestion,
   ImportQuestionOption,
   PDF_IMPORT_QUESTION_SOURCE,
+  tagFieldsFromIds,
 } from '../types/import-question';
 import { MatchedQuestion } from '../types/matched-question';
 import { MarkdownImageExtractorService } from './markdown-image.extractor';
@@ -15,6 +16,8 @@ export interface QuestionMapperMetadata {
   subjectId: string;
   topicId: string;
   examIds: readonly string[];
+  /** Tags chosen on the PDF upload. Empty or omitted when none were selected. */
+  tagIds?: readonly string[];
 }
 
 @Injectable()
@@ -135,6 +138,7 @@ export class QuestionMapper {
       subject: metadata.subjectId,
       topic: metadata.topicId,
       exams: [...metadata.examIds],
+      ...tagFieldsFromIds(metadata.tagIds),
       difficultyLevel: output.difficultyLevel,
       isActive: true,
       isDeleted: false,

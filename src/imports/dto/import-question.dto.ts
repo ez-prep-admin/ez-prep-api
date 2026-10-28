@@ -1,6 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { Allow, IsOptional, ValidateNested } from 'class-validator';
+import {
+  Allow,
+  IsArray,
+  IsMongoId,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 
 export class ImportImageMetadataDto {
   @Allow()
@@ -163,12 +169,14 @@ export class ImportQuestionPayloadDto {
 
   @Allow()
   @IsOptional()
+  @IsArray()
+  @IsMongoId({ each: true })
   @ApiPropertyOptional({
     description:
-      'Ignored for PDF imports; accepted for admin form compatibility',
-    nullable: true,
+      'All tag ObjectIds selected for this PDF import. Omit when no tag was selected.',
+    type: [String],
   })
-  tag?: string | null;
+  tags?: string[];
 
   @Allow()
   @IsOptional()

@@ -721,6 +721,44 @@ describe('ImportService', () => {
 
       expect(result.title).toBe('Paper');
       expect(result.status).toBe('uploaded');
+      expect(questionUploadModel.mock.calls[0][0].tags).toEqual([]);
+    });
+
+    it('stores selected tag ids and lists them on the upload', async () => {
+      s3Service.uploadFile.mockResolvedValue({
+        key: 'pdf/key.pdf',
+        bucket: 'uploads',
+        region: 'ap-south-1',
+        size: 12,
+        contentType: 'application/pdf',
+        etag: 'etag',
+      });
+      questionUploadModel.mockImplementation(() => makeUpload());
+
+      await service.uploadQuestionPdf(
+        {
+          buffer: Buffer.from('%PDF'),
+          originalname: 'paper.pdf',
+          size: 4,
+          mimetype: 'application/pdf',
+        } as Express.Multer.File,
+        {
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          tagIds: [TOPIC_ID],
+        },
+      );
+
+      const created = questionUploadModel.mock.calls.at(-1)[0];
+      expect(created.tags).toHaveLength(1);
+      expect(created.tags[0].toString()).toBe(TOPIC_ID);
+
+      questionUploadModel.findById.mockResolvedValue(
+        makeUpload({ tags: [new Types.ObjectId(TOPIC_ID)] }),
+      );
+      const details = await service.getUploadDetails(UPLOAD_ID);
+      expect(details.tagIds).toEqual([TOPIC_ID]);
     });
 
     it('getUploadDetails and listUploads', async () => {
