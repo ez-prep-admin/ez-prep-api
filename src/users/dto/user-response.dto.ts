@@ -32,15 +32,6 @@ export class PreferencesResponseDto {
   notifications: NotificationPreferencesResponseDto;
 }
 
-export class FeedbackResponseDto {
-  @Expose() text?: string;
-  @Expose() userInterface?: number;
-  @Expose() questions?: number;
-  @Expose() fullMockTests?: number;
-  @Expose() topicWisePractice?: number;
-  @Expose() easeOfUse?: number;
-}
-
 export class TargetExamResponseDto {
   @Expose() id: string;
   @Expose() name: string;
@@ -125,14 +116,6 @@ export class UserResponseDto {
   @Expose()
   @Type(() => LocationResponseDto)
   location?: LocationResponseDto;
-
-  @ApiPropertyOptional({
-    description: 'Saved support feedback',
-    type: FeedbackResponseDto,
-  })
-  @Expose()
-  @Type(() => FeedbackResponseDto)
-  feedback?: FeedbackResponseDto;
 
   // ── Group 2: Target exam ───────────────────────────────────────────────────
   @ApiPropertyOptional({

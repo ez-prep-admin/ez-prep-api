@@ -513,7 +513,6 @@ export class UsersService {
       $set.dateOfBirth = new Date(dto.dateOfBirth);
     if (dto.gender !== undefined) $set.gender = dto.gender;
     if (dto.location !== undefined) $set.location = dto.location;
-    if (dto.feedback !== undefined) $set.feedback = dto.feedback;
     if (dto.targetExam !== undefined) {
       if (dto.targetExam === null) {
         $unset.targetExam = 1;
