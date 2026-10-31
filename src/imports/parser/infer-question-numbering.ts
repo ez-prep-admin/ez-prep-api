@@ -1,3 +1,5 @@
+import { findSolutionMarker } from './solution-markers';
+
 export interface InferredQuestionPattern {
   regex: string;
   type: 'numbered' | 'labeled' | 'hierarchical';
@@ -43,6 +45,13 @@ const CANDIDATE_PATTERNS: Array<{
   },
 ];
 
+/** Used only when no Q-heading or "1. " pattern matches. Nested lists must not replace those. */
+const ITEMIZE_QUESTION_PATTERN = {
+  lineRegex: /^\\item\[(\d+)\]/gm,
+  source: '^\\\\item\\[(\\d+)\\]',
+  type: 'numbered' as const,
+};
+
 /**
  * Score question-boundary patterns against the full markdown.
  * Used to correct stale LLM/cached structure when Mathpix output format changes.
@@ -51,9 +60,25 @@ export function inferQuestionNumberingPattern(
   markdown: string,
 ): InferredQuestionPattern | null {
   const questionsPortion = extractQuestionsPortion(markdown);
+  const best = scoreQuestionPattern(questionsPortion, CANDIDATE_PATTERNS);
+  if (best) {
+    return best;
+  }
+
+  return scoreQuestionPattern(questionsPortion, [ITEMIZE_QUESTION_PATTERN]);
+}
+
+function scoreQuestionPattern(
+  questionsPortion: string,
+  candidates: ReadonlyArray<{
+    lineRegex: RegExp;
+    source: string;
+    type: 'numbered' | 'labeled' | 'hierarchical';
+  }>,
+): InferredQuestionPattern | null {
   let best: InferredQuestionPattern | null = null;
 
-  for (const candidate of CANDIDATE_PATTERNS) {
+  for (const candidate of candidates) {
     const regex = new RegExp(
       candidate.lineRegex.source,
       candidate.lineRegex.flags,
@@ -99,20 +124,11 @@ export function countPatternMatches(markdown: string, pattern: string): number {
 }
 
 function extractQuestionsPortion(markdown: string): string {
-  const markers = [
-    '\\section*{ANSWERS AND SOLUTIONS}',
-    '\\section*{Answers and Solutions}',
-    '## ANSWERS AND SOLUTIONS',
-    '## SOLUTIONS',
-    '## ANSWERS',
-  ];
-
-  for (const marker of markers) {
-    const index = markdown.indexOf(marker);
-    if (index !== -1) {
-      return markdown.slice(0, index);
-    }
+  const marker = findSolutionMarker(markdown);
+  if (!marker) {
+    return markdown;
   }
 
-  return markdown;
+  const index = markdown.indexOf(marker);
+  return index === -1 ? markdown : markdown.slice(0, index);
 }

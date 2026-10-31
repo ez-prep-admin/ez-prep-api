@@ -141,6 +141,72 @@ describe('AdaptiveParserStrategy', () => {
     expect(data[0].question).toContain('First');
   });
 
+  it('keeps exercise questions and treats a later hints section as solutions', async () => {
+    detectStructure.mockResolvedValue({
+      questionPattern: {
+        type: 'numbered',
+        regex: '^\\\\item\\[(\\d+)\\]',
+        exampleMatch: '\\item[1] Which statement is true?',
+      },
+      solutionPattern: {
+        location: 'inline',
+        matchesQuestionNumbering: true,
+        inlineFormat: 'Ans:',
+      },
+      delimiter: { type: 'heading', value: '\\item', confidence: 0.8 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'itemize exercises',
+      confidence: 0.8,
+    });
+
+    const markdown = [
+      '\\section*{FOUNDATION QUESTIONS EXERCISE}',
+      '\\begin{itemize}',
+      '\\item[1] Which statement is true?',
+      '(a) one',
+      '(b) two',
+      '\\item[2] Second stem',
+      '(a) one',
+      '\\end{itemize}',
+      '\\section*{PROGRESSIVE QUESTIONS EXERCISE}',
+      '\\begin{itemize}',
+      '\\item[1] Third stem',
+      '(a) one',
+      '\\end{itemize}',
+      '\\section*{ANSWERS}',
+      '1 (b)',
+      '2 (a)',
+      '1 (c)',
+      '\\section*{Hints and Explanations}',
+      '\\begin{itemize}',
+      '\\item[1] Hint for the first exercise question',
+      '\\item[2] Hint for the second exercise question',
+      '\\item[1] Hint for the progressive question',
+      '\\end{itemize}',
+    ].join('\n');
+
+    const result = await strategy.parseWithResult(markdown);
+
+    expect(result.errors).toEqual([]);
+    expect(result.data).toHaveLength(3);
+    expect(result.data.map(question => question.question)).toEqual([
+      expect.stringContaining('Which statement is true?'),
+      expect.stringContaining('Second stem'),
+      expect.stringContaining('Third stem'),
+    ]);
+    expect(result.data[0].solution).toContain('first exercise');
+    expect(result.data[2].solution).toContain('progressive question');
+    expect(
+      result.data.some(question =>
+        question.question.includes('Hint for the first'),
+      ),
+    ).toBe(false);
+  });
+
   it('splits repeated numbering when there is no solutions section', async () => {
     detectStructure.mockResolvedValue({
       ...numberedStructure,
