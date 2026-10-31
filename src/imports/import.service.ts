@@ -48,6 +48,7 @@ import { PersistQuestionValidationError } from './validators/persist-question.va
 import { QuestionPersistenceService } from './persistence/question-persistence.service';
 import { FailedQuestionService } from './persistence/failed-question.service';
 import { FailedQuestionDocument } from './schemas/failed-question.schema';
+import { shuffleImportOptions } from './utils/shuffle-options.util';
 import {
   ImportImageMaterializeError,
   ImportImageStorageService,
@@ -1555,7 +1556,12 @@ export class ImportService {
           NEET_BUSINESS_VALIDATOR_CONFIG,
         );
 
-    return this.questionMapper.map(validated, mapperMetadata, matched);
+    const mapped = this.questionMapper.map(validated, mapperMetadata, matched);
+
+    return {
+      ...mapped,
+      options: shuffleImportOptions(mapped.options),
+    };
   }
 
   private buildQuestionDraftOnFailure(

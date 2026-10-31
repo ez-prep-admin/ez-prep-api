@@ -33,10 +33,11 @@ export const AI_QUESTION_OUTPUT_JSON_SHAPE = {
   options: [
     {
       label: 'a | b | c | d (lowercase)',
-      text: 'string — option text only, without the label prefix; preserve LaTeX as in source',
+      text: 'string — option text only, without the label prefix; keep the source (a)/(b)/(c)/(d) pairing; preserve LaTeX as in source',
     },
   ],
-  correctAnswer: 'a | b | c | d — must match one option label',
+  correctAnswer:
+    'a | b | c | d — source label of the factually correct option; do not default to a',
   explanation:
     'string — step-by-step explanation in English from the solution; preserve LaTeX math delimiters from the source',
   difficultyLevel: 'easy | medium | hard',
