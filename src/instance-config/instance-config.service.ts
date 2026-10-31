@@ -9,6 +9,8 @@ import { Model, UpdateQuery } from 'mongoose';
 import { CreateInstanceConfigDto } from './dto/create-instance-config.dto';
 import {
   InstanceConfigResponseDto,
+  InstanceOperationsResponseDto,
+  InstanceRedisResponseDto,
   InstanceSellerResponseDto,
   InstanceTaxConfigResponseDto,
 } from './dto/instance-config-response.dto';
@@ -20,6 +22,8 @@ import {
 import {
   InstanceConfig,
   InstanceConfigDocument,
+  InstanceOperationsConfig,
+  InstanceRedisConfig,
   InstanceSeller,
   InstanceTaxConfig,
 } from './schemas/instance-config.schema';
@@ -109,6 +113,8 @@ export class InstanceConfigService {
     this.assignOptionalUrl($set, $unset, 'faviconUrl', dto.faviconUrl);
     this.assignNested($set, 'seller', dto.seller);
     this.assignNested($set, 'taxConfig', dto.taxConfig);
+    this.assignNested($set, 'operations', dto.operations);
+    this.assignNested($set, 'redis', dto.redis);
 
     if (Object.keys($set).length === 0 && Object.keys($unset).length === 0) {
       return null;
@@ -138,7 +144,7 @@ export class InstanceConfigService {
 
   private assignNested(
     $set: Record<string, unknown>,
-    prefix: 'seller' | 'taxConfig',
+    prefix: 'seller' | 'taxConfig' | 'operations' | 'redis',
     value: object | undefined,
   ): void {
     if (!value) {
@@ -162,6 +168,8 @@ export class InstanceConfigService {
       faviconUrl: config.faviconUrl ?? null,
       seller: this.toSeller(config.seller),
       taxConfig: this.toTaxConfig(config.taxConfig),
+      operations: this.toOperations(config.operations),
+      redis: this.toRedis(config.redis),
       createdAt: config.createdAt,
       updatedAt: config.updatedAt,
     });
@@ -181,6 +189,58 @@ export class InstanceConfigService {
       stateCode: seller.stateCode ?? null,
       signatoryName: seller.signatoryName ?? null,
       signatoryDesignation: seller.signatoryDesignation ?? null,
+    };
+  }
+
+  private toOperations(
+    operations?: InstanceOperationsConfig | null,
+  ): InstanceOperationsResponseDto | null {
+    if (!operations) {
+      return null;
+    }
+    return {
+      invoicesEnabled: operations.invoicesEnabled ?? null,
+      trustProxyHops: operations.trustProxyHops ?? null,
+      maxOpenOrdersPerUser: operations.maxOpenOrdersPerUser ?? null,
+      reconciliationEnabled: operations.reconciliationEnabled ?? null,
+      reconciliationMinAgeMinutes:
+        operations.reconciliationMinAgeMinutes ?? null,
+      reconciliationIntervalMs: operations.reconciliationIntervalMs ?? null,
+      reconciliationBatch: operations.reconciliationBatch ?? null,
+      reconciliationMaxAttempts: operations.reconciliationMaxAttempts ?? null,
+      webhookRetryWindowMinutes: operations.webhookRetryWindowMinutes ?? null,
+      lateCaptureWatchHours: operations.lateCaptureWatchHours ?? null,
+      refundUnknownWindowMinutes: operations.refundUnknownWindowMinutes ?? null,
+    };
+  }
+
+  private toRedis(
+    redis?: InstanceRedisConfig | null,
+  ): InstanceRedisResponseDto | null {
+    if (!redis) {
+      return null;
+    }
+    return {
+      keyPrefix: redis.keyPrefix ?? null,
+      bullPrefix: redis.bullPrefix ?? null,
+      connectTimeoutMs: redis.connectTimeoutMs ?? null,
+      commandTimeoutMs: redis.commandTimeoutMs ?? null,
+      healthTimeoutMs: redis.healthTimeoutMs ?? null,
+      keepAliveMs: redis.keepAliveMs ?? null,
+      parseConcurrency: redis.parseConcurrency ?? null,
+      enrichConcurrency: redis.enrichConcurrency ?? null,
+      attempts: redis.attempts ?? null,
+      backoffDelayMs: redis.backoffDelayMs ?? null,
+      stalledIntervalMs: redis.stalledIntervalMs ?? null,
+      maxStalledCount: redis.maxStalledCount ?? null,
+      lockDurationMs: redis.lockDurationMs ?? null,
+      staleJobMs: redis.staleJobMs ?? null,
+      recoveryIntervalMs: redis.recoveryIntervalMs ?? null,
+      pollIntervalMs: redis.pollIntervalMs ?? null,
+      removeOnCompleteCount: redis.removeOnCompleteCount ?? null,
+      removeOnCompleteAgeSec: redis.removeOnCompleteAgeSec ?? null,
+      removeOnFailCount: redis.removeOnFailCount ?? null,
+      removeOnFailAgeSec: redis.removeOnFailAgeSec ?? null,
     };
   }
 

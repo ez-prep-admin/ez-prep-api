@@ -40,7 +40,7 @@ export class InstanceConfigController {
   @ApiOperation({
     summary: 'Get this deployment instance configuration',
     description:
-      'Returns the singleton branding document for this API instance. data is null until an admin creates it.',
+      'Returns the singleton document for this API instance. data is null until an admin creates it. operations and redis are null until stored. Missing keys inside those groups are not filled from defaults.',
   })
   @ApiResponse({
     status: 200,
@@ -89,7 +89,7 @@ export class InstanceConfigController {
   @ApiOperation({
     summary: 'Update this deployment instance configuration',
     description:
-      'Changes only the fields you send. Send null or an empty string to clear logoUrl or faviconUrl. Nested seller and taxConfig keys update on their own. A new GSTIN is stored as sent, with no checksum or state-prefix check.',
+      'Changes only the fields you send. Send null or an empty string to clear logoUrl or faviconUrl. Nested seller, taxConfig, operations, and redis keys update on their own. operations and redis apply on the next process start. A new GSTIN is stored as sent, with no checksum or state-prefix check.',
   })
   @ApiResponse({
     status: 200,

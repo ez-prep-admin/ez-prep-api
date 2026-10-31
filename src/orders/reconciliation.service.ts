@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { CommerceHealthService } from '../commerce-health/commerce-health.service';
 import { OrderStatus } from '../common/enums/order-status.enum';
@@ -9,9 +8,6 @@ import { nextLateWatchAt } from './late-capture-watch';
 import { RepairSweepsService } from './repair-sweeps.service';
 import { OrderDocument } from './schemas/order.schema';
 import { OrdersService } from './orders.service';
-
-const DEFAULT_MIN_AGE_MINUTES = 60;
-const DEFAULT_INTERVAL_MS = 300_000;
 
 export type ReconciliationOutcome = 'paid' | 'failed' | 'expired' | 'skipped';
 
@@ -28,7 +24,6 @@ export class ReconciliationService {
   private readonly logger = new Logger(ReconciliationService.name);
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly commerceConfig: CommerceConfigService,
     private readonly ordersService: OrdersService,
     private readonly registry: PaymentGatewayRegistry,
@@ -235,29 +230,11 @@ export class ReconciliationService {
   }
 
   private minAgeMinutes(): number {
-    const raw = this.configService.get<string>(
-      'RECONCILIATION_MIN_AGE_MINUTES',
-    );
-    if (raw == null || raw.trim() === '') {
-      return DEFAULT_MIN_AGE_MINUTES;
-    }
-    const value = Number(raw);
-    if (!Number.isInteger(value) || value < 0) {
-      return DEFAULT_MIN_AGE_MINUTES;
-    }
-    return value;
+    return this.commerceConfig.settings.reconciliationMinAgeMinutes;
   }
 
   private intervalMs(): number {
-    const raw = this.configService.get<string>('RECONCILIATION_INTERVAL_MS');
-    if (raw == null || raw.trim() === '') {
-      return DEFAULT_INTERVAL_MS;
-    }
-    const value = Number(raw);
-    if (!Number.isInteger(value) || value < 1000) {
-      return DEFAULT_INTERVAL_MS;
-    }
-    return value;
+    return this.commerceConfig.settings.reconciliationIntervalMs;
   }
 
   private batch(): number {

@@ -1,3 +1,8 @@
+import {
+  InstanceOperationsSnapshot,
+  InstanceRuntimeSnapshot,
+} from '../instance-config/instance-runtime.snapshot';
+
 export const INSTANCE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,62}$/;
 
 export type AccessEnforcementSetting = 'LEGACY' | 'ENFORCED';
@@ -21,12 +26,82 @@ export type CommerceSettings = {
   lateCaptureWatchHours: number;
   reconciliationBatch: number;
   reconciliationMaxAttempts: number;
+  reconciliationMinAgeMinutes: number;
+  reconciliationIntervalMs: number;
   refundUnknownWindowMinutes: number;
 };
 
-type EnvSource = {
+export type EnvSource = {
   get(key: string): string | undefined;
 };
+
+/**
+ * Stored operations win, including false and 0. An absent field stays on the environment.
+ */
+export function commerceSettingsSource(
+  env: EnvSource,
+  runtime?: InstanceRuntimeSnapshot | null,
+): EnvSource {
+  const operations = runtime?.operations ?? null;
+  return {
+    get(key: string): string | undefined {
+      const stored = operationsEnvValue(operations, key);
+      if (stored !== undefined) {
+        return stored;
+      }
+      return env.get(key);
+    },
+  };
+}
+
+function operationsEnvValue(
+  operations: InstanceOperationsSnapshot | null,
+  key: string,
+): string | undefined {
+  if (!operations) {
+    return undefined;
+  }
+  switch (key) {
+    case 'INVOICES_ENABLED':
+      return boolEnv(operations.invoicesEnabled);
+    case 'RECONCILIATION_ENABLED':
+      return boolEnv(operations.reconciliationEnabled);
+    case 'TRUST_PROXY_HOPS':
+      return numberEnv(operations.trustProxyHops);
+    case 'MAX_OPEN_ORDERS_PER_USER':
+      return numberEnv(operations.maxOpenOrdersPerUser);
+    case 'RECONCILIATION_MIN_AGE_MINUTES':
+      return numberEnv(operations.reconciliationMinAgeMinutes);
+    case 'RECONCILIATION_INTERVAL_MS':
+      return numberEnv(operations.reconciliationIntervalMs);
+    case 'RECONCILIATION_BATCH':
+      return numberEnv(operations.reconciliationBatch);
+    case 'RECONCILIATION_MAX_ATTEMPTS':
+      return numberEnv(operations.reconciliationMaxAttempts);
+    case 'WEBHOOK_RETRY_WINDOW_MINUTES':
+      return numberEnv(operations.webhookRetryWindowMinutes);
+    case 'LATE_CAPTURE_WATCH_HOURS':
+      return numberEnv(operations.lateCaptureWatchHours);
+    case 'REFUND_UNKNOWN_WINDOW_MINUTES':
+      return numberEnv(operations.refundUnknownWindowMinutes);
+    default:
+      return undefined;
+  }
+}
+
+function boolEnv(value: boolean | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value ? 'true' : 'false';
+}
+
+function numberEnv(value: number | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return String(value);
+}
 
 export function parseCommerceSettings(env: EnvSource): CommerceSettings {
   const nodeEnv = (env.get('NODE_ENV') ?? '').trim();
@@ -69,6 +144,12 @@ export function parseCommerceSettings(env: EnvSource): CommerceSettings {
     reconciliationMaxAttempts: positiveInt(
       env.get('RECONCILIATION_MAX_ATTEMPTS'),
       12,
+    ),
+    reconciliationMinAgeMinutes: parseReconciliationMinAgeMinutes(
+      env.get('RECONCILIATION_MIN_AGE_MINUTES'),
+    ),
+    reconciliationIntervalMs: parseReconciliationIntervalMs(
+      env.get('RECONCILIATION_INTERVAL_MS'),
     ),
     refundUnknownWindowMinutes: nonNegativeInt(
       env.get('REFUND_UNKNOWN_WINDOW_MINUTES'),
@@ -150,6 +231,28 @@ function parseAccessMode(
     mode: 'LEGACY',
     warning: `ACCESS_ENFORCEMENT_MODE "${raw}" is not LEGACY or ENFORCED; using LEGACY`,
   };
+}
+
+function parseReconciliationMinAgeMinutes(raw: string | undefined): number {
+  if (raw == null || raw.trim() === '') {
+    return 60;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0) {
+    return 60;
+  }
+  return value;
+}
+
+function parseReconciliationIntervalMs(raw: string | undefined): number {
+  if (raw == null || raw.trim() === '') {
+    return 300_000;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1_000) {
+    return 300_000;
+  }
+  return value;
 }
 
 function nonNegativeInt(value: string | undefined, fallback: number): number {

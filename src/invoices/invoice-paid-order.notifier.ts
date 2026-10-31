@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { PaidOrderNotifier } from '../entitlements/paid-order-notifier';
 import { InvoiceService } from './invoice.service';
 
@@ -13,12 +13,12 @@ export class InvoicePaidOrderNotifier implements PaidOrderNotifier {
   private readonly logger = new Logger(InvoicePaidOrderNotifier.name);
 
   constructor(
-    private readonly configService: ConfigService,
+    private readonly commerceConfig: CommerceConfigService,
     private readonly invoiceService: InvoiceService,
   ) {}
 
   async onOrderProvisioned(orderId: string): Promise<void> {
-    if (this.configService.get<string>('INVOICES_ENABLED') !== 'true') {
+    if (!this.commerceConfig.settings.invoicesEnabled) {
       return;
     }
     setImmediate(() => {

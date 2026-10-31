@@ -1,3 +1,5 @@
+import { InstanceRedisSnapshot } from '../instance-config/instance-runtime.snapshot';
+
 export interface RedisEnv {
   NODE_ENV?: string;
   INSTANCE_ID?: string;
@@ -209,6 +211,77 @@ export function resolveRedisSettings(env: RedisEnv): RedisSettings {
       7_776_000,
     ),
   };
+}
+
+/**
+ * Stored redis overrides replace the matching environment values.
+ * REDIS_URL, QUEUE_WORKER_ENABLED, and IMPORT_QUEUE_DRIVER are never taken from here.
+ */
+export function overlayRedisEnv(
+  env: RedisEnv,
+  redis: InstanceRedisSnapshot | null | undefined,
+): RedisEnv {
+  if (!redis) {
+    return env;
+  }
+  const next: RedisEnv = { ...env };
+  setString(next, 'REDIS_KEY_PREFIX', redis.keyPrefix);
+  setString(next, 'BULLMQ_PREFIX', redis.bullPrefix);
+  setNumber(next, 'REDIS_CONNECT_TIMEOUT_MS', redis.connectTimeoutMs);
+  setNumber(next, 'REDIS_COMMAND_TIMEOUT_MS', redis.commandTimeoutMs);
+  setNumber(next, 'REDIS_HEALTH_TIMEOUT_MS', redis.healthTimeoutMs);
+  setNumber(next, 'REDIS_KEEP_ALIVE_MS', redis.keepAliveMs);
+  setNumber(next, 'IMPORT_PARSE_CONCURRENCY', redis.parseConcurrency);
+  setNumber(next, 'IMPORT_ENRICH_CONCURRENCY', redis.enrichConcurrency);
+  setNumber(next, 'IMPORT_QUEUE_ATTEMPTS', redis.attempts);
+  setNumber(next, 'IMPORT_QUEUE_BACKOFF_MS', redis.backoffDelayMs);
+  setNumber(next, 'IMPORT_QUEUE_STALLED_INTERVAL_MS', redis.stalledIntervalMs);
+  setNumber(next, 'IMPORT_QUEUE_MAX_STALLED_COUNT', redis.maxStalledCount);
+  setNumber(next, 'IMPORT_QUEUE_LOCK_DURATION_MS', redis.lockDurationMs);
+  setNumber(next, 'IMPORT_QUEUE_STALE_MS', redis.staleJobMs);
+  setNumber(
+    next,
+    'IMPORT_QUEUE_RECOVERY_INTERVAL_MS',
+    redis.recoveryIntervalMs,
+  );
+  setNumber(next, 'IMPORT_QUEUE_POLL_INTERVAL_MS', redis.pollIntervalMs);
+  setNumber(
+    next,
+    'IMPORT_QUEUE_REMOVE_ON_COMPLETE_COUNT',
+    redis.removeOnCompleteCount,
+  );
+  setNumber(
+    next,
+    'IMPORT_QUEUE_REMOVE_ON_COMPLETE_AGE_SEC',
+    redis.removeOnCompleteAgeSec,
+  );
+  setNumber(next, 'IMPORT_QUEUE_REMOVE_ON_FAIL_COUNT', redis.removeOnFailCount);
+  setNumber(
+    next,
+    'IMPORT_QUEUE_REMOVE_ON_FAIL_AGE_SEC',
+    redis.removeOnFailAgeSec,
+  );
+  return next;
+}
+
+function setString(
+  env: RedisEnv,
+  key: keyof RedisEnv,
+  value: string | undefined,
+): void {
+  if (value !== undefined) {
+    env[key] = value;
+  }
+}
+
+function setNumber(
+  env: RedisEnv,
+  key: keyof RedisEnv,
+  value: number | undefined,
+): void {
+  if (value !== undefined) {
+    env[key] = String(value);
+  }
 }
 
 export function readRedisEnv(config: {

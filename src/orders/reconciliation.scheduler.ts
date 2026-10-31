@@ -4,12 +4,8 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { ReconciliationService } from './reconciliation.service';
-
-const DEFAULT_INTERVAL_MS = 300_000;
-const MIN_INTERVAL_MS = 1_000;
 
 @Injectable()
 export class ReconciliationScheduler implements OnModuleInit, OnModuleDestroy {
@@ -19,14 +15,13 @@ export class ReconciliationScheduler implements OnModuleInit, OnModuleDestroy {
   private interval = 0;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly commerceConfig: CommerceConfigService,
     private readonly reconciliation: ReconciliationService,
   ) {}
 
   onModuleInit(): void {
     const settings = this.commerceConfig.settings;
-    const intervalMs = this.intervalMs();
+    const intervalMs = settings.reconciliationIntervalMs;
     this.logger.log(
       `Commerce schedulers enabled=${
         settings.commerceEnabled && settings.reconciliationEnabled
@@ -71,17 +66,5 @@ export class ReconciliationScheduler implements OnModuleInit, OnModuleDestroy {
       }
       this.running = false;
     }
-  }
-
-  private intervalMs(): number {
-    const raw = this.configService.get<string>('RECONCILIATION_INTERVAL_MS');
-    if (raw == null || raw.trim() === '') {
-      return DEFAULT_INTERVAL_MS;
-    }
-    const value = Number(raw);
-    if (!Number.isInteger(value) || value < MIN_INTERVAL_MS) {
-      return DEFAULT_INTERVAL_MS;
-    }
-    return value;
   }
 }

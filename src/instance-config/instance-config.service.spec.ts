@@ -202,5 +202,28 @@ describe('InstanceConfigService', () => {
       expect(result.seller?.gstin).toBe('99NOTACHECKSUM');
       expect(result.seller?.legalName).toBe('Kept');
     });
+
+    it('sets only the operations field that was sent', async () => {
+      model.findByIdAndUpdate.mockReturnValue(
+        chain(
+          stored({
+            operations: { reconciliationEnabled: true },
+          }),
+        ),
+      );
+
+      const result = await service.update({
+        operations: { reconciliationEnabled: true },
+      });
+
+      expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+        INSTANCE_CONFIG_ID,
+        { $set: { 'operations.reconciliationEnabled': true } },
+        { new: true },
+      );
+      expect(result.operations?.reconciliationEnabled).toBe(true);
+      expect(result.operations?.invoicesEnabled).toBeNull();
+      expect(result.redis).toBeNull();
+    });
   });
 });

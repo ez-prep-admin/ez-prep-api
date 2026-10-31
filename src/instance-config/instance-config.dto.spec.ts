@@ -103,4 +103,40 @@ describe('instance config DTOs', () => {
     });
     expect(error).toBeInstanceOf(BadRequestException);
   });
+
+  it('accepts a partial operations update', async () => {
+    const dto = await parse(UpdateInstanceConfigDto, {
+      operations: { reconciliationEnabled: false, trustProxyHops: 0 },
+    });
+    expect(dto.operations).toEqual({
+      reconciliationEnabled: false,
+      trustProxyHops: 0,
+    });
+  });
+
+  it('rejects a reconciliation interval below 1000ms', async () => {
+    const error = await rejection(UpdateInstanceConfigDto, {
+      operations: { reconciliationIntervalMs: 999 },
+    });
+    expect(error).toBeInstanceOf(BadRequestException);
+  });
+
+  it('lowercases a redis key prefix and rejects a bull prefix without a hash tag', async () => {
+    const dto = await parse(UpdateInstanceConfigDto, {
+      redis: { keyPrefix: ' EZPrep ' },
+    });
+    expect(dto.redis?.keyPrefix).toBe('ezprep');
+
+    const error = await rejection(UpdateInstanceConfigDto, {
+      redis: { bullPrefix: 'bull' },
+    });
+    expect(error).toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a redis timeout outside the parser bounds', async () => {
+    const error = await rejection(UpdateInstanceConfigDto, {
+      redis: { connectTimeoutMs: 50 },
+    });
+    expect(error).toBeInstanceOf(BadRequestException);
+  });
 });
