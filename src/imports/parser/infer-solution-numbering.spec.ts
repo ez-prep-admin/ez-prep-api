@@ -27,6 +27,32 @@ describe('inferSolutionNumberingRegex', () => {
     );
   });
 
+  it('detects Mathpix itemize hint lines', () => {
+    const section = `
+\\item[1] First hint
+\\item[2] Second hint
+\\item[3] Third hint
+`.trim();
+
+    expect(inferSolutionNumberingRegex(section)?.regex).toBe(
+      '^\\\\item\\[(\\d+)\\]',
+    );
+  });
+
+  it('keeps plain numbered answers when itemize lines are also present', () => {
+    const section = `
+1. (2) First answer
+2. (4) Second answer
+\\item[1] nested statement
+\\item[2] nested statement
+\\item[3] nested statement
+`.trim();
+
+    expect(inferSolutionNumberingRegex(section)?.regex).toBe(
+      '^(\\d+)\\s*\\.\\s',
+    );
+  });
+
   it('detects Sol.N answer lines', () => {
     const section = `
 Sol.48.(d) First

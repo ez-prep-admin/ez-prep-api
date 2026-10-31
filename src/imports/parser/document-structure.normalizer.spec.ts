@@ -254,6 +254,79 @@ describe('normalizeDocumentStructure', () => {
     expect(normalized.solutionPattern.numberingRegex).toBe('^Sol\\.(\\d+)');
   });
 
+  it('does not let an itemize regex replace numbered questions', () => {
+    const markdown = [
+      '1. First question',
+      '\\item[1] statement',
+      '\\item[2] statement',
+      '\\item[3] statement',
+      '2. Second question',
+      '\\item[1] statement',
+      '\\item[2] statement',
+      '## SOLUTIONS',
+      '1. Answer one',
+      '2. Answer two',
+    ].join('\n');
+
+    const normalized = normalizeDocumentStructure(markdown, {
+      questionPattern: {
+        type: 'numbered',
+        regex: '^\\\\item\\[(\\d+)\\]',
+        exampleMatch: '\\item[1] statement',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: true,
+        marker: '## SOLUTIONS',
+      },
+      delimiter: { type: 'heading', value: '\\item', confidence: 0.8 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'numbered with nested lists',
+      confidence: 0.8,
+    });
+
+    expect(normalized.questionPattern.regex).toBe('^(\\d+)\\.\\s');
+  });
+
+  it('keeps numbered answer lines when the solutions section also has itemize', () => {
+    const markdown = [
+      '1. Question one',
+      '2. Question two',
+      '## SOLUTIONS',
+      '1. Answer one',
+      '2. Answer two',
+      '\\item[1] nested',
+      '\\item[2] nested',
+      '\\item[3] nested',
+    ].join('\n');
+
+    const normalized = normalizeDocumentStructure(markdown, {
+      questionPattern: {
+        type: 'numbered',
+        regex: '^(\\d+)\\.\\s',
+        exampleMatch: '1. Question one',
+      },
+      solutionPattern: {
+        location: 'separate',
+        matchesQuestionNumbering: false,
+      },
+      delimiter: { type: 'heading', value: '##', confidence: 0.9 },
+      metadata: {
+        hasDifficulty: false,
+        hasMarks: false,
+        hasSubjectLabels: false,
+      },
+      detectedFormat: 'separate answers',
+      confidence: 0.9,
+    });
+
+    expect(normalized.solutionPattern.numberingRegex).toBe('^(\\d+)\\s*\\.\\s');
+  });
+
   it('infers solution numbering from a known answers section', () => {
     const markdown = [
       '1. Question one',

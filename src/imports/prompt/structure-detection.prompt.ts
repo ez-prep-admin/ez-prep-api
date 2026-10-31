@@ -1,8 +1,6 @@
 import { StructureDetectionResponse } from '../types/document-structure';
-import {
-  KNOWN_SOLUTION_MARKERS,
-  STRUCTURE_SAMPLE_BOUNDARY,
-} from '../parser/document-structure.normalizer';
+import { STRUCTURE_SAMPLE_BOUNDARY } from '../parser/document-structure.normalizer';
+import { findSolutionMarker } from '../parser/solution-markers';
 
 /**
  * JSON schema shape for structure detection response
@@ -128,12 +126,9 @@ export function extractMarkdownSample(
 
   // Append a solutions-section snippet so the LLM can detect separate answer keys
   let appendedSolutionsSample = false;
-  for (const marker of KNOWN_SOLUTION_MARKERS) {
+  const marker = findSolutionMarker(markdown);
+  if (marker) {
     const markerIndex = markdown.indexOf(marker);
-    if (markerIndex === -1) {
-      continue;
-    }
-
     const solutionSnippet = markdown.substring(
       markerIndex,
       markerIndex + solutionSampleChars,
@@ -141,7 +136,6 @@ export function extractMarkdownSample(
 
     sample = `${sample}\n\n${STRUCTURE_SAMPLE_BOUNDARY}\n\n[Solutions section sample]\n${solutionSnippet}`;
     appendedSolutionsSample = true;
-    break;
   }
 
   // Headerless answer blocks only appear at the tail — mirror the head line count.

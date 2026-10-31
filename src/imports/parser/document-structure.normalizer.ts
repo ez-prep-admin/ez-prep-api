@@ -5,6 +5,7 @@ import {
 } from './infer-question-numbering';
 import { inferSolutionNumberingRegex } from './infer-solution-numbering';
 import { splitHeaderlessAlternateSolutions } from './headerless-solution-split.util';
+import { findSolutionMarker } from './solution-markers';
 
 /** Delimiter between head/tail snippets in structure-detection prompts — not a document marker. */
 export const STRUCTURE_SAMPLE_BOUNDARY = '<<<STRUCTURE_DETECTION_SAMPLE>>>';
@@ -13,20 +14,6 @@ export const STRUCTURE_SAMPLE_LABELS = [
   STRUCTURE_SAMPLE_BOUNDARY,
   '[Document tail sample]',
   '[Solutions section sample]',
-] as const;
-
-export const KNOWN_SOLUTION_MARKERS = [
-  '\\section*{ANSWERS AND SOLUTIONS}',
-  '\\section*{Answers and Solutions}',
-  '## ANSWERS AND SOLUTIONS',
-  '## Answers and Solutions',
-  '## SOLUTIONS',
-  '## Solutions',
-  '## ANSWERS',
-  '## Answers',
-  'Answer Key',
-  'ANSWER KEY',
-  'Answers:',
 ] as const;
 
 /**
@@ -110,7 +97,16 @@ function reconcileQuestionPatternFromMarkdown(
     structure.questionPattern.regex,
   );
 
-  if (cachedMatches >= 2 && cachedMatches >= inferred.matchCount - 1) {
+  const itemizeWouldHideRealQuestions =
+    isItemizeNumbering(structure.questionPattern.regex) &&
+    !isItemizeNumbering(inferred.regex) &&
+    inferred.matchCount >= 2;
+
+  if (
+    !itemizeWouldHideRealQuestions &&
+    cachedMatches >= 2 &&
+    cachedMatches >= inferred.matchCount - 1
+  ) {
     return structure;
   }
 
@@ -132,15 +128,18 @@ function reconcileQuestionPatternFromMarkdown(
   };
 }
 
+function isItemizeNumbering(pattern: string): boolean {
+  return pattern.includes('\\item');
+}
+
 function extractQuestionsPortionForCount(markdown: string): string {
-  for (const marker of KNOWN_SOLUTION_MARKERS) {
-    const index = markdown.indexOf(marker);
-    if (index !== -1) {
-      return markdown.slice(0, index);
-    }
+  const marker = findSolutionMarker(markdown);
+  if (!marker) {
+    return markdown;
   }
 
-  return markdown;
+  const index = markdown.indexOf(marker);
+  return index === -1 ? markdown : markdown.slice(0, index);
 }
 
 function enrichSolutionPatternFromDocument(
@@ -308,7 +307,7 @@ function attachHeaderlessSolutionNumbering(
 }
 
 export function inferSolutionMarker(markdown: string): string | undefined {
-  return KNOWN_SOLUTION_MARKERS.find(marker => markdown.includes(marker));
+  return findSolutionMarker(markdown);
 }
 
 export function extractSolutionsSection(

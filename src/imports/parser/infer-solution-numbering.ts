@@ -37,6 +37,13 @@ const CANDIDATE_PATTERNS: Array<{
   { regex: /^(\d+)\)\s/, source: '^(\\d+)\\)\\s', type: 'numbered' },
 ];
 
+/** Fallback when the solutions section is a Mathpix itemize list and nothing else matches. */
+const ITEMIZE_SOLUTION_PATTERN = {
+  regex: /^\\item\[(\d+)\]/,
+  source: '^\\\\item\\[(\\d+)\\]',
+  type: 'numbered' as const,
+};
+
 /**
  * Infer how answers are numbered in a solutions section by scoring line matches.
  */
@@ -53,13 +60,40 @@ export function inferSolutionNumberingRegex(
     return null;
   }
 
+  const best = scoreSolutionPattern(lines, CANDIDATE_PATTERNS);
+  const chosen =
+    best ?? scoreSolutionPattern(lines, [ITEMIZE_SOLUTION_PATTERN]);
+
+  if (!chosen) {
+    return null;
+  }
+
+  return {
+    regex: chosen.pattern.source,
+    type: chosen.pattern.type,
+    exampleLine: chosen.line,
+  };
+}
+
+function scoreSolutionPattern(
+  lines: string[],
+  patterns: ReadonlyArray<{
+    regex: RegExp;
+    source: string;
+    type: 'numbered' | 'labeled';
+  }>,
+): {
+  score: number;
+  pattern: { regex: RegExp; source: string; type: 'numbered' | 'labeled' };
+  line: string;
+} | null {
   let best: {
     score: number;
-    pattern: (typeof CANDIDATE_PATTERNS)[number];
+    pattern: { regex: RegExp; source: string; type: 'numbered' | 'labeled' };
     line: string;
   } | null = null;
 
-  for (const pattern of CANDIDATE_PATTERNS) {
+  for (const pattern of patterns) {
     let score = 0;
     let exampleLine = '';
 
@@ -81,9 +115,5 @@ export function inferSolutionNumberingRegex(
     return null;
   }
 
-  return {
-    regex: best.pattern.source,
-    type: best.pattern.type,
-    exampleLine: best.line,
-  };
+  return best;
 }
