@@ -1,4 +1,6 @@
 import {
+  BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+  QUESTION_EXTRACTION_SYSTEM_PROMPT,
   buildBatchQuestionUserPrompt,
   buildQuestionUserPrompt,
 } from './question.prompt';
@@ -29,5 +31,21 @@ describe('question.prompt', () => {
     expect(prompt).toContain('S1');
     expect(prompt).toContain('No solution provided.');
     expect(prompt).toContain('2 questions');
+    expect(prompt).toContain('Do not move the correct option to (a)');
+  });
+
+  it('tells the model to keep source labels and not default every answer to a', () => {
+    expect(QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
+      'Do not default correctAnswer to "a"',
+    );
+    expect(QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
+      'randomly reorders the saved options',
+    );
+    expect(BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
+      'Do not default correctAnswer to "a"',
+    );
+    expect(buildQuestionUserPrompt({ number: 1, question: 'Q' })).toContain(
+      'Do not move the correct option to (a)',
+    );
   });
 });
