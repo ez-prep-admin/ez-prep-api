@@ -27,29 +27,6 @@ export class UserLocation {
 }
 export const UserLocationSchema = SchemaFactory.createForClass(UserLocation);
 
-/** One saved note from the learner. Replaced on the next save. */
-@Schema({ _id: false })
-export class UserFeedback {
-  @Prop({ trim: true, maxlength: 1000 })
-  text?: string;
-
-  @Prop({ min: 0, max: 5 })
-  userInterface?: number;
-
-  @Prop({ min: 0, max: 5 })
-  questions?: number;
-
-  @Prop({ min: 0, max: 5 })
-  fullMockTests?: number;
-
-  @Prop({ min: 0, max: 5 })
-  topicWisePractice?: number;
-
-  @Prop({ min: 0, max: 5 })
-  easeOfUse?: number;
-}
-export const UserFeedbackSchema = SchemaFactory.createForClass(UserFeedback);
-
 @Schema({ _id: false })
 export class NotificationPreferences {
   @Prop({ default: true })
@@ -223,9 +200,6 @@ export class User {
 
   @Prop({ type: UserLocationSchema })
   location?: UserLocation;
-
-  @Prop({ type: UserFeedbackSchema })
-  feedback?: UserFeedback;
 
   // ── Group 2: Target exams ─────────────────────────────────────────────────
   /**

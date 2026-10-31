@@ -546,29 +546,6 @@ describe('UsersService', () => {
       );
     });
 
-    it('stores feedback text and ratings on the user', async () => {
-      const feedback = {
-        text: 'The timer feels jumpy',
-        userInterface: 4,
-        questions: 5,
-        fullMockTests: 3,
-        topicWisePractice: 4,
-        easeOfUse: 5,
-      };
-      mockUserModel.findByIdAndUpdate.mockReturnValue(
-        chain(mockUserDocument({ name: 'Ada', feedback })),
-      );
-
-      const result = await service.updateMe(OID, { feedback });
-
-      expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
-        expect.anything(),
-        { $set: { feedback } },
-        { new: true },
-      );
-      expect(result.feedback).toEqual(feedback);
-    });
-
     it('should $unset targetExam when null is sent', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(
         chain(mockUserDocument({ name: 'Ada' })),
