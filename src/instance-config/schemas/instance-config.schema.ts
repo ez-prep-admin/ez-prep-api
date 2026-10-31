@@ -71,6 +71,117 @@ export class InstanceSeller {
 export const InstanceSellerSchema =
   SchemaFactory.createForClass(InstanceSeller);
 
+/**
+ * Shared process settings. Absent fields fall back to the environment, then
+ * to the code default. GST and seller stay on their own subdocuments.
+ */
+@Schema({ _id: false })
+export class InstanceOperationsConfig {
+  @Prop({ type: Boolean })
+  invoicesEnabled?: boolean;
+
+  @Prop({ type: Number })
+  trustProxyHops?: number;
+
+  @Prop({ type: Number })
+  maxOpenOrdersPerUser?: number;
+
+  @Prop({ type: Boolean })
+  reconciliationEnabled?: boolean;
+
+  @Prop({ type: Number })
+  reconciliationMinAgeMinutes?: number;
+
+  @Prop({ type: Number })
+  reconciliationIntervalMs?: number;
+
+  @Prop({ type: Number })
+  reconciliationBatch?: number;
+
+  @Prop({ type: Number })
+  reconciliationMaxAttempts?: number;
+
+  @Prop({ type: Number })
+  webhookRetryWindowMinutes?: number;
+
+  @Prop({ type: Number })
+  lateCaptureWatchHours?: number;
+
+  @Prop({ type: Number })
+  refundUnknownWindowMinutes?: number;
+}
+
+export const InstanceOperationsConfigSchema = SchemaFactory.createForClass(
+  InstanceOperationsConfig,
+);
+
+/** Optional Redis and import-queue overrides. Connection URL stays in the environment. */
+@Schema({ _id: false })
+export class InstanceRedisConfig {
+  @Prop({ trim: true })
+  keyPrefix?: string;
+
+  @Prop({ trim: true })
+  bullPrefix?: string;
+
+  @Prop({ type: Number })
+  connectTimeoutMs?: number;
+
+  @Prop({ type: Number })
+  commandTimeoutMs?: number;
+
+  @Prop({ type: Number })
+  healthTimeoutMs?: number;
+
+  @Prop({ type: Number })
+  keepAliveMs?: number;
+
+  @Prop({ type: Number })
+  parseConcurrency?: number;
+
+  @Prop({ type: Number })
+  enrichConcurrency?: number;
+
+  @Prop({ type: Number })
+  attempts?: number;
+
+  @Prop({ type: Number })
+  backoffDelayMs?: number;
+
+  @Prop({ type: Number })
+  stalledIntervalMs?: number;
+
+  @Prop({ type: Number })
+  maxStalledCount?: number;
+
+  @Prop({ type: Number })
+  lockDurationMs?: number;
+
+  @Prop({ type: Number })
+  staleJobMs?: number;
+
+  @Prop({ type: Number })
+  recoveryIntervalMs?: number;
+
+  @Prop({ type: Number })
+  pollIntervalMs?: number;
+
+  @Prop({ type: Number })
+  removeOnCompleteCount?: number;
+
+  @Prop({ type: Number })
+  removeOnCompleteAgeSec?: number;
+
+  @Prop({ type: Number })
+  removeOnFailCount?: number;
+
+  @Prop({ type: Number })
+  removeOnFailAgeSec?: number;
+}
+
+export const InstanceRedisConfigSchema =
+  SchemaFactory.createForClass(InstanceRedisConfig);
+
 @Schema({
   timestamps: true,
   versionKey: false,
@@ -99,6 +210,14 @@ export class InstanceConfig {
   /** Optional until a local/prod commerce seed writes it. Admins edit it here. */
   @Prop({ type: InstanceSellerSchema })
   seller?: InstanceSeller;
+
+  /** Optional. Each field overrides the environment only when it is stored. */
+  @Prop({ type: InstanceOperationsConfigSchema })
+  operations?: InstanceOperationsConfig;
+
+  /** Optional Redis tunables. REDIS_URL and per-process queue role stay in the environment. */
+  @Prop({ type: InstanceRedisConfigSchema })
+  redis?: InstanceRedisConfig;
 
   createdAt?: Date;
   updatedAt?: Date;

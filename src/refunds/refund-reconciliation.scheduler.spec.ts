@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { parseCommerceSettings } from '../commerce/commerce-config';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
 import { RefundReconciliationScheduler } from './refund-reconciliation.scheduler';
@@ -10,14 +9,10 @@ describe('RefundReconciliationScheduler', () => {
   };
 
   function scheduler(values: Record<string, string>) {
-    const config = {
-      get: (key: string) => values[key],
-    } as ConfigService;
     const commerce = {
       settings: parseCommerceSettings({ get: key => values[key] }),
     } as CommerceConfigService;
     return new RefundReconciliationScheduler(
-      config,
       commerce,
       refunds as unknown as RefundsService,
     );

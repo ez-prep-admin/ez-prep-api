@@ -52,6 +52,103 @@ export class InstanceTaxConfigResponseDto {
   invoiceSeriesPrefix: string | null;
 }
 
+export class InstanceOperationsResponseDto {
+  @ApiProperty({ nullable: true })
+  invoicesEnabled: boolean | null;
+
+  @ApiProperty({ nullable: true })
+  trustProxyHops: number | null;
+
+  @ApiProperty({ nullable: true })
+  maxOpenOrdersPerUser: number | null;
+
+  @ApiProperty({ nullable: true })
+  reconciliationEnabled: boolean | null;
+
+  @ApiProperty({ nullable: true })
+  reconciliationMinAgeMinutes: number | null;
+
+  @ApiProperty({ nullable: true })
+  reconciliationIntervalMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  reconciliationBatch: number | null;
+
+  @ApiProperty({ nullable: true })
+  reconciliationMaxAttempts: number | null;
+
+  @ApiProperty({ nullable: true })
+  webhookRetryWindowMinutes: number | null;
+
+  @ApiProperty({ nullable: true })
+  lateCaptureWatchHours: number | null;
+
+  @ApiProperty({ nullable: true })
+  refundUnknownWindowMinutes: number | null;
+}
+
+export class InstanceRedisResponseDto {
+  @ApiProperty({ nullable: true })
+  keyPrefix: string | null;
+
+  @ApiProperty({ nullable: true })
+  bullPrefix: string | null;
+
+  @ApiProperty({ nullable: true })
+  connectTimeoutMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  commandTimeoutMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  healthTimeoutMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  keepAliveMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  parseConcurrency: number | null;
+
+  @ApiProperty({ nullable: true })
+  enrichConcurrency: number | null;
+
+  @ApiProperty({ nullable: true })
+  attempts: number | null;
+
+  @ApiProperty({ nullable: true })
+  backoffDelayMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  stalledIntervalMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  maxStalledCount: number | null;
+
+  @ApiProperty({ nullable: true })
+  lockDurationMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  staleJobMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  recoveryIntervalMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  pollIntervalMs: number | null;
+
+  @ApiProperty({ nullable: true })
+  removeOnCompleteCount: number | null;
+
+  @ApiProperty({ nullable: true })
+  removeOnCompleteAgeSec: number | null;
+
+  @ApiProperty({ nullable: true })
+  removeOnFailCount: number | null;
+
+  @ApiProperty({ nullable: true })
+  removeOnFailAgeSec: number | null;
+}
+
 export class InstanceConfigResponseDto {
   @ApiProperty({ example: 'singleton' })
   id: string;
@@ -83,6 +180,12 @@ export class InstanceConfigResponseDto {
 
   @ApiPropertyOptional({ type: InstanceTaxConfigResponseDto, nullable: true })
   taxConfig: InstanceTaxConfigResponseDto | null;
+
+  @ApiPropertyOptional({ type: InstanceOperationsResponseDto, nullable: true })
+  operations: InstanceOperationsResponseDto | null;
+
+  @ApiPropertyOptional({ type: InstanceRedisResponseDto, nullable: true })
+  redis: InstanceRedisResponseDto | null;
 
   @ApiProperty({ example: '2026-09-28T00:00:00.000Z' })
   createdAt: Date;

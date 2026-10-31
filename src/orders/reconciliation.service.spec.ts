@@ -1,4 +1,3 @@
-import { ConfigService } from '@nestjs/config';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Types } from 'mongoose';
@@ -28,13 +27,6 @@ describe('ReconciliationService', () => {
   const paidHandler = { onOrderPaid: jest.fn() };
   const provisioning = { provisionForPaidOrder: jest.fn() };
   const razorpay = { fetchOrderStatus: jest.fn() };
-  const configValues: Record<string, string> = {
-    PAYMENT_PROVIDER: 'fake',
-    RECONCILIATION_MIN_AGE_MINUTES: '60',
-  };
-  const config = {
-    get: (key: string) => configValues[key],
-  };
   const orderModel = {
     find: jest.fn(),
     findById: jest.fn(),
@@ -53,7 +45,6 @@ describe('ReconciliationService', () => {
     paidHandler.onOrderPaid.mockResolvedValue(undefined);
     provisioning.provisionForPaidOrder.mockReset();
     razorpay.fetchOrderStatus.mockReset();
-    configValues.RECONCILIATION_MIN_AGE_MINUTES = '60';
 
     orderModel.find.mockImplementation((query: Record<string, unknown>) => ({
       sort() {
@@ -89,7 +80,6 @@ describe('ReconciliationService', () => {
       providers: [
         ReconciliationService,
         OrdersService,
-        { provide: ConfigService, useValue: config },
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(Payment.name), useValue: paymentModel },
         { provide: ORDER_PAID_HANDLER, useValue: paidHandler },
@@ -98,7 +88,14 @@ describe('ReconciliationService', () => {
         { provide: RazorpayGateway, useValue: razorpay },
         {
           provide: CommerceConfigService,
-          useValue: { settings: { paymentProvider: 'fake', nodeEnv: 'test' } },
+          useValue: {
+            settings: {
+              paymentProvider: 'fake',
+              nodeEnv: 'test',
+              reconciliationMinAgeMinutes: 60,
+              reconciliationIntervalMs: 300_000,
+            },
+          },
         },
         PaymentGatewayRegistry,
         {

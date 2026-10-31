@@ -11,9 +11,9 @@ import {
   normalizeOptionalUrl,
   trimString,
 } from '../instance-config.transforms';
-import { UpdateCommerceConfigFields } from './update-commerce-config.dto';
+import { UpdateRuntimeConfigFields } from './update-runtime-config.dto';
 
-export class UpdateInstanceConfigDto extends UpdateCommerceConfigFields {
+export class UpdateInstanceConfigDto extends UpdateRuntimeConfigFields {
   @ApiPropertyOptional({
     description: 'Display name for this deployment',
     example: 'ExamFlex',
