@@ -803,6 +803,9 @@ export class FullMockTestsService {
     test: MockTestDocument,
   ): Promise<DraftSubjectBlockDto[]> {
     const questionIds = (test.questionIds || []).map(id => id.toString());
+    // Paper order is authoritative — never invent contiguous positions from
+    // questionStartIndex (min/max ranges overlap on mixed/interleaved papers).
+    const positionById = new Map(questionIds.map((id, i) => [id, i]));
     const docs = questionIds.length
       ? await this.questionModel
           .find({ _id: { $in: questionIds } })
@@ -820,9 +823,9 @@ export class FullMockTestsService {
           questionIds.slice(row.questionStartIndex, row.questionEndIndex + 1);
 
         const questions = await Promise.all(
-          blockIds.map(async (qid, indexInBlock) => {
+          blockIds.map(async qid => {
             const doc = byId.get(qid);
-            const position = row.questionStartIndex + indexInBlock;
+            const position = positionById.get(qid);
             const safe = doc
               ? await this.toSafeQuestion(doc)
               : {
@@ -837,7 +840,8 @@ export class FullMockTestsService {
                 };
             return {
               ...safe,
-              position,
+              // Fall back only if the id is absent from questionIds (corrupt config).
+              position: position ?? -1,
               marksPerQuestion: row.marksPerQuestion,
               negativeMarking: row.hasNegativeMarking
                 ? row.negativeMarksPerQuestion
@@ -845,6 +849,8 @@ export class FullMockTestsService {
             };
           }),
         );
+
+        questions.sort((a, b) => a.position - b.position);
 
         return {
           subjectId: row.subject.toString(),
