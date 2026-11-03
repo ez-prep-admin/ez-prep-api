@@ -1427,6 +1427,77 @@ describe('FullMockTestsService', () => {
       );
     });
 
+    it('uses real paper positions for interleaved mixed subjects (not startIndex+offset)', async () => {
+      const subB = '507f1f77bcf86cd799439019';
+      const q3 = '507f1f77bcf86cd79943901a';
+      const q4 = '507f1f77bcf86cd79943901b';
+      // Paper order: A, B, A, B — overlapping min/max ranges like a real mixed publish.
+      const interleaved = {
+        ...published,
+        totalQuestions: 4,
+        questionIds: [
+          { toString: () => Q1 },
+          { toString: () => Q2 },
+          { toString: () => q3 },
+          { toString: () => q4 },
+        ],
+        subjectConfig: [
+          {
+            subject: { toString: () => SUB_ID },
+            name: 'DATA INTERPRETATION',
+            numberOfQuestions: 2,
+            marksPerQuestion: 1,
+            hasNegativeMarking: true,
+            negativeMarksPerQuestion: 0.33,
+            questionStartIndex: 0,
+            questionEndIndex: 2,
+            questionIds: [{ toString: () => Q1 }, { toString: () => q3 }],
+          },
+          {
+            subject: { toString: () => subB },
+            name: 'GENERAL INTELLIGENCE AND REASONING',
+            numberOfQuestions: 2,
+            marksPerQuestion: 1,
+            hasNegativeMarking: true,
+            negativeMarksPerQuestion: 0.33,
+            questionStartIndex: 1,
+            questionEndIndex: 3,
+            questionIds: [{ toString: () => Q2 }, { toString: () => q4 }],
+          },
+        ],
+      };
+
+      mockTestModel.findOne.mockReturnValue(chainable(interleaved));
+      mockTestsService.getUserAttemptActions.mockResolvedValue(new Map());
+      questionModel.find.mockReturnValue(
+        chainable([
+          questionLean(Q1),
+          questionLean(Q2),
+          questionLean(q3),
+          questionLean(q4),
+        ]),
+      );
+
+      const result = await service.findOnePublished(TEST_ID, USER_ID, true);
+      expect(result.subjects).toHaveLength(2);
+
+      const di = result.subjects!.find(s => s.name === 'DATA INTERPRETATION')!;
+      const gir = result.subjects!.find(
+        s => s.name === 'GENERAL INTELLIGENCE AND REASONING',
+      )!;
+
+      // Real paper slots — not contiguous 0,1 / 1,2 from startIndex+offset.
+      expect(di.questions.map(q => q.position)).toEqual([0, 2]);
+      expect(gir.questions.map(q => q.position)).toEqual([1, 3]);
+      expect(di.questions.map(q => q._id)).toEqual([Q1, q3]);
+      expect(gir.questions.map(q => q._id)).toEqual([Q2, q4]);
+
+      const allPositions = [...di.questions, ...gir.questions].map(
+        q => q.position,
+      );
+      expect(new Set(allPositions).size).toBe(allPositions.length);
+    });
+
     it('lists and loads papers without a user id', async () => {
       mockTestModel.find.mockReturnValue(chainable([published]));
       const listed = await service.listPublished(undefined);
