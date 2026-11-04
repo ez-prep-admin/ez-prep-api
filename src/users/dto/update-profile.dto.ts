@@ -81,7 +81,8 @@ export class UpdateProfileDto {
   location?: LocationDto;
 
   @ApiPropertyOptional({
-    description: 'ID of the target exam the user is preparing for',
+    description:
+      'Primary target exam id. Reorders targetExams so this exam is first. Prefer PUT /users/me/target-exams for multi-target edits.',
     example: '64f123456789abcdef123456',
   })
   @IsOptional()

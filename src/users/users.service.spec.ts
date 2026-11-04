@@ -525,7 +525,6 @@ describe('UsersService', () => {
         dateOfBirth: '2000-01-01',
         gender: Gender.MALE,
         location: { city: 'Kochi' },
-        targetExam: OID,
         targetExamDate: '2027-01-01',
       } as any);
 
@@ -546,18 +545,49 @@ describe('UsersService', () => {
       );
     });
 
-    it('should $unset targetExam when null is sent', async () => {
+    it('clears targetExams when targetExam null is sent', async () => {
       mockUserModel.findByIdAndUpdate.mockReturnValue(
-        chain(mockUserDocument({ name: 'Ada' })),
+        chain(mockUserDocument({ name: 'Ada', targetExams: [] })),
       );
 
       await service.updateMe(OID, { targetExam: null });
 
       expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
         expect.anything(),
-        { $unset: { targetExam: 1 } },
-        { new: true },
+        { $set: { targetExams: [] }, $unset: { targetExam: 1 } },
+        { new: true, runValidators: true },
       );
+    });
+
+    it('promotes targetExam to primary and keeps remaining targets', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(
+          mockUserDocument({
+            targetExams: [
+              new Types.ObjectId('507f1f77bcf86cd799439012'),
+              new Types.ObjectId(OID),
+            ],
+          }),
+        ),
+      );
+      mockExamModel.find.mockReturnValue(
+        chain([
+          { _id: new Types.ObjectId(OID) },
+          { _id: new Types.ObjectId('507f1f77bcf86cd799439012') },
+        ]),
+      );
+      mockUserModel.findByIdAndUpdate.mockReturnValue(
+        chain(mockUserDocument({ targetExams: [] })),
+      );
+
+      await service.updateMe(OID, { targetExam: OID });
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([
+        OID,
+        '507f1f77bcf86cd799439012',
+      ]);
+      expect(String(update.$set.targetExam)).toBe(OID);
     });
   });
 
@@ -573,7 +603,6 @@ describe('UsersService', () => {
           dateOfBirth: '2000-01-01',
           gender: Gender.FEMALE,
           location: { city: 'Delhi' },
-          targetExam: OID,
           targetExamDate: '2027-01-01',
         } as any),
       ).resolves.toBeDefined();
@@ -790,8 +819,15 @@ describe('UsersService', () => {
     }
 
     function activeExams(ids: string[]) {
-      mockExamModel.find.mockReturnValue(
-        chain(ids.map(id => ({ _id: new Types.ObjectId(id) }))),
+      const active = new Set(ids);
+      mockExamModel.find.mockImplementation(
+        (query: { _id?: { $in?: Types.ObjectId[] } }) => {
+          const requested = (query?._id?.$in ?? []).map(String);
+          const matched = requested
+            .filter(id => active.has(id))
+            .map(id => ({ _id: new Types.ObjectId(id) }));
+          return chain(matched);
+        },
       );
     }
 
@@ -877,7 +913,7 @@ describe('UsersService', () => {
       expect(mockUserModel.findByIdAndUpdate).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         { $set: { targetExams: [] }, $unset: { targetExam: 1 } },
-        { new: true },
+        { new: true, runValidators: true },
       );
     });
 
@@ -895,7 +931,7 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue(
         chain(learner({ targetExams: [EXAM_A] })),
       );
-      activeExams([EXAM_B]);
+      activeExams([EXAM_A, EXAM_B]);
       mockUserModel.findByIdAndUpdate.mockReturnValue(
         chain(
           learner({
@@ -922,17 +958,18 @@ describe('UsersService', () => {
           }),
         ),
       );
+      activeExams([EXAM_A]);
 
       await service.addTargetExam(OID, EXAM_A);
 
       expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
-      expect(mockExamModel.find).not.toHaveBeenCalled();
     });
 
     it('rejects a sixth target exam', async () => {
       mockUserModel.findById.mockReturnValue(
         chain(learner({ targetExams: five })),
       );
+      activeExams(five);
 
       await expect(service.addTargetExam(OID, EXAM_F)).rejects.toThrow(
         ConflictException,
@@ -941,13 +978,32 @@ describe('UsersService', () => {
       expect(mockUserModel.findByIdAndUpdate).not.toHaveBeenCalled();
     });
 
+    it('ignores inactive stored targets when checking the limit', async () => {
+      mockUserModel.findById.mockReturnValue(
+        chain(learner({ targetExams: five })),
+      );
+      // Three stored ids plus the exam being added remain active.
+      activeExams([EXAM_A, EXAM_B, EXAM_C, EXAM_F]);
+      mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
+
+      await service.addTargetExam(OID, EXAM_F);
+
+      const update = mockUserModel.findByIdAndUpdate.mock.calls[0][1];
+      expect(update.$set.targetExams.map(String)).toEqual([
+        EXAM_A,
+        EXAM_B,
+        EXAM_C,
+        EXAM_F,
+      ]);
+    });
+
     it('carries the legacy single target into the list when adding another exam', async () => {
       mockUserModel.findById.mockReturnValue(
         chain(
           learner({ targetExam: new Types.ObjectId(EXAM_A), targetExams: [] }),
         ),
       );
-      activeExams([EXAM_B]);
+      activeExams([EXAM_A, EXAM_B]);
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
 
       await service.addTargetExam(OID, EXAM_B);
@@ -960,6 +1016,7 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue(
         chain(learner({ targetExams: [EXAM_A, EXAM_B] })),
       );
+      activeExams([EXAM_A, EXAM_B]);
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
 
       await service.removeTargetExam(OID, EXAM_A);
@@ -982,17 +1039,18 @@ describe('UsersService', () => {
       mockUserModel.findById.mockReturnValue(
         chain(learner({ targetExams: [EXAM_A] })),
       );
+      activeExams([EXAM_A]);
 
       await expect(
         service.shouldPromptForTargetExam(OID, EXAM_A),
       ).resolves.toEqual({ shouldPrompt: false });
-      expect(mockExamModel.find).not.toHaveBeenCalled();
     });
 
     it('does not ask when the target list is full', async () => {
       mockUserModel.findById.mockReturnValue(
         chain(learner({ targetExams: five })),
       );
+      activeExams(five);
 
       await expect(
         service.shouldPromptForTargetExam(OID, EXAM_F),
@@ -1063,6 +1121,7 @@ describe('UsersService', () => {
 
     it('records the first dismissal and increments later ones', async () => {
       mockUserModel.findById.mockReturnValue(chain(learner()));
+      activeExams([EXAM_A]);
       mockUserModel.findByIdAndUpdate.mockReturnValue(chain(learner()));
 
       await service.dismissTargetExamPrompt(OID, EXAM_A);

@@ -116,7 +116,7 @@ export class UpdateMeDto {
 
   @ApiPropertyOptional({
     description:
-      'ID of the target exam. Send null to clear the selected target exam.',
+      'Primary target exam id. Sets/reorders targetExams so this exam is first. Send null to clear all target exams. Prefer PUT /users/me/target-exams for multi-target edits.',
     example: '64f123456789abcdef123456',
     nullable: true,
   })
