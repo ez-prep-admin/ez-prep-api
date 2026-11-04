@@ -202,6 +202,32 @@ describe('QuestionsService', () => {
       expect(result.data).toHaveLength(1);
     });
 
+    it('applies escaped case-insensitive regex on English question text', async () => {
+      questionModel.find.mockReturnValue(chain([questionDoc()]));
+      questionModel.countDocuments.mockReturnValue(chain(1));
+      await service.findAll(1, 10, OID, undefined, undefined, '  a+b  ');
+      expect(questionModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subject: expect.any(Types.ObjectId),
+          'questionText.en.text': {
+            $regex: 'a\\+b',
+            $options: 'i',
+          },
+        }),
+      );
+    });
+
+    it('ignores blank search terms', async () => {
+      questionModel.find.mockReturnValue(chain([]));
+      questionModel.countDocuments.mockReturnValue(chain(0));
+      await service.findAll(1, 10, undefined, undefined, undefined, '   ');
+      expect(questionModel.find).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          'questionText.en.text': expect.anything(),
+        }),
+      );
+    });
+
     it('throws on invalid subject ID', async () => {
       await expect(service.findAll(1, 10, 'bad')).rejects.toThrow(
         BadRequestException,

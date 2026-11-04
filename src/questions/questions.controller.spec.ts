@@ -49,8 +49,15 @@ describe('QuestionsController', () => {
 
   it('findAll wraps paginated data', async () => {
     service.findAll.mockResolvedValue({ data: [question], pagination });
-    const result = await controller.findAll(1, 10, 's', 't', 'e');
-    expect(service.findAll).toHaveBeenCalledWith(1, 10, 's', 't', 'e');
+    const result = await controller.findAll(1, 10, 's', 't', 'e', 'president');
+    expect(service.findAll).toHaveBeenCalledWith(
+      1,
+      10,
+      's',
+      't',
+      'e',
+      'president',
+    );
     expect(result.data).toEqual([question]);
   });
 

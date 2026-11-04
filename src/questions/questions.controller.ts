@@ -68,12 +68,20 @@ export class QuestionsController {
   @ApiQuery({ name: 'subjectId', required: false, type: String })
   @ApiQuery({ name: 'topicId', required: false, type: String })
   @ApiQuery({ name: 'examId', required: false, type: String })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description:
+      'Case-insensitive substring match on English question text only',
+  })
   async findAll(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('subjectId') subjectId?: string,
     @Query('topicId') topicId?: string,
     @Query('examId') examId?: string,
+    @Query('search') search?: string,
   ): Promise<{
     message: string;
     data: QuestionResponseDto[];
@@ -85,6 +93,7 @@ export class QuestionsController {
       subjectId,
       topicId,
       examId,
+      search,
     );
     return {
       message: 'Questions retrieved successfully',

@@ -30,6 +30,10 @@ const VISIBLE_QUESTION: FilterQuery<Question> = {
   isDeleted: { $ne: true },
 };
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').slice(0, 100);
+}
+
 @Injectable()
 export class QuestionsService {
   constructor(
@@ -60,6 +64,7 @@ export class QuestionsService {
     subjectId?: string,
     topicId?: string,
     examId?: string,
+    search?: string,
   ): Promise<{ data: QuestionResponseDto[]; pagination: PaginationMetaDto }> {
     const validPage = Math.max(1, page);
     const validLimit = Math.min(Math.max(1, limit), 100);
@@ -84,6 +89,12 @@ export class QuestionsService {
         throw new BadRequestException('Invalid exam ID');
       }
       query.exams = new Types.ObjectId(examId);
+    }
+    if (search?.trim()) {
+      query['questionText.en.text'] = {
+        $regex: escapeRegex(search.trim()),
+        $options: 'i',
+      };
     }
 
     const [questions, total] = await Promise.all([
