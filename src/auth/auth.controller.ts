@@ -7,6 +7,9 @@ import {
   HttpCode,
   UseGuards,
   Get,
+  Req,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,17 +23,26 @@ import {
   ApiCreatedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
+import type { Request, Response } from 'express';
+import { AuthService, JwtPayload, StudentAuthResult } from './auth.service';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { GoogleSignInDto } from './dto/google-sign-in.dto';
 import { GoogleMobileSignInDto } from './dto/google-mobile-sign-in.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
+import { GetJwtPayload } from './decorators/get-jwt-payload.decorator';
 import { UserResponseDto } from '../users/dto/user-response.dto';
+import {
+  assertCookieRequestOrigin,
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from './session/auth-cookie';
 
 @ApiTags('authentication')
 @Controller('auth')
@@ -39,20 +51,12 @@ export class AuthController {
 
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({
     summary: 'Verify OTP and authenticate user',
     description: `
     Verifies the access token received from MSG91 OTP widget and authenticates the user.
-    This endpoint handles both login and signup in a single flow:
-    - If the phone number exists in the database, the user is logged in
-    - If the phone number is new, a user account is created automatically
-    
-    Frontend Flow:
-    1. User enters phone number in MSG91 widget
-    2. User receives and enters OTP
-    3. Widget validates OTP and returns access token
-    4. Frontend calls this endpoint with the access token
-    5. Backend verifies token with MSG91, checks/creates user, returns JWT
+    Web clients receive an HttpOnly refresh cookie; mobile receives refreshToken in JSON.
     `,
   })
   @ApiResponse({
@@ -66,20 +70,27 @@ export class AuthController {
   @ApiUnauthorizedResponse({
     description: 'Invalid or expired access token, or account deactivated',
   })
-  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto): Promise<{
+  async verifyOtp(
+    @Body() verifyOtpDto: VerifyOtpDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{
     message: string;
     data: AuthResponseDto;
   }> {
-    const authResponse =
-      await this.authService.verifyOtpAndAuthenticate(verifyOtpDto);
+    const result = await this.authService.verifyOtpAndAuthenticate(
+      verifyOtpDto,
+      this.sessionMeta(req),
+    );
+    this.applyRefreshCookie(res, result);
 
-    const message = authResponse.isNewUser
+    const message = result.response.isNewUser
       ? 'Account created and authenticated successfully'
       : 'Authentication successful';
 
     return {
       message,
-      data: authResponse,
+      data: result.response,
     };
   }
 
@@ -89,15 +100,8 @@ export class AuthController {
   @ApiOperation({
     summary: 'Sign in with Google',
     description: `
-Verifies a Google authorization code and returns the same JWT used by OTP login.
-
-The browser sends the one-time code, the redirect URI, and the PKCE verifier.
-The API exchanges that code with Google using the client secret, then verifies
-the ID token signature, audience, issuer, expiry, and email_verified flag.
-A fake or malformed JWT is rejected and does not create a session.
-
-Accounts are matched by the stable Google subject first, then by email, so a student who
-already added that email to an OTP account continues in the same account.
+Verifies a Google authorization code and returns a student session.
+Web: HttpOnly refresh cookie. Mobile body refresh is unused on this route.
     `,
   })
   @ApiResponse({
@@ -113,18 +117,26 @@ already added that email to an OTP account continues in the same account.
   @ApiConflictResponse({
     description: 'Email is already linked to a different Google account',
   })
-  async signInWithGoogle(@Body() dto: GoogleSignInDto): Promise<{
+  async signInWithGoogle(
+    @Body() dto: GoogleSignInDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{
     message: string;
     data: AuthResponseDto;
   }> {
-    const authResponse = await this.authService.signInWithGoogle(dto);
-    const message = authResponse.isNewUser
+    const result = await this.authService.signInWithGoogle(
+      dto,
+      this.sessionMeta(req),
+    );
+    this.applyRefreshCookie(res, result);
+    const message = result.response.isNewUser
       ? 'Account created and authenticated successfully'
       : 'Authentication successful';
 
     return {
       message,
-      data: authResponse,
+      data: result.response,
     };
   }
 
@@ -134,12 +146,8 @@ already added that email to an OTP account continues in the same account.
   @ApiOperation({
     summary: 'Sign in with Google on the mobile app',
     description: `
-Mobile-only. Verifies a Google ID token from the native Sign-In SDK and returns
-the same student JWT as OTP login.
-
-The web endpoint \`POST /auth/google\` is unchanged and still requires an
-authorization code, redirect URI, and PKCE verifier. This route never accepts
-that code and never uses the client secret.
+Mobile-only. Verifies a Google ID token from the native Sign-In SDK.
+Returns refreshToken in JSON (no HttpOnly cookie).
     `,
   })
   @ApiResponse({
@@ -156,19 +164,95 @@ that code and never uses the client secret.
   })
   async signInWithGoogleMobile(
     @Body() dto: GoogleMobileSignInDto,
+    @Req() req: Request,
   ): Promise<{
     message: string;
     data: AuthResponseDto;
   }> {
-    const authResponse = await this.authService.signInWithGoogleIdToken(dto);
-    const message = authResponse.isNewUser
+    const result = await this.authService.signInWithGoogleIdToken(
+      dto,
+      this.sessionMeta(req),
+    );
+    const message = result.response.isNewUser
       ? 'Account created and authenticated successfully'
       : 'Authentication successful';
 
     return {
       message,
-      data: authResponse,
+      data: result.response,
     };
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiOperation({
+    summary: 'Refresh a student access token',
+    description:
+      'Web: send HttpOnly ezprep_rt cookie. Mobile: send refreshToken in JSON body. Rotates the refresh credential.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tokens refreshed',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, reused, or expired refresh token',
+  })
+  async refresh(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{
+    message: string;
+    data: AuthResponseDto;
+  }> {
+    const fromCookie = readRefreshCookie(req);
+    const refreshToken = fromCookie || dto.refreshToken;
+    if (!refreshToken) {
+      clearRefreshCookie(res);
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    if (fromCookie) {
+      assertCookieRequestOrigin(req);
+    }
+
+    try {
+      const result = await this.authService.refreshStudentSession(refreshToken);
+      this.applyRefreshCookie(res, result);
+      return {
+        message: 'Token refreshed',
+        data: result.response,
+      };
+    } catch (error) {
+      clearRefreshCookie(res);
+      throw error;
+    }
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({
+    summary: 'Log out the current student session',
+    description:
+      'Revokes the Redis session bound to the access token (when present) and always clears the refresh cookie.',
+  })
+  @ApiResponse({ status: 200, description: 'Logged out' })
+  async logout(
+    @GetJwtPayload() payload: JwtPayload | undefined,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ message: string }> {
+    const refreshToken = readRefreshCookie(req);
+    if (refreshToken) {
+      assertCookieRequestOrigin(req);
+    }
+    await this.authService.logoutStudent(payload, refreshToken);
+    clearRefreshCookie(res);
+    return { message: 'Logged out' };
   }
 
   @Post('admins')
@@ -254,6 +338,31 @@ OTP / student accounts are unchanged. Admins sign in via \`POST /auth/admin/logi
     return {
       message: 'Profile retrieved successfully',
       data: user,
+    };
+  }
+
+  private applyRefreshCookie(res: Response, result: StudentAuthResult): void {
+    if (result.refreshCookie) {
+      setRefreshCookie(
+        res,
+        result.refreshCookie.token,
+        result.refreshCookie.maxAgeSec,
+      );
+    }
+  }
+
+  private sessionMeta(req: Request) {
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip =
+      typeof forwarded === 'string'
+        ? forwarded.split(',')[0]?.trim()
+        : req.ip;
+    const origin =
+      typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+    return {
+      userAgent: req.headers['user-agent'],
+      ip,
+      origin,
     };
   }
 }

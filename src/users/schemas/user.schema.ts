@@ -185,6 +185,10 @@ export class User {
   @Prop({ default: false })
   isDeleted: boolean;
 
+  /** Last time this user made an authenticated API request (throttled). */
+  @Prop()
+  lastActiveAt?: Date;
+
   // ── Group 1: Extended profile ─────────────────────────────────────────────
   @Prop({ trim: true, maxlength: 500 })
   bio?: string;
@@ -260,6 +264,7 @@ UserSchema.index({ phoneNumber: 1 }, { sparse: true });
 UserSchema.index({ username: 1 }, { unique: true, sparse: true });
 UserSchema.index({ googleSub: 1 }, { unique: true, sparse: true });
 UserSchema.index({ isActive: 1, isDeleted: 1 });
+UserSchema.index({ lastActiveAt: 1 }, { sparse: true });
 UserSchema.index({ membershipTier: 1 });
 UserSchema.index({ targetExam: 1 }, { sparse: true });
 UserSchema.index({ targetExams: 1 }, { sparse: true });

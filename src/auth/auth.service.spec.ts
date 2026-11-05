@@ -8,6 +8,7 @@ import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
 import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
 import { StudentAccountResolver } from './identity/student-account.resolver';
 import { StudentAuthProvider } from './identity/verified-student-identity';
+import { StudentSessionService } from './session/student-session.service';
 import {
   ConflictException,
   ForbiddenException,
@@ -44,6 +45,7 @@ describe('AuthService', () => {
     createGoogleUser: jest.fn(),
     linkGoogleAccount: jest.fn(),
     updateEmailIfAvailable: jest.fn(),
+    touchLastActiveAt: jest.fn(),
   };
 
   const mockGoogleIdentity = {
@@ -53,6 +55,16 @@ describe('AuthService', () => {
 
   const mockGoogleCodes = {
     exchange: jest.fn(),
+  };
+
+  const mockStudentSessions = {
+    create: jest.fn(),
+    assertActive: jest.fn(),
+    touchActivity: jest.fn(),
+    refresh: jest.fn(),
+    revoke: jest.fn(),
+    revokeByRefreshToken: jest.fn(),
+    isDegraded: jest.fn().mockReturnValue(false),
   };
 
   beforeEach(async () => {
@@ -81,6 +93,10 @@ describe('AuthService', () => {
           provide: GoogleCodeExchangeService,
           useValue: mockGoogleCodes,
         },
+        {
+          provide: StudentSessionService,
+          useValue: mockStudentSessions,
+        },
       ],
     }).compile();
 
@@ -91,6 +107,24 @@ describe('AuthService', () => {
 
     // Reset all mocks before each test
     jest.clearAllMocks();
+    mockStudentSessions.create.mockResolvedValue({
+      sid: 'sid-1',
+      refreshToken: 'refresh-1',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      expiresInSec: 7 * 24 * 60 * 60,
+      client: 'web',
+      persisted: true,
+    });
+    mockStudentSessions.assertActive.mockResolvedValue({
+      sid: 'sid-1',
+      userId: mockUsers.validStudent.id,
+      expiresAt: new Date(Date.now() + 60_000),
+      client: 'web',
+      fromCache: true,
+    });
+    mockStudentSessions.touchActivity.mockResolvedValue({
+      shouldUpdateMongo: false,
+    });
   });
 
   it('should be defined', () => {
@@ -116,13 +150,19 @@ describe('AuthService', () => {
           validDto.accessToken,
         );
         expect(usersService.findByPhone).toHaveBeenCalledWith('+1234567890');
-        expect(jwtService.sign).toHaveBeenCalledWith({
-          sub: existingUser.id,
-          phoneNumber: existingUser.phoneNumber,
-          role: existingUser.role,
-        });
-        expect(result.user).toEqual(existingUser);
-        expect(result.accessToken).toBe('mock-jwt-token');
+        expect(jwtService.sign).toHaveBeenCalledWith(
+          {
+            sub: existingUser.id,
+            phoneNumber: existingUser.phoneNumber,
+            role: existingUser.role,
+            sid: 'sid-1',
+          },
+          { expiresIn: 15 * 60 },
+        );
+        expect(result.response.user).toEqual(existingUser);
+        expect(result.response.accessToken).toBe('mock-jwt-token');
+        expect(result.response.refreshToken).toBeUndefined();
+        expect(result.refreshCookie?.token).toBe('refresh-1');
       });
 
       it('should throw UnauthorizedException for inactive user', async () => {
@@ -166,9 +206,9 @@ describe('AuthService', () => {
             phoneNumber: '+1234567890',
           }),
         );
-        expect(result.user).toEqual(newUser);
-        expect(result.accessToken).toBe('mock-jwt-token');
-        expect(result.isNewUser).toBe(true);
+        expect(result.response.user).toEqual(newUser);
+        expect(result.response.accessToken).toBe('mock-jwt-token');
+        expect(result.response.isNewUser).toBe(true);
       });
 
       it('should handle user creation failure', async () => {
@@ -242,12 +282,17 @@ describe('AuthService', () => {
       expect(mockGoogleIdentity.verify).toHaveBeenCalledWith(
         'header.payload.signature',
       );
-      expect(result.accessToken).toBe('mock-jwt-token');
-      expect(result.isNewUser).toBe(false);
-      expect(jwtService.sign).toHaveBeenCalledWith({
-        sub: googleUser.id,
-        role: googleUser.role,
-      });
+      expect(result.response.accessToken).toBe('mock-jwt-token');
+      expect(result.response.isNewUser).toBe(false);
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sub: googleUser.id,
+          role: googleUser.role,
+          sid: 'sid-1',
+        }),
+        { expiresIn: 15 * 60 },
+      );
+      expect(result.refreshCookie?.token).toBe('refresh-1');
     });
 
     it('does not create an account when the ID token is rejected', async () => {
@@ -314,7 +359,7 @@ describe('AuthService', () => {
       expect(mockGoogleCodes.exchange).not.toHaveBeenCalled();
       expect(mockGoogleIdentity.verify).not.toHaveBeenCalled();
       expect(mockGoogleIdentity.verifyMobile).toHaveBeenCalledWith(dto.idToken);
-      expect(result.accessToken).toBe('mock-jwt-token');
+      expect(result.response.accessToken).toBe('mock-jwt-token');
     });
 
     it('does not create an account when the ID token is rejected', async () => {
@@ -454,6 +499,35 @@ describe('AuthService', () => {
 
       expect(usersService.findOne).toHaveBeenCalledWith(payload.sub);
       expect(result).toEqual(user);
+      expect(mockStudentSessions.assertActive).not.toHaveBeenCalled();
+    });
+
+    it('requires a live Redis session when sid is present', async () => {
+      const user = mockUsers.validStudent;
+      mockUsersService.findOne.mockResolvedValue(user);
+      mockStudentSessions.assertActive.mockResolvedValue(null);
+
+      await expect(
+        service.validateJwtPayload({
+          sub: user.id,
+          role: user.role,
+          sid: 'sid-1',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('skips Redis for admin tokens', async () => {
+      const admin = { ...mockUsers.validAdmin, role: UserRole.ADMIN };
+      mockUsersService.findOne.mockResolvedValue(admin);
+
+      const result = await service.validateJwtPayload({
+        sub: admin.id,
+        role: UserRole.ADMIN,
+        sid: 'should-be-ignored',
+      });
+
+      expect(result).toEqual(admin);
+      expect(mockStudentSessions.assertActive).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException for invalid user ID', async () => {
@@ -515,6 +589,86 @@ describe('AuthService', () => {
     });
   });
 
+  describe('resolveStudentClient', () => {
+    it('forces web when Origin is an allowed CORS browser origin', () => {
+      process.env.CORS_ORIGINS = 'https://ezprep.in,https://www.ezprep.in';
+      expect(
+        service.resolveStudentClient('mobile', 'https://www.ezprep.in', 'web'),
+      ).toBe('web');
+    });
+
+    it('honours requested client when Origin is absent (native)', () => {
+      expect(service.resolveStudentClient('mobile', undefined, 'web')).toBe(
+        'mobile',
+      );
+    });
+  });
+
+  describe('logoutStudent', () => {
+    it('revokes by sid when access payload is present', async () => {
+      await service.logoutStudent({
+        sub: mockUsers.validStudent.id,
+        role: UserRole.USER,
+        sid: 'sid-1',
+      });
+      expect(mockStudentSessions.revoke).toHaveBeenCalledWith(
+        'sid-1',
+        mockUsers.validStudent.id,
+      );
+    });
+
+    it('revokes by refresh token when access JWT is missing', async () => {
+      mockStudentSessions.revokeByRefreshToken = jest.fn();
+      await service.logoutStudent(undefined, 'cookie-refresh');
+      expect(mockStudentSessions.revokeByRefreshToken).toHaveBeenCalledWith(
+        'cookie-refresh',
+      );
+    });
+  });
+
+  describe('refreshStudentSession', () => {
+    it('returns a web cookie and omits refreshToken from JSON', async () => {
+      mockStudentSessions.refresh.mockResolvedValue({
+        sid: 'sid-1',
+        refreshToken: 'rotated-rt',
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresInSec: 15 * 60,
+        client: 'web',
+        userId: mockUsers.validStudent.id,
+      });
+      mockUsersService.findOne.mockResolvedValue(mockUsers.validStudent);
+      mockJwtService.sign.mockReturnValue('next-access');
+
+      const result = await service.refreshStudentSession('old-rt');
+
+      expect(result.response.accessToken).toBe('next-access');
+      expect(result.response.refreshToken).toBeUndefined();
+      expect(result.refreshCookie?.token).toBe('rotated-rt');
+      expect(jwtService.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ sid: 'sid-1' }),
+        { expiresIn: 15 * 60 },
+      );
+    });
+
+    it('keeps refreshToken in JSON for mobile', async () => {
+      mockStudentSessions.refresh.mockResolvedValue({
+        sid: 'sid-m',
+        refreshToken: 'mobile-rt',
+        expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+        expiresInSec: 90 * 24 * 60 * 60,
+        client: 'mobile',
+        userId: mockUsers.validStudent.id,
+      });
+      mockUsersService.findOne.mockResolvedValue(mockUsers.validStudent);
+      mockJwtService.sign.mockReturnValue('mobile-access');
+
+      const result = await service.refreshStudentSession('old-mobile-rt');
+
+      expect(result.response.refreshToken).toBe('mobile-rt');
+      expect(result.refreshCookie).toBeUndefined();
+    });
+  });
+
   describe('integration scenarios', () => {
     it('should handle concurrent authentication requests', async () => {
       const user = mockUsers.validStudent;
@@ -534,8 +688,8 @@ describe('AuthService', () => {
 
       expect(results).toHaveLength(5);
       results.forEach(result => {
-        expect(result.accessToken).toBe('mock-jwt-token');
-        expect(result.user).toEqual(user);
+        expect(result.response.accessToken).toBe('mock-jwt-token');
+        expect(result.response.user).toEqual(user);
       });
     });
 

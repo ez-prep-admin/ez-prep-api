@@ -1,5 +1,13 @@
-import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { AuthClient } from '../session/session.types';
 
 export class GoogleSignInDto {
   @ApiProperty({
@@ -30,4 +38,14 @@ export class GoogleSignInDto {
   @MinLength(43)
   @MaxLength(128)
   codeVerifier: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Client that is signing in. Defaults to web for this browser endpoint.',
+    enum: ['web', 'mobile'],
+    default: 'web',
+  })
+  @IsOptional()
+  @IsIn(['web', 'mobile'])
+  client?: AuthClient;
 }

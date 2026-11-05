@@ -92,6 +92,13 @@ export class UserResponseDto {
   @Expose()
   isActive: boolean;
 
+  @ApiPropertyOptional({
+    description: 'When the user was last active on an authenticated request',
+    example: '2026-11-05T12:00:00.000Z',
+  })
+  @Expose()
+  lastActiveAt?: Date;
+
   // ── Group 1: Extended profile ──────────────────────────────────────────────
   @ApiPropertyOptional({ description: 'Short bio (max 500 chars)' })
   @Expose()

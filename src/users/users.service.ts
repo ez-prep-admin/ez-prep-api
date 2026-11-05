@@ -414,6 +414,25 @@ export class UsersService {
     return this.toResponseDto(updatedUser);
   }
 
+  /**
+   * Fire-and-forget friendly. Updates lastActiveAt without loading the full user.
+   * Callers throttle so this is not invoked on every request.
+   */
+  async touchLastActiveAt(
+    userId: string,
+    at: Date = new Date(),
+  ): Promise<void> {
+    if (!Types.ObjectId.isValid(userId)) {
+      return;
+    }
+    await this.userModel
+      .updateOne(
+        { _id: new Types.ObjectId(userId) },
+        { $set: { lastActiveAt: at } },
+      )
+      .exec();
+  }
+
   async getUserStats() {
     const [totalUsers, activeUsers, adminUsers, deletedUsers] =
       await Promise.all([

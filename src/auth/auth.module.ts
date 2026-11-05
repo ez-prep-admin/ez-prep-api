@@ -12,6 +12,7 @@ import { GoogleIdentityStrategy } from './identity/google-identity.strategy';
 import { GoogleIdTokenVerifier } from './identity/google-id-token.verifier';
 import { GoogleCodeExchangeService } from './identity/google-code-exchange.service';
 import { StudentAccountResolver } from './identity/student-account.resolver';
+import { StudentSessionService } from './session/student-session.service';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -39,6 +40,7 @@ import { UsersModule } from '../users/users.module';
     GoogleCodeExchangeService,
     GoogleIdentityStrategy,
     StudentAccountResolver,
+    StudentSessionService,
     JwtStrategy,
   ],
   exports: [AuthService, JwtModule, PassportModule],
