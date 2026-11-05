@@ -26,6 +26,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { AdminUsersService } from './admin-users.service';
 import { AppUserDetailApiResponseDto } from './dto/app-user-detail.dto';
+import { AppUsersActiveSummaryApiResponseDto } from './dto/app-users-active-summary.dto';
 import { AppUsersListApiResponseDto } from './dto/paginated-app-users-response.dto';
 
 @ApiTags('admin-users')
@@ -76,6 +77,24 @@ export class AdminUsersController {
       message: 'App users retrieved successfully',
       data: result.data,
       pagination: result.pagination,
+    };
+  }
+
+  @Get('active-summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Active learner counts by lastActiveAt (Admin only)',
+    description:
+      'Unique student accounts (`role=user`, not deleted) whose throttled ' +
+      '`lastActiveAt` falls within the past 1 day and past 7 days. ' +
+      'Admin accounts are excluded. Each window is a distinct document count.',
+  })
+  @ApiOkResponse({ type: AppUsersActiveSummaryApiResponseDto })
+  async activeSummary(): Promise<AppUsersActiveSummaryApiResponseDto> {
+    const data = await this.adminUsersService.getActiveSummary();
+    return {
+      message: 'Active learner summary retrieved successfully',
+      data,
     };
   }
 

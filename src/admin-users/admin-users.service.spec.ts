@@ -110,6 +110,35 @@ describe('AdminUsersService', () => {
     expect(service).toBeDefined();
   });
 
+  it('counts unique learners by lastActiveAt for 1 and 7 day windows', async () => {
+    userModel.countDocuments
+      .mockReturnValueOnce(chain(4))
+      .mockReturnValueOnce(chain(17));
+
+    await expect(service.getActiveSummary()).resolves.toEqual({
+      last1Day: 4,
+      last7Days: 17,
+    });
+
+    expect(userModel.countDocuments).toHaveBeenCalledTimes(2);
+    expect(userModel.countDocuments.mock.calls[0][0]).toMatchObject({
+      role: APP_USER_ROLE,
+      isDeleted: { $ne: true },
+      lastActiveAt: { $gte: expect.any(Date) },
+    });
+    expect(userModel.countDocuments.mock.calls[1][0]).toMatchObject({
+      role: APP_USER_ROLE,
+      isDeleted: { $ne: true },
+      lastActiveAt: { $gte: expect.any(Date) },
+    });
+
+    const since1 = userModel.countDocuments.mock.calls[0][0].lastActiveAt
+      .$gte as Date;
+    const since7 = userModel.countDocuments.mock.calls[1][0].lastActiveAt
+      .$gte as Date;
+    expect(since7.getTime()).toBeLessThan(since1.getTime());
+  });
+
   it('queries only learners and never asks Mongo for admins', async () => {
     const user = learnerDoc();
     const findChain = chain([user]);

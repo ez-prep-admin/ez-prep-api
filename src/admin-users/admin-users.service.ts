@@ -47,7 +47,10 @@ import {
   AppUserAccessDto,
   AppUserListItemDto,
 } from './dto/app-user-list-item.dto';
+import { AppUsersActiveSummaryDto } from './dto/app-users-active-summary.dto';
 import { PaginatedAppUsersResponseDto } from './dto/paginated-app-users-response.dto';
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AdminUsersService {
@@ -113,6 +116,34 @@ export class AdminUsersService {
     };
 
     return { data, pagination };
+  }
+
+  /**
+   * Unique learners touched recently, from throttled Mongo `lastActiveAt`.
+   * Same learner scope as the directory (`role=user`, not deleted).
+   */
+  async getActiveSummary(): Promise<AppUsersActiveSummaryDto> {
+    const now = Date.now();
+    const since1Day = new Date(now - MS_PER_DAY);
+    const since7Days = new Date(now - 7 * MS_PER_DAY);
+    const base = buildAppUserFilter();
+
+    const [last1Day, last7Days] = await Promise.all([
+      this.userModel
+        .countDocuments({
+          ...base,
+          lastActiveAt: { $gte: since1Day },
+        })
+        .exec(),
+      this.userModel
+        .countDocuments({
+          ...base,
+          lastActiveAt: { $gte: since7Days },
+        })
+        .exec(),
+    ]);
+
+    return { last1Day, last7Days };
   }
 
   /**

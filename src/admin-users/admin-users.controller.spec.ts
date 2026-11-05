@@ -11,6 +11,7 @@ describe('AdminUsersController', () => {
   let controller: AdminUsersController;
   const adminUsersService = {
     listAppUsers: jest.fn(),
+    getActiveSummary: jest.fn(),
     getAppUserDetails: jest.fn(),
   };
 
@@ -89,6 +90,19 @@ describe('AdminUsersController', () => {
 
     const result = await controller.list(1, 12);
     expect(result.data.every(item => item.role === UserRole.USER)).toBe(true);
+  });
+
+  it('wraps the active learner summary', async () => {
+    adminUsersService.getActiveSummary.mockResolvedValue({
+      last1Day: 3,
+      last7Days: 11,
+    });
+
+    await expect(controller.activeSummary()).resolves.toEqual({
+      message: 'Active learner summary retrieved successfully',
+      data: { last1Day: 3, last7Days: 11 },
+    });
+    expect(adminUsersService.getActiveSummary).toHaveBeenCalledTimes(1);
   });
 
   it('wraps one learner detail from the service', async () => {
