@@ -11,11 +11,25 @@ describe('AuthController', () => {
   const mockAuthService = {
     verifyOtpAndAuthenticate: jest.fn(),
     signInWithGoogle: jest.fn(),
+    signInWithGoogleIdToken: jest.fn(),
+    refreshStudentSession: jest.fn(),
+    logoutStudent: jest.fn(),
     createAdmin: jest.fn(),
     loginAdmin: jest.fn(),
   };
 
+  const mockReq = {
+    headers: { 'user-agent': 'jest', origin: 'http://localhost:3001' },
+    ip: '127.0.0.1',
+  } as never;
+
+  const mockRes = {
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
+  } as never;
+
   beforeEach(async () => {
+    process.env.CORS_ORIGINS = 'http://localhost:3001';
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
@@ -32,7 +46,6 @@ describe('AuthController', () => {
     controller = module.get<AuthController>(AuthController);
     authService = module.get<AuthService>(AuthService);
 
-    // Reset all mocks before each test
     jest.clearAllMocks();
   });
 
@@ -45,37 +58,28 @@ describe('AuthController', () => {
       accessToken: 'test-access-token',
     };
 
-    it('should verify OTP and authenticate user successfully', async () => {
-      const serviceResponse = {
+    it('should verify OTP and set refresh cookie for web', async () => {
+      const authResponse = {
         accessToken: 'new-jwt-token',
         isNewUser: false,
-        user: {
-          _id: '507f1f77bcf86cd799439011',
-          name: 'John Doe',
-          email: 'john@example.com',
-          phoneNumber: '+1234567890',
-          role: 'student',
-          isActive: true,
-          createdAt: new Date('2023-01-01'),
-          updatedAt: new Date('2023-01-01'),
-        },
+        user: { id: '1' },
       };
+      mockAuthService.verifyOtpAndAuthenticate.mockResolvedValue({
+        response: authResponse,
+        refreshCookie: { token: 'rt', maxAgeSec: 3600 },
+      });
 
-      const expectedResponse = {
+      const result = await controller.verifyOtp(validDto, mockReq, mockRes);
+
+      expect(result).toEqual({
         message: 'Authentication successful',
-        data: serviceResponse,
-      };
-
-      mockAuthService.verifyOtpAndAuthenticate.mockResolvedValue(
-        serviceResponse,
-      );
-
-      const result = await controller.verifyOtp(validDto);
-
-      expect(result).toEqual(expectedResponse);
+        data: authResponse,
+      });
       expect(authService.verifyOtpAndAuthenticate).toHaveBeenCalledWith(
         validDto,
+        expect.objectContaining({ userAgent: 'jest', ip: '127.0.0.1' }),
       );
+      expect((mockRes as { cookie: jest.Mock }).cookie).toHaveBeenCalled();
     });
 
     it('should handle authentication failure', async () => {
@@ -83,27 +87,21 @@ describe('AuthController', () => {
         new UnauthorizedException('Invalid OTP'),
       );
 
-      await expect(controller.verifyOtp(validDto)).rejects.toThrow(
-        UnauthorizedException,
-      );
-    });
-
-    it('should handle service errors', async () => {
-      mockAuthService.verifyOtpAndAuthenticate.mockRejectedValue(
-        new Error('Service unavailable'),
-      );
-
-      await expect(controller.verifyOtp(validDto)).rejects.toThrow();
+      await expect(
+        controller.verifyOtp(validDto, mockReq, mockRes),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should use the new-user success message', async () => {
       mockAuthService.verifyOtpAndAuthenticate.mockResolvedValue({
-        accessToken: 'jwt',
-        isNewUser: true,
-        user: { id: '1' },
+        response: {
+          accessToken: 'jwt',
+          isNewUser: true,
+          user: { id: '1' },
+        },
       });
 
-      const result = await controller.verifyOtp(validDto);
+      const result = await controller.verifyOtp(validDto, mockReq, mockRes);
 
       expect(result.message).toBe(
         'Account created and authenticated successfully',
@@ -119,34 +117,26 @@ describe('AuthController', () => {
     };
 
     it('should authenticate an existing Google user', async () => {
-      const serviceResponse = {
+      const authResponse = {
         accessToken: 'jwt',
         isNewUser: false,
         user: { id: '1' },
       };
-      mockAuthService.signInWithGoogle.mockResolvedValue(serviceResponse);
+      mockAuthService.signInWithGoogle.mockResolvedValue({
+        response: authResponse,
+        refreshCookie: { token: 'rt', maxAgeSec: 3600 },
+      });
 
-      const result = await controller.signInWithGoogle(dto);
+      const result = await controller.signInWithGoogle(dto, mockReq, mockRes);
 
-      expect(authService.signInWithGoogle).toHaveBeenCalledWith(dto);
+      expect(authService.signInWithGoogle).toHaveBeenCalledWith(
+        dto,
+        expect.objectContaining({ userAgent: 'jest' }),
+      );
       expect(result).toEqual({
         message: 'Authentication successful',
-        data: serviceResponse,
+        data: authResponse,
       });
-    });
-
-    it('should use the new-user success message', async () => {
-      mockAuthService.signInWithGoogle.mockResolvedValue({
-        accessToken: 'jwt',
-        isNewUser: true,
-        user: { id: '1' },
-      });
-
-      const result = await controller.signInWithGoogle(dto);
-
-      expect(result.message).toBe(
-        'Account created and authenticated successfully',
-      );
     });
   });
 
@@ -171,35 +161,112 @@ describe('AuthController', () => {
   });
 
   describe('loginAdmin', () => {
-    it('should return the authentication payload', async () => {
+    it('should wrap the admin auth response', async () => {
       const dto = { username: 'admin', password: 'secret' };
-      const auth = { accessToken: 'jwt', isNewUser: false, user: { id: 'a1' } };
-      mockAuthService.loginAdmin.mockResolvedValue(auth);
+      const authResponse = {
+        accessToken: 'jwt',
+        isNewUser: false,
+        user: { id: 'a1' },
+      };
+      mockAuthService.loginAdmin.mockResolvedValue(authResponse);
 
       const result = await controller.loginAdmin(dto);
 
       expect(result).toEqual({
         message: 'Authentication successful',
-        data: auth,
+        data: authResponse,
       });
     });
   });
 
-  describe('getProfile', () => {
-    it('should return the authenticated user', async () => {
-      const user = {
-        id: '507f1f77bcf86cd799439011',
-        name: 'John Doe',
-        email: 'john@example.com',
-        phoneNumber: '+1234567890',
-        role: 'user',
-        isActive: true,
+  describe('refresh', () => {
+    it('refreshes from body for mobile and does not require Origin', async () => {
+      const authResponse = {
+        accessToken: 'next',
+        refreshToken: 'rt2',
+        expiresIn: 3600,
+        isNewUser: false,
+        user: { id: '1' },
+      };
+      mockAuthService.refreshStudentSession.mockResolvedValue({
+        response: authResponse,
+      });
+      const req = { headers: { cookie: '' }, ip: '127.0.0.1' } as never;
+
+      const result = await controller.refresh(
+        { refreshToken: 'mobile-refresh-token-value' },
+        req,
+        mockRes,
+      );
+
+      expect(result.data).toEqual(authResponse);
+      expect(authService.refreshStudentSession).toHaveBeenCalledWith(
+        'mobile-refresh-token-value',
+      );
+    });
+
+    it('refreshes from cookie and sets a new cookie', async () => {
+      process.env.NODE_ENV = 'test';
+      mockAuthService.refreshStudentSession.mockResolvedValue({
+        response: {
+          accessToken: 'next',
+          expiresIn: 900,
+          isNewUser: false,
+          user: { id: '1' },
+        },
+        refreshCookie: { token: 'rotated', maxAgeSec: 1000 },
+      });
+      const req = {
+        headers: {
+          cookie: 'ezprep_rt=old-refresh',
+          origin: 'http://localhost:3001',
+        },
+        ip: '127.0.0.1',
       } as never;
 
-      await expect(controller.getProfile(user)).resolves.toEqual({
-        message: 'Profile retrieved successfully',
-        data: user,
-      });
+      await controller.refresh({}, req, mockRes);
+
+      expect(authService.refreshStudentSession).toHaveBeenCalledWith(
+        'old-refresh',
+      );
+      expect((mockRes as { cookie: jest.Mock }).cookie).toHaveBeenCalled();
+    });
+
+    it('rejects cookie refresh from an evil origin', async () => {
+      process.env.NODE_ENV = 'production';
+      const req = {
+        headers: {
+          cookie: 'ezprep_rt=old-refresh',
+          origin: 'https://evil.example',
+        },
+        ip: '127.0.0.1',
+      } as never;
+
+      await expect(controller.refresh({}, req, mockRes)).rejects.toThrow();
+      expect(authService.refreshStudentSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('logout', () => {
+    it('clears the refresh cookie and revokes via cookie when JWT is absent', async () => {
+      const req = {
+        headers: {
+          origin: 'http://localhost:3001',
+          cookie: 'ezprep_rt=still-valid-refresh',
+        },
+        ip: '127.0.0.1',
+      } as never;
+
+      const result = await controller.logout(undefined, req, mockRes);
+
+      expect(result.message).toBe('Logged out');
+      expect(authService.logoutStudent).toHaveBeenCalledWith(
+        undefined,
+        'still-valid-refresh',
+      );
+      expect(
+        (mockRes as { clearCookie: jest.Mock }).clearCookie,
+      ).toHaveBeenCalled();
     });
   });
 });

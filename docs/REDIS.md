@@ -719,3 +719,49 @@ curl http://localhost:3000/api/v1/health
 ```
 
 `"redis": "up"` means the URL connected. `"disabled"` means `REDIS_URL` was empty at startup. `"down"` usually means the scheme is `redis://` instead of `rediss://`, or the read-only Upstash token was used. The normal token is required because the queue writes.
+
+---
+
+## Student sessions
+
+Student (non-admin) auth stores revocable sessions in Redis. Admin JWTs never touch this path.
+
+Full login / refresh / cookie / SPA design: [`STUDENT_SESSION_AUTH.md`](./STUDENT_SESSION_AUTH.md).
+
+### Keys (`RedisKeyBuilder`)
+
+| Key | Purpose | TTL |
+| --- | --- | --- |
+| `{prefix}:session:{sid}` | Session JSON (`userId`, refresh hash, `client`, timestamps) | Remaining absolute session life (web 7d / mobile 90d) |
+| `{prefix}:session-refresh:{sha256}` | Refresh token → `sid` index | Same as session |
+| `{prefix}:user-sessions:{userId}` | SET of `sid`s for future logout-all | Same as session |
+
+### Command budget (same rules as the import worker)
+
+Idle authenticated traffic must not poll Redis on a timer.
+
+| Event | Redis commands (typical) |
+| --- | --- |
+| Login / session create | Pipeline: `SET` session + `SET` refresh index + `SADD` + `EXPIRE` (~4) |
+| Access-token validate (cache hit) | **0** — in-process positive `sid` cache (~90s) |
+| Access-token validate (cache miss) | **1** `GET` |
+| Activity touch (at most every ~12 min per sid) | **1** `GET` + **1** `SET` when due; otherwise 0 |
+| Refresh (web) | Rotate refresh; **remaining** absolute 7d TTL |
+| Refresh (mobile) | Rotate refresh; **slide** idle window +90d (Instagram-style) |
+| Logout | Pipeline `DEL` session + refresh index + `SREM` |
+
+### Web refresh cookie vs mobile body
+
+| Client | Access JWT | Refresh delivery |
+| --- | --- | --- |
+| **Web** (`client=web`) | **15m** in SPA memory; JSON omits `refreshToken` | HttpOnly `ezprep_rt` cookie (`Path=/api/v1/auth`, `SameSite=Lax`, `Secure` in prod). Set `AUTH_COOKIE_DOMAIN=.ezprep.in` in production so `www` → `api` credentialed calls receive it. |
+| **Mobile** (`client=mobile`) | Long-lived until Phase 12 SecureStore | Opaque `refreshToken` in JSON body (unchanged) |
+| **Admin** | Unchanged | No Redis session / no refresh cookie |
+
+`POST /auth/refresh` prefers the cookie, else body. Cookie-based refresh/logout enforce Origin/Referer ∈ `CORS_ORIGINS`.
+
+Do **not** add background session sweepers, `SMEMBERS` on the request path, pub/sub, or BullMQ for auth.
+
+`AUTH_SESSION_STORE=degraded` (or Redis unavailable) skips Redis checks and may issue legacy JWTs without `sid` so students are not locked out. Revocation is weak until Redis recovers. Log line: `auth.session.degraded`.
+
+Mongo remains the source of truth for the user row and throttled `lastActiveAt`. Redis is only the revoke/session glue.

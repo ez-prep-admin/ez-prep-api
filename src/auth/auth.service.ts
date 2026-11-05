@@ -21,14 +21,33 @@ import { UserResponseDto } from '../users/dto/user-response.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { StudentSessionService } from './session/student-session.service';
+import { AuthClient } from './session/session.types';
+import { WEB_ACCESS_TTL_SEC } from './session/session.constants';
+import { parseCorsOrigins } from '../common/config/security.config';
 
 export interface JwtPayload {
   sub: string; // user id
   phoneNumber?: string;
   username?: string;
   role: string;
+  /** Student Redis session id. Absent on admin and legacy student tokens. */
+  sid?: string;
   iat?: number;
   exp?: number;
+}
+
+export interface StudentSessionRequestMeta {
+  userAgent?: string;
+  ip?: string;
+  /** Browser Origin when present; used to force web session semantics. */
+  origin?: string;
+}
+
+/** Login/refresh result; web sets HttpOnly refresh via refreshCookie. */
+export interface StudentAuthResult {
+  response: AuthResponseDto;
+  refreshCookie?: { token: string; maxAgeSec: number };
 }
 
 @Injectable()
@@ -42,6 +61,7 @@ export class AuthService {
     private readonly googleCodes: GoogleCodeExchangeService,
     private readonly googleIdentity: GoogleIdentityStrategy,
     private readonly studentAccounts: StudentAccountResolver,
+    private readonly studentSessions: StudentSessionService,
   ) {}
 
   /**
@@ -52,12 +72,18 @@ export class AuthService {
    */
   async verifyOtpAndAuthenticate(
     verifyOtpDto: VerifyOtpDto,
-  ): Promise<AuthResponseDto> {
+    meta: StudentSessionRequestMeta = {},
+  ): Promise<StudentAuthResult> {
     try {
       this.logger.log('Starting OTP verification and authentication process');
       const identity = await this.otpIdentity.verify(verifyOtpDto.accessToken);
       const { user, isNewUser } = await this.studentAccounts.resolve(identity);
-      return this.issueStudentToken(user, isNewUser);
+      return this.issueStudentSession(
+        user,
+        isNewUser,
+        this.resolveStudentClient(verifyOtpDto.client, meta.origin, 'web'),
+        meta,
+      );
     } catch (error) {
       if (error instanceof UnauthorizedException) {
         throw error;
@@ -76,7 +102,10 @@ export class AuthService {
    * then issue the same student JWT used by OTP login.
    * A token supplied by the browser is never accepted in place of that check.
    */
-  async signInWithGoogle(dto: GoogleSignInDto): Promise<AuthResponseDto> {
+  async signInWithGoogle(
+    dto: GoogleSignInDto,
+    meta: StudentSessionRequestMeta = {},
+  ): Promise<StudentAuthResult> {
     try {
       const idToken = await this.googleCodes.exchange({
         code: dto.code,
@@ -85,7 +114,12 @@ export class AuthService {
       });
       const identity = await this.googleIdentity.verify(idToken);
       const { user, isNewUser } = await this.studentAccounts.resolve(identity);
-      return this.issueStudentToken(user, isNewUser);
+      return this.issueStudentSession(
+        user,
+        isNewUser,
+        this.resolveStudentClient(dto.client, meta.origin, 'web'),
+        meta,
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -99,14 +133,21 @@ export class AuthService {
   /**
    * Mobile-only Google sign-in. Verifies the SDK ID token with Google and
    * issues the same student JWT. The web code + PKCE endpoint is not used.
+   * Defaults client to mobile (90d session) unless overridden.
    */
   async signInWithGoogleIdToken(
     dto: GoogleMobileSignInDto,
-  ): Promise<AuthResponseDto> {
+    meta: StudentSessionRequestMeta = {},
+  ): Promise<StudentAuthResult> {
     try {
       const identity = await this.googleIdentity.verifyMobile(dto.idToken);
       const { user, isNewUser } = await this.studentAccounts.resolve(identity);
-      return this.issueStudentToken(user, isNewUser);
+      return this.issueStudentSession(
+        user,
+        isNewUser,
+        this.resolveStudentClient(dto.client, meta.origin, 'mobile'),
+        meta,
+      );
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -117,10 +158,99 @@ export class AuthService {
     }
   }
 
-  private issueStudentToken(
+  /** Rotate refresh and issue a new access token. */
+  async refreshStudentSession(refreshToken: string): Promise<StudentAuthResult> {
+    const rotated = await this.studentSessions.refresh(refreshToken);
+    if (!rotated) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this.usersService.findOne(rotated.userId);
+    if (!user.isActive) {
+      await this.studentSessions.revoke(rotated.sid, rotated.userId);
+      throw new UnauthorizedException('Account is deactivated');
+    }
+
+    const jwtPayload: JwtPayload = {
+      sub: user.id,
+      role: user.role,
+      sid: rotated.sid,
+    };
+    if (user.phoneNumber) {
+      jwtPayload.phoneNumber = user.phoneNumber;
+    }
+
+    const accessToken = this.jwtService.sign(jwtPayload, {
+      expiresIn: rotated.expiresInSec,
+    });
+
+    const sessionRemainingSec = Math.max(
+      1,
+      Math.floor((rotated.expiresAt.getTime() - Date.now()) / 1000),
+    );
+
+    const isWeb = rotated.client === 'web';
+
+    return {
+      response: new AuthResponseDto(accessToken, user, false, {
+        refreshToken: isWeb ? undefined : rotated.refreshToken,
+        expiresIn: rotated.expiresInSec,
+      }),
+      refreshCookie: isWeb
+        ? { token: rotated.refreshToken, maxAgeSec: sessionRemainingSec }
+        : undefined,
+    };
+  }
+
+  /**
+   * Revoke the current student Redis session. Idempotent.
+   * Prefers access-token `sid`; falls back to refresh cookie when access expired.
+   * Admin tokens and legacy JWTs without sid are a no-op for the JWT path.
+   */
+  async logoutStudent(
+    payload?: JwtPayload,
+    refreshToken?: string,
+  ): Promise<void> {
+    if (payload?.sid && payload.role !== UserRole.ADMIN) {
+      await this.studentSessions.revoke(payload.sid, payload.sub);
+      return;
+    }
+    if (refreshToken) {
+      await this.studentSessions.revokeByRefreshToken(refreshToken);
+    }
+  }
+
+  /**
+   * Browser origins listed in CORS_ORIGINS cannot opt into mobile session
+   * semantics (JSON refresh + long access). Native apps typically send no Origin.
+   */
+  resolveStudentClient(
+    requested: AuthClient | undefined,
+    origin: string | undefined,
+    fallback: AuthClient = 'web',
+  ): AuthClient {
+    if (origin) {
+      const allowed = parseCorsOrigins(process.env.CORS_ORIGINS);
+      if (allowed.includes(origin)) {
+        return 'web';
+      }
+    }
+    return requested || fallback;
+  }
+
+  private async issueStudentSession(
     user: UserResponseDto,
     isNewUser: boolean,
-  ): AuthResponseDto {
+    client: AuthClient,
+    meta: StudentSessionRequestMeta,
+  ): Promise<StudentAuthResult> {
+    const session = await this.studentSessions.create({
+      userId: user.id,
+      client,
+      userAgent: meta.userAgent,
+      ip: meta.ip,
+    });
+
     const jwtPayload: JwtPayload = {
       sub: user.id,
       role: user.role,
@@ -129,11 +259,52 @@ export class AuthService {
       jwtPayload.phoneNumber = user.phoneNumber;
     }
 
-    const accessToken = this.jwtService.sign(jwtPayload);
-    this.logger.log(
-      `JWT token generated for user: ${user.id}, isNewUser: ${isNewUser}`,
-    );
-    return new AuthResponseDto(accessToken, user, isNewUser);
+    try {
+      // Degraded Redis: issue legacy JWT without sid so the user is not locked out.
+      if (!session.persisted) {
+        const accessToken = this.jwtService.sign(jwtPayload, {
+          expiresIn: session.expiresInSec,
+        });
+        this.logger.warn(
+          `auth.session.degraded: legacy JWT issued for user ${user.id} (no sid)`,
+        );
+        return {
+          response: new AuthResponseDto(accessToken, user, isNewUser, {
+            expiresIn: session.expiresInSec,
+          }),
+        };
+      }
+
+      jwtPayload.sid = session.sid;
+      const accessExpiresIn =
+        client === 'web'
+          ? Math.min(WEB_ACCESS_TTL_SEC, session.expiresInSec)
+          : session.expiresInSec;
+      const accessToken = this.jwtService.sign(jwtPayload, {
+        expiresIn: accessExpiresIn,
+      });
+
+      this.logger.log(
+        `Student session created for user ${user.id} client=${session.client} sid=${session.sid} isNewUser=${isNewUser}`,
+      );
+
+      const isWeb = client === 'web';
+      return {
+        response: new AuthResponseDto(accessToken, user, isNewUser, {
+          refreshToken: isWeb ? undefined : session.refreshToken,
+          expiresIn: accessExpiresIn,
+        }),
+        refreshCookie: isWeb
+          ? { token: session.refreshToken, maxAgeSec: session.expiresInSec }
+          : undefined,
+      };
+    } catch (error) {
+      this.logger.error(
+        'Unexpected error during authentication:',
+        error?.message,
+      );
+      throw new UnauthorizedException('Authentication failed');
+    }
   }
 
   /**
@@ -218,10 +389,65 @@ export class AuthService {
         throw new UnauthorizedException('Account is deactivated');
       }
 
+      // Admin tokens never use Redis sessions.
+      if (user.role === UserRole.ADMIN || payload.role === UserRole.ADMIN) {
+        return user;
+      }
+
+      // New student tokens carry sid and must map to a live Redis session
+      // (unless degraded mode / Redis blip — assertActive handles that).
+      if (payload.sid) {
+        const session = await this.studentSessions.assertActive(
+          payload.sid,
+          payload.sub,
+        );
+        if (!session) {
+          throw new UnauthorizedException('Session has ended');
+        }
+
+        const touch = await this.studentSessions.touchActivity(
+          payload.sid,
+          payload.sub,
+        );
+        if (touch.shouldUpdateMongo) {
+          void this.usersService
+            .touchLastActiveAt(payload.sub)
+            .catch(error => {
+              this.logger.warn(
+                `Failed to touch lastActiveAt for ${payload.sub}: ${error?.message}`,
+              );
+            });
+        }
+      } else {
+        // Legacy student JWT (no sid): still track activity, no Redis bind.
+        void this.touchLegacyActivity(payload.sub);
+      }
+
       return user;
     } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
       this.logger.error('JWT payload validation failed:', error.message);
       throw new UnauthorizedException('Invalid token');
+    }
+  }
+
+  private async touchLegacyActivity(userId: string): Promise<void> {
+    // Reuse session service throttle via a synthetic sid key so we do not
+    // write Mongo on every legacy request either.
+    const touch = await this.studentSessions.touchActivity(
+      `legacy:${userId}`,
+      userId,
+    );
+    if (touch.shouldUpdateMongo) {
+      try {
+        await this.usersService.touchLastActiveAt(userId);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to touch lastActiveAt for legacy user ${userId}: ${error?.message}`,
+        );
+      }
     }
   }
 }

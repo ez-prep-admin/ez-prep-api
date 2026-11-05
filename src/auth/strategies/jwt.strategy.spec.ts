@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtStrategy } from './jwt.strategy';
+import { JwtStrategy, JWT_PAYLOAD_REQUEST_KEY } from './jwt.strategy';
 import { AuthService } from '../auth.service';
 
 describe('JwtStrategy', () => {
@@ -30,12 +30,16 @@ describe('JwtStrategy', () => {
     expect(strategy).toBeDefined();
   });
 
-  it('should return the user when payload is valid', async () => {
-    const payload = { sub: '1', phoneNumber: '+1', role: 'user' };
+  it('should return the user when payload is valid and stash the payload', async () => {
+    const payload = { sub: '1', phoneNumber: '+1', role: 'user', sid: 's1' };
     const user = { id: '1' };
+    const req = {} as Record<string, unknown>;
     mockAuthService.validateJwtPayload.mockResolvedValue(user);
 
-    await expect(strategy.validate(payload as any)).resolves.toEqual(user);
+    await expect(
+      strategy.validate(req as never, payload as never),
+    ).resolves.toEqual(user);
+    expect(req[JWT_PAYLOAD_REQUEST_KEY]).toEqual(payload);
     expect(mockAuthService.validateJwtPayload).toHaveBeenCalledWith(payload);
   });
 
@@ -43,7 +47,7 @@ describe('JwtStrategy', () => {
     mockAuthService.validateJwtPayload.mockResolvedValue(null);
 
     await expect(
-      strategy.validate({ sub: 'missing' } as any),
+      strategy.validate({} as never, { sub: 'missing' } as never),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

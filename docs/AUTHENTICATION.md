@@ -1,5 +1,7 @@
 # Authentication System Documentation
 
+> **Current student session model (web HttpOnly refresh, Redis `sid`, 15m access):** see [`STUDENT_SESSION_AUTH.md`](./STUDENT_SESSION_AUTH.md). This file remains useful for MSG91 OTP background; storage and refresh details below are partially superseded.
+
 ## Overview
 
 This application implements a **OTP-based authentication system** using **MSG91** for SMS OTP delivery. The system handles both user registration and login in a **single seamless flow**.
