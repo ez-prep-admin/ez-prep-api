@@ -22,7 +22,7 @@ describe('question.prompt', () => {
     expect(without).toContain('No solution provided');
   });
 
-  it('builds a batch prompt with and without solutions', () => {
+  it('builds a batch prompt with solution blocks and a closing label reminder', () => {
     const prompt = buildBatchQuestionUserPrompt([
       { number: 1, question: 'Q1', solution: 'S1' },
       { number: 2, question: 'Q2' },
@@ -31,21 +31,27 @@ describe('question.prompt', () => {
     expect(prompt).toContain('S1');
     expect(prompt).toContain('No solution provided.');
     expect(prompt).toContain('2 questions');
-    expect(prompt).toContain('Do not move the correct option to (a)');
+    expect(prompt.indexOf('Question 1')).toBeLessThan(
+      prompt.indexOf('FINAL CHECK'),
+    );
+    expect(prompt).toContain('Do not mark every question as "a"');
   });
 
-  it('tells the model to keep source labels and not default every answer to a', () => {
-    expect(QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
-      'Do not default correctAnswer to "a"',
-    );
-    expect(QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
-      'randomly reorders the saved options',
-    );
-    expect(BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT).toContain(
-      'Do not default correctAnswer to "a"',
-    );
+  it('puts answer-label rules at the start and end of system prompts', () => {
+    for (const prompt of [
+      QUESTION_EXTRACTION_SYSTEM_PROMPT,
+      BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+    ]) {
+      expect(prompt).toContain('CRITICAL — answer labels');
+      expect(prompt).toContain('FINAL CHECK — before you output JSON');
+      expect(prompt.indexOf('CRITICAL — answer labels')).toBeLessThan(
+        prompt.indexOf('FINAL CHECK — before you output JSON'),
+      );
+      expect(prompt).toContain('Never move the correct choice onto (a)');
+    }
+
     expect(buildQuestionUserPrompt({ number: 1, question: 'Q' })).toContain(
-      'Do not move the correct option to (a)',
+      'FINAL CHECK — before you output JSON',
     );
   });
 });
