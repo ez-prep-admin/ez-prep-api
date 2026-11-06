@@ -49,6 +49,7 @@ import { QuestionPersistenceService } from './persistence/question-persistence.s
 import { FailedQuestionService } from './persistence/failed-question.service';
 import { FailedQuestionDocument } from './schemas/failed-question.schema';
 import { shuffleImportOptions } from './utils/shuffle-options.util';
+import { resolveCorrectAnswerLabel } from './utils/extract-correct-answer-label.util';
 import {
   ImportImageMaterializeError,
   ImportImageStorageService,
@@ -1107,6 +1108,8 @@ export class ImportService {
       chunk.questions.map(question => [question.number, question]),
     );
 
+    this.warnIfCorrectAnswerCollapsedToA(chunk.chunkIndex, batchOutputs);
+
     // Process each output from LLM
     for (const output of batchOutputs) {
       try {
@@ -1549,10 +1552,25 @@ export class ImportService {
     const { number: _ignoredQuestionNumber, ...aiOutput } = output;
     void _ignoredQuestionNumber;
 
+    const answerResolution = resolveCorrectAnswerLabel(
+      aiOutput.correctAnswer,
+      matched.solution,
+    );
+    if (answerResolution.overridden) {
+      this.logger.warn(
+        `[enrich] Q${matched.number}: overriding model correctAnswer="${aiOutput.correctAnswer}" with solution label="${answerResolution.label}"`,
+      );
+    }
+
+    const correctedOutput = {
+      ...aiOutput,
+      correctAnswer: answerResolution.label,
+    };
+
     const validated = skipBusinessValidation
-      ? aiOutput
+      ? correctedOutput
       : this.businessValidator.validate(
-          aiOutput,
+          correctedOutput,
           NEET_BUSINESS_VALIDATOR_CONFIG,
         );
 
@@ -1562,6 +1580,26 @@ export class ImportService {
       ...mapped,
       options: shuffleImportOptions(mapped.options),
     };
+  }
+
+  private warnIfCorrectAnswerCollapsedToA(
+    chunkIndex: number,
+    batchOutputs: AiQuestionBatchItem[],
+  ): void {
+    if (batchOutputs.length < 3) {
+      return;
+    }
+
+    const aCount = batchOutputs.filter(
+      output => output.correctAnswer?.toLowerCase() === 'a',
+    ).length;
+    const share = aCount / batchOutputs.length;
+
+    if (share >= 0.75) {
+      this.logger.warn(
+        `[enrich] Chunk ${chunkIndex}: ${aCount}/${batchOutputs.length} model correctAnswer values are "a" (${Math.round(share * 100)}%). Solution-label override + option shuffle will still run.`,
+      );
+    }
   }
 
   private buildQuestionDraftOnFailure(

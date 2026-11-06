@@ -93,7 +93,18 @@ describe('DeepseekService', () => {
     expect(result.totalTokens).toBe(30);
     const request = mockCreate.mock.calls[0][0];
     expect(request.thinking).toEqual({ type: 'enabled' });
-    expect(request.max_tokens).toBeGreaterThanOrEqual(32768);
+    expect(request.max_tokens).toBe(65536);
+  });
+
+  it('honors DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS when thinking is enabled', async () => {
+    const service = buildService({
+      DEEPSEEK_MAX_OUTPUT_TOKENS: 16384,
+      DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS: 70000,
+    });
+    await service.extractQuestionsBatch([matched], {
+      thinking: { enabled: true, reasoningEffort: 'high' },
+    });
+    expect(mockCreate.mock.calls[0][0].max_tokens).toBe(70000);
   });
 
   it('warns when batch finish_reason is length', async () => {

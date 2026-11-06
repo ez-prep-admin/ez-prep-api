@@ -6,15 +6,13 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export class AppUsersActiveSummaryDto {
   @ApiProperty({
-    description:
-      'Unique learners with lastActiveAt within the past 24 hours',
+    description: 'Unique learners with lastActiveAt within the past 24 hours',
     example: 12,
   })
   last1Day: number;
 
   @ApiProperty({
-    description:
-      'Unique learners with lastActiveAt within the past 7 days',
+    description: 'Unique learners with lastActiveAt within the past 7 days',
     example: 48,
   })
   last7Days: number;

@@ -13,10 +13,11 @@ import { DeepseekLlmResult, DeepseekThinkingOptions } from './deepseek.types';
 /** Default output budget for 20-question batch enrichment with LaTeX explanations */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
 /**
- * Thinking shares max_tokens with final content. Chemistry/STEM batches need
- * enough headroom after reasoning or content comes back empty / truncated.
+ * Thinking shares max_tokens with final content. STEM batches (LaTeX + multi-step
+ * solutions) need a large shared budget so reasoning does not crowd out JSON.
+ * Floor is 64k; override with DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS if needed.
  */
-const THINKING_MIN_OUTPUT_TOKENS = 32_768;
+const THINKING_MIN_OUTPUT_TOKENS = 65_536;
 
 @Injectable()
 export class DeepseekService {
@@ -186,7 +187,17 @@ export class DeepseekService {
       return this.maxOutputTokens;
     }
 
-    return Math.max(this.maxOutputTokens, THINKING_MIN_OUTPUT_TOKENS);
+    const configuredThinking = Number(
+      this.configService.get<string | number>(
+        'DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS',
+      ),
+    );
+    const thinkingBudget =
+      Number.isFinite(configuredThinking) && configuredThinking > 0
+        ? configuredThinking
+        : THINKING_MIN_OUTPUT_TOKENS;
+
+    return Math.max(this.maxOutputTokens, thinkingBudget);
   }
 
   private toLlmResult(
