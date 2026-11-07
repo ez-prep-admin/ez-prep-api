@@ -45,4 +45,32 @@ describe('UploadQuestionPdfDto', () => {
     const errors = await errorsFor({ ...base, unexpected: 'x' });
     expect(errors.map(error => error.property)).toContain('unexpected');
   });
+
+  it('accepts a known prompt enhancer and normalizes a single multipart value', async () => {
+    const dto = toDto({ ...base, promptEnhancers: 'shared-passage' });
+    expect(
+      await errorsFor({ ...base, promptEnhancers: 'shared-passage' }),
+    ).toHaveLength(0);
+    expect(dto.promptEnhancers).toEqual(['shared-passage']);
+
+    const multiCorrect = toDto({
+      ...base,
+      promptEnhancers: 'multi-correct-statements',
+    });
+    expect(
+      await errorsFor({
+        ...base,
+        promptEnhancers: 'multi-correct-statements',
+      }),
+    ).toHaveLength(0);
+    expect(multiCorrect.promptEnhancers).toEqual(['multi-correct-statements']);
+  });
+
+  it('rejects an unknown prompt enhancer id', async () => {
+    const errors = await errorsFor({
+      ...base,
+      promptEnhancers: ['not-real'],
+    });
+    expect(errors.map(error => error.property)).toContain('promptEnhancers');
+  });
 });

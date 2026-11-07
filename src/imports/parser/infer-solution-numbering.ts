@@ -38,11 +38,18 @@ const CANDIDATE_PATTERNS: Array<{
 ];
 
 /** Fallback when the solutions section is a Mathpix itemize list and nothing else matches. */
-const ITEMIZE_SOLUTION_PATTERN = {
-  regex: /^\\item\[(\d+)\]/,
-  source: '^\\\\item\\[(\\d+)\\]',
-  type: 'numbered' as const,
-};
+const ITEMIZE_SOLUTION_PATTERNS = [
+  {
+    regex: /^\\item\[(\d+)\.\]/,
+    source: '^\\\\item\\[(\\d+)\\.\\]',
+    type: 'numbered' as const,
+  },
+  {
+    regex: /^\\item\[(\d+)\]/,
+    source: '^\\\\item\\[(\\d+)\\]',
+    type: 'numbered' as const,
+  },
+];
 
 /**
  * Infer how answers are numbered in a solutions section by scoring line matches.
@@ -61,8 +68,7 @@ export function inferSolutionNumberingRegex(
   }
 
   const best = scoreSolutionPattern(lines, CANDIDATE_PATTERNS);
-  const chosen =
-    best ?? scoreSolutionPattern(lines, [ITEMIZE_SOLUTION_PATTERN]);
+  const chosen = best ?? scoreSolutionPattern(lines, ITEMIZE_SOLUTION_PATTERNS);
 
   if (!chosen) {
     return null;

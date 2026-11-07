@@ -196,6 +196,14 @@ export class GetUploadDetailsResponseDto {
 
   @ApiPropertyOptional({
     description:
+      'Prompt enhancer ids selected at upload. Empty when none were selected.',
+    type: [String],
+    example: ['shared-passage'],
+  })
+  promptEnhancers?: string[];
+
+  @ApiPropertyOptional({
+    description:
       'S3 key for markdown file (if parsed). To retrieve markdown content, download from S3 using this key.',
   })
   markdownS3Key?: string;
@@ -310,6 +318,14 @@ export class UploadMetadataDto {
     type: [String],
   })
   tagIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Prompt enhancer ids selected at upload. Empty when none were selected.',
+    type: [String],
+    example: ['shared-passage'],
+  })
+  promptEnhancers?: string[];
 
   @ApiPropertyOptional({
     description: 'S3 key for PDF',

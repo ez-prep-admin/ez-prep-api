@@ -116,6 +116,13 @@ export class QuestionUpload {
   source: string;
 
   /**
+   * Optional prompt enhancers selected at upload time (e.g. shared-passage).
+   * Empty means the default enrich prompts with no additive instructions.
+   */
+  @Prop({ type: [String], default: [] })
+  promptEnhancers: string[];
+
+  /**
    * Additional metadata (flexible field for future use)
    */
   @Prop({ type: Map, of: String })

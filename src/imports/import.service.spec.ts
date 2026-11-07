@@ -44,6 +44,8 @@ import {
 } from './types/import-question';
 import { MATHPIX_PENDING_BUCKET } from './types/import-image-metadata';
 import { MatchedQuestion } from './types/matched-question';
+import { PromptEnhancerComposer } from './prompt-enhancers/prompt-enhancer.composer';
+import { PromptEnhancerRegistry } from './prompt-enhancers/prompt-enhancer.registry';
 import { ZodError } from 'zod';
 
 const UPLOAD_ID = '507f1f77bcf86cd799439011';
@@ -172,6 +174,21 @@ describe('ImportService', () => {
   const mathpixService = {
     convertPdfToMarkdown: jest.fn(),
   };
+  const promptEnhancerComposer = {
+    prepareMatchedQuestions: jest.fn(
+      (questions: MatchedQuestion[]) => questions,
+    ),
+    resolveMaxQuestionsPerEnrichChunk: jest.fn().mockReturnValue(undefined),
+  };
+  const promptEnhancerRegistry = {
+    list: jest.fn().mockReturnValue([
+      {
+        id: 'shared-passage',
+        label: 'Shared passage (multiple questions)',
+        description: 'RC-style papers',
+      },
+    ]),
+  };
   const questionUploadModel: any = jest.fn();
   const subjectModel: any = {
     findById: jest.fn().mockReturnValue(subjectQuery()),
@@ -184,6 +201,12 @@ describe('ImportService', () => {
     questionUploadModel.updateOne = jest.fn().mockResolvedValue({});
     questionUploadModel.countDocuments = jest.fn().mockResolvedValue(0);
     subjectModel.findById.mockReturnValue(subjectQuery());
+    promptEnhancerComposer.resolveMaxQuestionsPerEnrichChunk.mockReturnValue(
+      undefined,
+    );
+    promptEnhancerComposer.prepareMatchedQuestions.mockImplementation(
+      (questions: MatchedQuestion[]) => questions,
+    );
     questionChunker.chunkByTokenLimit.mockImplementation(
       (questions: MatchedQuestion[]) => [
         { chunkIndex: 0, questions, estimatedTokens: 50 },
@@ -244,6 +267,14 @@ describe('ImportService', () => {
         { provide: S3Service, useValue: s3Service },
         { provide: MathpixService, useValue: mathpixService },
         {
+          provide: PromptEnhancerComposer,
+          useValue: promptEnhancerComposer,
+        },
+        {
+          provide: PromptEnhancerRegistry,
+          useValue: promptEnhancerRegistry,
+        },
+        {
           provide: getModelToken(QuestionUpload.name),
           useValue: questionUploadModel,
         },
@@ -252,6 +283,86 @@ describe('ImportService', () => {
     }).compile();
 
     service = module.get(ImportService);
+  });
+
+  describe('prompt enhancers on enrich', () => {
+    it('passes upload prompt enhancers through to DeepSeek', async () => {
+      await service.enrichMatchedQuestions(matched, {
+        mapperMetadata: {
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          tagIds: [],
+        },
+        promptEnhancers: ['shared-passage'],
+        maxRetries: 1,
+      });
+
+      expect(
+        promptEnhancerComposer.prepareMatchedQuestions,
+      ).toHaveBeenCalledWith(matched, ['shared-passage']);
+      expect(deepseekService.extractQuestionsBatch).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ promptEnhancers: ['shared-passage'] }),
+      );
+    });
+
+    it('defaults to no prompt enhancers on the standard enrich path', async () => {
+      await service.enrichMatchedQuestions(matched, {
+        mapperMetadata: {
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          tagIds: [],
+        },
+        maxRetries: 1,
+      });
+
+      expect(deepseekService.extractQuestionsBatch).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ promptEnhancers: [] }),
+      );
+    });
+
+    it('applies enhancer maxQuestionsPerEnrichChunk when shared-passage is selected', async () => {
+      const many = Array.from({ length: 12 }, (_, index) => ({
+        index,
+        number: index + 1,
+        question: `Q${index + 1}`,
+        solution: `S${index + 1}`,
+      }));
+      promptEnhancerComposer.resolveMaxQuestionsPerEnrichChunk.mockReturnValue(
+        5,
+      );
+      questionChunker.chunkByTokenLimit.mockImplementation(
+        (
+          questions: MatchedQuestion[],
+          options?: { maxQuestionsPerChunk?: number },
+        ) => {
+          expect(options?.maxQuestionsPerChunk).toBe(5);
+          return [{ chunkIndex: 0, questions, estimatedTokens: 50 }];
+        },
+      );
+
+      await service.enrichMatchedQuestions(many, {
+        mapperMetadata: {
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          tagIds: [],
+        },
+        promptEnhancers: ['shared-passage'],
+        maxRetries: 1,
+      });
+
+      expect(
+        promptEnhancerComposer.resolveMaxQuestionsPerEnrichChunk,
+      ).toHaveBeenCalledWith(['shared-passage']);
+      expect(questionChunker.chunkByTokenLimit).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({ maxQuestionsPerChunk: 5 }),
+      );
+    });
   });
 
   describe('parseMarkdown', () => {
@@ -722,6 +833,48 @@ describe('ImportService', () => {
       expect(result.title).toBe('Paper');
       expect(result.status).toBe('uploaded');
       expect(questionUploadModel.mock.calls[0][0].tags).toEqual([]);
+      expect(questionUploadModel.mock.calls[0][0].promptEnhancers).toEqual([]);
+    });
+
+    it('stores selected prompt enhancers on the upload', async () => {
+      s3Service.uploadFile.mockResolvedValue({
+        key: 'pdf/key.pdf',
+        bucket: 'uploads',
+        region: 'ap-south-1',
+        size: 12,
+        contentType: 'application/pdf',
+        etag: 'etag',
+      });
+      questionUploadModel.mockImplementation(() => makeUpload());
+
+      await service.uploadQuestionPdf(
+        {
+          buffer: Buffer.from('%PDF'),
+          originalname: 'paper.pdf',
+          size: 4,
+          mimetype: 'application/pdf',
+        } as Express.Multer.File,
+        {
+          subjectId: SUBJECT_ID,
+          topicId: TOPIC_ID,
+          examIds: [SUBJECT_ID],
+          promptEnhancers: ['shared-passage'],
+        },
+      );
+
+      expect(questionUploadModel.mock.calls.at(-1)[0].promptEnhancers).toEqual([
+        'shared-passage',
+      ]);
+    });
+
+    it('lists prompt enhancers from the registry', () => {
+      expect(service.listPromptEnhancers()).toEqual([
+        {
+          id: 'shared-passage',
+          label: 'Shared passage (multiple questions)',
+          description: 'RC-style papers',
+        },
+      ]);
     });
 
     it('stores selected tag ids and lists them on the upload', async () => {
@@ -753,6 +906,7 @@ describe('ImportService', () => {
       const created = questionUploadModel.mock.calls.at(-1)[0];
       expect(created.tags).toHaveLength(1);
       expect(created.tags[0].toString()).toBe(TOPIC_ID);
+      expect(created.promptEnhancers).toEqual([]);
 
       questionUploadModel.findById.mockResolvedValue(
         makeUpload({ tags: [new Types.ObjectId(TOPIC_ID)] }),

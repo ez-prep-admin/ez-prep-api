@@ -8,7 +8,13 @@ import {
   buildQuestionUserPrompt,
   QUESTION_EXTRACTION_SYSTEM_PROMPT,
 } from '../prompt/question.prompt';
+import { PromptEnhancerComposer } from '../prompt-enhancers/prompt-enhancer.composer';
 import { DeepseekLlmResult, DeepseekThinkingOptions } from './deepseek.types';
+
+export type DeepseekExtractOptions = {
+  thinking?: DeepseekThinkingOptions;
+  promptEnhancers?: string[];
+};
 
 /** Default output budget for 20-question batch enrichment with LaTeX explanations */
 const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
@@ -26,7 +32,10 @@ export class DeepseekService {
   private readonly model: string;
   private readonly maxOutputTokens: number;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly promptEnhancerComposer: PromptEnhancerComposer,
+  ) {
     const apiKey = this.configService.get<string>('DEEPSEEK_API_KEY');
 
     if (!apiKey) {
@@ -67,7 +76,7 @@ export class DeepseekService {
 
   async extractQuestionDetailed(
     matched: MatchedQuestion,
-    options?: { thinking?: DeepseekThinkingOptions },
+    options?: DeepseekExtractOptions,
   ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     this.logger.log(`[deepseek] Single request started for Q${matched.number}`);
@@ -76,11 +85,17 @@ export class DeepseekService {
       [
         {
           role: 'system',
-          content: QUESTION_EXTRACTION_SYSTEM_PROMPT,
+          content: this.promptEnhancerComposer.composeEnrichSystemPrompt(
+            QUESTION_EXTRACTION_SYSTEM_PROMPT,
+            options?.promptEnhancers,
+          ),
         },
         {
           role: 'user',
-          content: buildQuestionUserPrompt(matched),
+          content: this.promptEnhancerComposer.composeEnrichUserPrompt(
+            buildQuestionUserPrompt(matched),
+            options?.promptEnhancers,
+          ),
         },
       ],
       options?.thinking,
@@ -107,7 +122,7 @@ export class DeepseekService {
 
   async extractQuestionsBatch(
     matchedQuestions: MatchedQuestion[],
-    options?: { thinking?: DeepseekThinkingOptions },
+    options?: DeepseekExtractOptions,
   ): Promise<DeepseekLlmResult> {
     const startedAt = Date.now();
     const numbers = matchedQuestions
@@ -123,11 +138,17 @@ export class DeepseekService {
       [
         {
           role: 'system',
-          content: BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+          content: this.promptEnhancerComposer.composeEnrichSystemPrompt(
+            BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+            options?.promptEnhancers,
+          ),
         },
         {
           role: 'user',
-          content: buildBatchQuestionUserPrompt(matchedQuestions),
+          content: this.promptEnhancerComposer.composeEnrichUserPrompt(
+            buildBatchQuestionUserPrompt(matchedQuestions),
+            options?.promptEnhancers,
+          ),
         },
       ],
       options?.thinking,

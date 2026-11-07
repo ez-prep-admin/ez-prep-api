@@ -62,6 +62,7 @@ import {
   StartEnrichUploadResponseDto,
 } from './dto/enrich-questions.dto';
 import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
+import { PromptEnhancerCatalogItemDto } from './dto/prompt-enhancer.dto';
 
 @ApiTags('imports')
 @Controller('imports')
@@ -71,6 +72,29 @@ import { ParseMarkdownResponseDto } from './dto/parse-markdown.dto';
 @ApiUnauthorizedResponse({ description: 'Admin privileges required' })
 export class ImportController {
   constructor(private readonly importService: ImportService) {}
+
+  @Get('prompt-enhancers')
+  @ApiOperation({
+    summary: 'List available prompt enhancers',
+    description:
+      'Returns catalog entries for optional PDF-import prompt enhancers. ' +
+      'Pass selected ids as `promptEnhancers` on upload (and optionally enrich).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Prompt enhancer catalog',
+    type: PromptEnhancerCatalogItemDto,
+    isArray: true,
+  })
+  listPromptEnhancers(): {
+    message: string;
+    data: PromptEnhancerCatalogItemDto[];
+  } {
+    return {
+      message: 'Prompt enhancers retrieved successfully',
+      data: this.importService.listPromptEnhancers(),
+    };
+  }
 
   @Post('questions/:uploadId')
   @HttpCode(HttpStatus.CREATED)
@@ -167,6 +191,13 @@ export class ImportController {
           description:
             'Optional tag IDs applied to every question imported from this PDF. Omit when no tag is selected.',
           example: ['507f1f77bcf86cd799439016'],
+        },
+        promptEnhancers: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Optional prompt enhancer ids (e.g. shared-passage). Omit for the default enrich pipeline.',
+          example: ['shared-passage'],
         },
         metadata: {
           type: 'object',
