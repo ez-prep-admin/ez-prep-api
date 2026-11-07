@@ -151,9 +151,14 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
   ): number | null {
     if (!this.structure) return null;
 
-    // First capture group should contain the number/label when present
-    const captured = match[1];
-    if (captured) {
+    // First defined capture group should contain the number/label when present.
+    // Combined itemize|plain patterns use alternate groups: (\d+) from \item[N.]
+    // or (\d+) from "N. ".
+    for (let index = 1; index < match.length; index++) {
+      const captured = match[index];
+      if (!captured) {
+        continue;
+      }
       const fromCapture = this.parseQuestionNumberToken(captured);
       if (fromCapture !== null) {
         return fromCapture;
@@ -197,6 +202,7 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
   private extractQuestionNumberFromText(text: string): number | null {
     const patterns = [
       /\\section\*\{Q(?:uestion)?\s*(\d+)\./i,
+      /\\item\[(\d+)\.?\]/,
       /\bQ\.(\d+)\b/i,
       /\bQ(?:uestion)?\s*(\d+)\b/i,
       /^#+\s*Q(?:uestion)?\s*(\d+)\b/i,
@@ -218,14 +224,19 @@ export class AdaptiveBoundaryStrategy implements QuestionBoundaryStrategy {
    * Extract content after question number/label
    */
   private extractContent(match: RegExpMatchArray, fullLine: string): string {
-    // If there's a second capture group, use it
-    if (match[2] !== undefined) {
+    // Patterns like `^(\d+)\.\s(.*)$` put the stem in group 2. Combined
+    // itemize|plain alternation also has a group 2, but that group is the
+    // alternate number capture (`4` in `4. stem`) — never treat digit-only
+    // groups as content.
+    if (
+      match[1] !== undefined &&
+      match[2] !== undefined &&
+      !/^\d+$/.test(match[2])
+    ) {
       return match[2];
     }
 
-    // Otherwise, remove the matched prefix from the line
-    const matchedText = match[0];
-    return fullLine.substring(matchedText.length).trim();
+    return fullLine.substring(match[0].length).trim();
   }
 
   /**

@@ -45,12 +45,22 @@ const CANDIDATE_PATTERNS: Array<{
   },
 ];
 
-/** Used only when no Q-heading or "1. " pattern matches. Nested lists must not replace those. */
-const ITEMIZE_QUESTION_PATTERN = {
-  lineRegex: /^\\item\[(\d+)\]/gm,
-  source: '^\\\\item\\[(\\d+)\\]',
-  type: 'numbered' as const,
-};
+/**
+ * Mathpix often emits `\item[1.]` (period inside brackets). Older samples use
+ * `\item[1]` without a period. Prefer the period-tolerant form.
+ */
+const ITEMIZE_QUESTION_PATTERNS = [
+  {
+    lineRegex: /^\\item\[(\d+)\.\]/gm,
+    source: '^\\\\item\\[(\\d+)\\.\\]',
+    type: 'numbered' as const,
+  },
+  {
+    lineRegex: /^\\item\[(\d+)\]/gm,
+    source: '^\\\\item\\[(\\d+)\\]',
+    type: 'numbered' as const,
+  },
+];
 
 /**
  * Score question-boundary patterns against the full markdown.
@@ -60,12 +70,99 @@ export function inferQuestionNumberingPattern(
   markdown: string,
 ): InferredQuestionPattern | null {
   const questionsPortion = extractQuestionsPortion(markdown);
-  const best = scoreQuestionPattern(questionsPortion, CANDIDATE_PATTERNS);
-  if (best) {
-    return best;
+  const bestPrimary = scoreQuestionPattern(
+    questionsPortion,
+    CANDIDATE_PATTERNS,
+  );
+  const bestItemize = scoreQuestionPattern(
+    questionsPortion,
+    ITEMIZE_QUESTION_PATTERNS,
+  );
+
+  if (bestItemize && shouldPreferItemizeOverPrimary(bestPrimary, bestItemize)) {
+    return withOptionalPlainNumberedFallback(
+      bestItemize,
+      bestPrimary,
+      questionsPortion,
+    );
   }
 
-  return scoreQuestionPattern(questionsPortion, [ITEMIZE_QUESTION_PATTERN]);
+  if (bestPrimary) {
+    return bestPrimary;
+  }
+
+  return bestItemize;
+}
+
+const PLAIN_NUMBERED_SOURCE = '^(\\d+)\\.\\s';
+
+/**
+ * Mathpix often wraps most stems as `\item[N.]` but leaves a few as plain `N. `.
+ * When itemize wins overall, keep matching those escaped plain-numbered lines too
+ * — even a single escape (below the usual ≥2 scoring floor) should stay reachable.
+ */
+function withOptionalPlainNumberedFallback(
+  itemize: InferredQuestionPattern,
+  primary: InferredQuestionPattern | null,
+  questionsPortion: string,
+): InferredQuestionPattern {
+  const plainFromPrimary =
+    primary &&
+    primary.type === 'numbered' &&
+    primary.regex === PLAIN_NUMBERED_SOURCE
+      ? primary.matchCount
+      : 0;
+  const plainMatchCount =
+    plainFromPrimary > 0
+      ? plainFromPrimary
+      : countPatternMatches(questionsPortion, PLAIN_NUMBERED_SOURCE);
+
+  if (plainMatchCount < 1) {
+    return itemize;
+  }
+
+  const combinedRegex = itemize.regex.includes('\\.\\]')
+    ? '^(?:\\\\item\\[(\\d+)\\.\\]|(\\d+)\\.\\s)'
+    : '^(?:\\\\item\\[(\\d+)\\]|(\\d+)\\.\\s)';
+
+  return {
+    ...itemize,
+    regex: combinedRegex,
+    matchCount: itemize.matchCount + plainMatchCount,
+  };
+}
+
+/**
+ * Prefer Mathpix itemize numbering only when the primary pattern looks like a
+ * *sparse* escape hatch (a few `N.` / `Qn.` lines) while itemize dominates.
+ *
+ * Full plain-numbered NEET papers often nest `\item[1.]` statement lists under
+ * each stem (~3 per question). That density must NOT flip boundaries to
+ * itemize. Require a low primary count **and** itemize counts strictly above
+ * the typical nested-statement ratio (or ≥4× primary).
+ */
+export const ITEMIZE_OVER_PRIMARY_MAX_SPARSE_PRIMARY = 6;
+
+export function shouldPreferItemizeOverPrimary(
+  primary: InferredQuestionPattern | null,
+  itemize: InferredQuestionPattern,
+): boolean {
+  if (!primary) {
+    return true;
+  }
+
+  const primaryCount = primary.matchCount;
+  const itemizeCount = itemize.matchCount;
+
+  if (primaryCount > ITEMIZE_OVER_PRIMARY_MAX_SPARSE_PRIMARY) {
+    return false;
+  }
+
+  const clearlyAboveNestedRatio =
+    itemizeCount > primaryCount * 3 && itemizeCount >= primaryCount + 8;
+  const stronglyItemizeLed = itemizeCount >= primaryCount * 4;
+
+  return clearlyAboveNestedRatio || stronglyItemizeLed;
 }
 
 function scoreQuestionPattern(

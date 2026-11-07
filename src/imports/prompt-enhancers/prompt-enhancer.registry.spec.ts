@@ -1,17 +1,24 @@
 import { BadRequestException } from '@nestjs/common';
-import { SHARED_PASSAGE_ENHANCER_ID } from './prompt-enhancer.ids';
+import {
+  MULTI_CORRECT_STATEMENTS_ENHANCER_ID,
+  SHARED_PASSAGE_ENHANCER_ID,
+} from './prompt-enhancer.ids';
 import { PromptEnhancerRegistry } from './prompt-enhancer.registry';
 
 describe('PromptEnhancerRegistry', () => {
   const registry = new PromptEnhancerRegistry();
 
-  it('lists registered enhancers including shared-passage', () => {
+  it('lists registered enhancers including shared-passage and multi-correct-statements', () => {
     const listed = registry.list();
     expect(listed).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: SHARED_PASSAGE_ENHANCER_ID,
           label: 'Shared passage (multiple questions)',
+        }),
+        expect.objectContaining({
+          id: MULTI_CORRECT_STATEMENTS_ENHANCER_ID,
+          label: 'More than one correct (statement MCQ)',
         }),
       ]),
     );

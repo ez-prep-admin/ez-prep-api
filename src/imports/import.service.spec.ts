@@ -298,10 +298,9 @@ describe('ImportService', () => {
         maxRetries: 1,
       });
 
-      expect(promptEnhancerComposer.prepareMatchedQuestions).toHaveBeenCalledWith(
-        matched,
-        ['shared-passage'],
-      );
+      expect(
+        promptEnhancerComposer.prepareMatchedQuestions,
+      ).toHaveBeenCalledWith(matched, ['shared-passage']);
       expect(deepseekService.extractQuestionsBatch).toHaveBeenCalledWith(
         expect.any(Array),
         expect.objectContaining({ promptEnhancers: ['shared-passage'] }),
@@ -336,7 +335,10 @@ describe('ImportService', () => {
         5,
       );
       questionChunker.chunkByTokenLimit.mockImplementation(
-        (questions: MatchedQuestion[], options?: { maxQuestionsPerChunk?: number }) => {
+        (
+          questions: MatchedQuestion[],
+          options?: { maxQuestionsPerChunk?: number },
+        ) => {
           expect(options?.maxQuestionsPerChunk).toBe(5);
           return [{ chunkIndex: 0, questions, estimatedTokens: 50 }];
         },

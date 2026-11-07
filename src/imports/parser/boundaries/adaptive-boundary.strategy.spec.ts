@@ -71,6 +71,28 @@ describe('AdaptiveBoundaryStrategy', () => {
     });
   });
 
+  it('keeps stem text for combined itemize|plain numbering regexes', () => {
+    strategy.initialize({
+      ...mathonGoStructure,
+      questionPattern: {
+        type: 'numbered',
+        regex: '^(?:\\\\item\\[(\\d+)\\.\\]|(\\d+)\\.\\s)',
+        exampleMatch: '\\item[1.] Stem',
+      },
+    });
+
+    expect(strategy.parseQuestionStart('\\item[1.] Wrapped stem')).toEqual({
+      number: 1,
+      content: 'Wrapped stem',
+    });
+    expect(
+      strategy.parseQuestionStart('4. Escaped plain stem that must remain'),
+    ).toEqual({
+      number: 4,
+      content: 'Escaped plain stem that must remain',
+    });
+  });
+
   it('throws when used before initialize', () => {
     const fresh = new AdaptiveBoundaryStrategy();
     expect(() => fresh.isQuestionStart('1. Q')).toThrow(/not initialized/);

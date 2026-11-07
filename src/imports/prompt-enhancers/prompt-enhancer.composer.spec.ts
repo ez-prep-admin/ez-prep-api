@@ -1,7 +1,11 @@
 import { BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT } from '../prompt/question.prompt';
-import { SHARED_PASSAGE_ENHANCER_ID } from './prompt-enhancer.ids';
+import {
+  MULTI_CORRECT_STATEMENTS_ENHANCER_ID,
+  SHARED_PASSAGE_ENHANCER_ID,
+} from './prompt-enhancer.ids';
 import { PromptEnhancerComposer } from './prompt-enhancer.composer';
 import { PromptEnhancerRegistry } from './prompt-enhancer.registry';
+import { MULTI_CORRECT_STATEMENTS_ENRICH_SYSTEM_ADDON } from './multi-correct-statements.enhancer';
 import { SHARED_PASSAGE_ENRICH_SYSTEM_ADDON } from './shared-passage.enhancer';
 
 describe('PromptEnhancerComposer', () => {
@@ -32,7 +36,9 @@ describe('PromptEnhancerComposer', () => {
       true,
     );
     expect(composed).toContain(SHARED_PASSAGE_ENRICH_SYSTEM_ADDON);
-    expect(composed).toContain(`Prompt enhancer: ${SHARED_PASSAGE_ENHANCER_ID}`);
+    expect(composed).toContain(
+      `Prompt enhancer: ${SHARED_PASSAGE_ENHANCER_ID}`,
+    );
     expect(composed).toContain(
       'set questionText to: the complete shared passage',
     );
@@ -62,5 +68,26 @@ describe('PromptEnhancerComposer', () => {
     expect(
       composer.resolveMaxQuestionsPerEnrichChunk([SHARED_PASSAGE_ENHANCER_ID]),
     ).toBe(5);
+    expect(
+      composer.resolveMaxQuestionsPerEnrichChunk([
+        MULTI_CORRECT_STATEMENTS_ENHANCER_ID,
+      ]),
+    ).toBeUndefined();
+  });
+
+  it('appends the multi-correct-statements addon with the elevator example', () => {
+    const composed = composer.composeEnrichSystemPrompt(
+      BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+      [MULTI_CORRECT_STATEMENTS_ENHANCER_ID],
+    );
+
+    expect(composed.startsWith(BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT)).toBe(
+      true,
+    );
+    expect(composed).toContain(MULTI_CORRECT_STATEMENTS_ENRICH_SYSTEM_ADDON);
+    expect(composed).toContain('III and IV only');
+    expect(composed).toContain(
+      'Apply this rewrite ONLY to questions that need it',
+    );
   });
 });

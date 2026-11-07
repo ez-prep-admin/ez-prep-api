@@ -4,10 +4,12 @@ import {
   PromptEnhancer,
   PromptEnhancerCatalogItem,
 } from './prompt-enhancer.types';
+import { multiCorrectStatementsEnhancer } from './multi-correct-statements.enhancer';
 import { sharedPassageEnhancer } from './shared-passage.enhancer';
 
 const REGISTERED_ENHANCERS: readonly PromptEnhancer[] = [
   sharedPassageEnhancer,
+  multiCorrectStatementsEnhancer,
 ];
 
 @Injectable()

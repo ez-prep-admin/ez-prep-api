@@ -116,7 +116,7 @@ const ENRICH_MAX_QUESTIONS_PER_CHUNK_WITH_THINKING = 5;
  * Bump when question-boundary rules change. Cached parses from an older
  * revision are discarded on the next enrich and rebuilt from the markdown.
  */
-export const MATCHED_QUESTION_CACHE_REVISION = 2;
+export const MATCHED_QUESTION_CACHE_REVISION = 3;
 
 export interface StartEnrichUploadResult {
   uploadId: string;
@@ -727,10 +727,11 @@ export class ImportService {
     const adaptiveChunking = options?.adaptiveChunking ?? true;
     const maxConcurrentChunks = options?.maxConcurrentChunks ?? 2;
     const promptEnhancers = options.promptEnhancers ?? [];
-    const preparedQuestions = this.promptEnhancerComposer.prepareMatchedQuestions(
-      matchedQuestions,
-      promptEnhancers,
-    );
+    const preparedQuestions =
+      this.promptEnhancerComposer.prepareMatchedQuestions(
+        matchedQuestions,
+        promptEnhancers,
+      );
     const indexedQuestions = ensureMatchedQuestionIndices(preparedQuestions);
 
     this.importImageStorage.clearSessionCache();
