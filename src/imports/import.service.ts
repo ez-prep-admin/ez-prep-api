@@ -97,6 +97,9 @@ import {
   IMPORT_JOB_PUBLISHER,
   IMPORT_PARSE_QUEUE,
 } from '../redis/redis.constants';
+import { PromptEnhancerComposer } from './prompt-enhancers/prompt-enhancer.composer';
+import { PromptEnhancerRegistry } from './prompt-enhancers/prompt-enhancer.registry';
+import { PromptEnhancerCatalogItem } from './prompt-enhancers/prompt-enhancer.types';
 
 /** deepseek-chat 64K context — generous input budget, reserve headroom for batch JSON output */
 const ENRICH_MAX_TOKENS_PER_CHUNK = 28000;
@@ -165,6 +168,8 @@ export class ImportService {
     private readonly importImageStorage: ImportImageStorageService,
     private readonly s3Service: S3Service,
     private readonly mathpixService: MathpixService,
+    private readonly promptEnhancerComposer: PromptEnhancerComposer,
+    private readonly promptEnhancerRegistry: PromptEnhancerRegistry,
     @InjectModel(QuestionUpload.name)
     private readonly questionUploadModel: Model<QuestionUploadDocument>,
     @InjectModel(Subject.name)
@@ -173,6 +178,10 @@ export class ImportService {
     @Inject(IMPORT_JOB_PUBLISHER)
     private readonly importJobs?: ImportJobPublisher | null,
   ) {}
+
+  listPromptEnhancers(): PromptEnhancerCatalogItem[] {
+    return this.promptEnhancerRegistry.list();
+  }
 
   async parseMarkdown(
     markdown: string,
@@ -526,6 +535,9 @@ export class ImportService {
 
       this.logger.log(formatEnrichThinkingLog(thinkingResolution.decision));
 
+      const promptEnhancers =
+        dto.promptEnhancers ?? upload.promptEnhancers ?? [];
+
       const result = await this.enrichMatchedQuestions(
         parsed.matchedQuestions,
         {
@@ -536,6 +548,7 @@ export class ImportService {
           mapperMetadata,
           uploadId,
           thinking: thinkingResolution.thinking,
+          promptEnhancers,
         },
       );
 
@@ -620,6 +633,7 @@ export class ImportService {
         maxConcurrentChunks: dto.maxConcurrentChunks ?? 2,
         mapperMetadata: this.buildMapperMetadataFromDto(dto),
         thinking: thinkingResolution.thinking,
+        promptEnhancers: dto.promptEnhancers ?? [],
       },
     );
   }
@@ -704,6 +718,7 @@ export class ImportService {
       mapperMetadata: QuestionMapperMetadata;
       uploadId?: string;
       thinking?: DeepseekThinkingOptions;
+      promptEnhancers?: string[];
     },
   ): Promise<EnrichDebugResult> {
     const startedAt = Date.now();
@@ -711,13 +726,26 @@ export class ImportService {
     const maxRetries = options?.maxRetries ?? 3;
     const adaptiveChunking = options?.adaptiveChunking ?? true;
     const maxConcurrentChunks = options?.maxConcurrentChunks ?? 2;
-    const indexedQuestions = ensureMatchedQuestionIndices(matchedQuestions);
+    const promptEnhancers = options.promptEnhancers ?? [];
+    const preparedQuestions = this.promptEnhancerComposer.prepareMatchedQuestions(
+      matchedQuestions,
+      promptEnhancers,
+    );
+    const indexedQuestions = ensureMatchedQuestionIndices(preparedQuestions);
 
     this.importImageStorage.clearSessionCache();
 
-    const maxQuestionsPerChunk = options.thinking?.enabled
+    const baseMaxQuestionsPerChunk = options.thinking?.enabled
       ? ENRICH_MAX_QUESTIONS_PER_CHUNK_WITH_THINKING
       : ENRICH_MAX_QUESTIONS_PER_CHUNK;
+    const enhancerMaxQuestionsPerChunk =
+      this.promptEnhancerComposer.resolveMaxQuestionsPerEnrichChunk(
+        promptEnhancers,
+      );
+    const maxQuestionsPerChunk =
+      enhancerMaxQuestionsPerChunk === undefined
+        ? baseMaxQuestionsPerChunk
+        : Math.min(baseMaxQuestionsPerChunk, enhancerMaxQuestionsPerChunk);
 
     const chunkingOptions = {
       maxTokensPerChunk: ENRICH_MAX_TOKENS_PER_CHUNK,
@@ -743,7 +771,7 @@ export class ImportService {
     };
 
     this.logger.log(
-      `[enrich] Starting batch enrichment: ${indexedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${maxQuestionsPerChunk}, thinking=${options.thinking?.enabled ? 'enabled' : 'disabled'})`,
+      `[enrich] Starting batch enrichment: ${indexedQuestions.length} question(s) in ${chunks.length} chunk(s) (parallel=${useParallel}, adaptive=${adaptiveChunking}, maxQuestionsPerChunk=${maxQuestionsPerChunk}, thinking=${options.thinking?.enabled ? 'enabled' : 'disabled'}, promptEnhancers=${promptEnhancers.length ? promptEnhancers.join(',') : 'none'})`,
     );
 
     this.logger.log(
@@ -758,6 +786,7 @@ export class ImportService {
           options.mapperMetadata,
           options.uploadId,
           options.thinking,
+          promptEnhancers,
         )
       : await this.processChunksSequential(
           chunks,
@@ -765,6 +794,7 @@ export class ImportService {
           options.mapperMetadata,
           options.uploadId,
           options.thinking,
+          promptEnhancers,
         );
 
     const { questions, errors } = aggregateChunkEnrichResults(chunkResults);
@@ -816,6 +846,7 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
     thinking?: DeepseekThinkingOptions,
+    promptEnhancers: string[] = [],
   ): Promise<ChunkEnrichResult[]> {
     const results: ChunkEnrichResult[] = [];
 
@@ -826,6 +857,8 @@ export class ImportService {
         mapperMetadata,
         uploadId,
         thinking,
+        1,
+        promptEnhancers,
       );
       results.push(result);
     }
@@ -843,6 +876,7 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
     thinking?: DeepseekThinkingOptions,
+    promptEnhancers: string[] = [],
   ): Promise<ChunkEnrichResult[]> {
     this.logger.log(
       `[enrich] Processing ${chunks.length} chunk(s) in parallel (concurrency=${maxConcurrentChunks})`,
@@ -860,6 +894,8 @@ export class ImportService {
             mapperMetadata,
             uploadId,
             thinking,
+            1,
+            promptEnhancers,
           ),
         ),
       );
@@ -909,6 +945,7 @@ export class ImportService {
     uploadId?: string,
     thinking?: DeepseekThinkingOptions,
     currentAttempt = 1,
+    promptEnhancers: string[] = [],
   ): Promise<ChunkEnrichResult> {
     const chunkStartedAt = Date.now();
     const numbers = chunk.questions.map(question => question.number).join(', ');
@@ -920,7 +957,7 @@ export class ImportService {
     try {
       const llmResult = await this.deepseekService.extractQuestionsBatch(
         chunk.questions,
-        { thinking },
+        { thinking, promptEnhancers },
       );
 
       this.logger.log(
@@ -961,6 +998,7 @@ export class ImportService {
           mapperMetadata,
           uploadId,
           thinking,
+          promptEnhancers,
         );
       }
 
@@ -981,6 +1019,7 @@ export class ImportService {
           uploadId,
           thinking,
           currentAttempt + 1,
+          promptEnhancers,
         );
       }
 
@@ -1013,6 +1052,7 @@ export class ImportService {
     mapperMetadata: QuestionMapperMetadata,
     uploadId?: string,
     thinking?: DeepseekThinkingOptions,
+    promptEnhancers: string[] = [],
   ): Promise<ChunkEnrichResult> {
     const midpoint = Math.ceil(chunk.questions.length / 2);
     const left: QuestionChunk = {
@@ -1041,6 +1081,8 @@ export class ImportService {
         mapperMetadata,
         uploadId,
         thinking,
+        1,
+        promptEnhancers,
       ),
       this.processChunkWithRetry(
         right,
@@ -1048,6 +1090,8 @@ export class ImportService {
         mapperMetadata,
         uploadId,
         thinking,
+        1,
+        promptEnhancers,
       ),
     ]);
 
@@ -2012,6 +2056,7 @@ export class ImportService {
         topic: dto.topicId ? new Types.ObjectId(dto.topicId) : undefined,
         exams: dto.examIds?.map(id => new Types.ObjectId(id)) ?? [],
         tags: dto.tagIds?.map(id => new Types.ObjectId(id)) ?? [],
+        promptEnhancers: dto.promptEnhancers ?? [],
         metadata: dto.metadata
           ? new Map(Object.entries(dto.metadata))
           : undefined,
@@ -2311,6 +2356,7 @@ export class ImportService {
       topicId: upload.topic?.toString(),
       examIds: upload.exams?.map(id => id.toString()),
       tagIds: upload.tags?.map(id => id.toString()) ?? [],
+      promptEnhancers: upload.promptEnhancers ?? [],
       markdownS3Key: upload.markdownS3Key,
       errorMessage: upload.errorMessage,
       enrichedAt: upload.enrichedAt,
@@ -2356,6 +2402,7 @@ export class ImportService {
         topicId: upload.topic?.toString(),
         examIds: upload.exams?.map(id => id.toString()),
         tagIds: upload.tags?.map(id => id.toString()) ?? [],
+        promptEnhancers: upload.promptEnhancers ?? [],
         s3Key: upload.s3Key,
         markdownS3Key: upload.markdownS3Key,
         errorMessage: upload.errorMessage,

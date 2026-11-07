@@ -6,9 +6,11 @@ import {
   ArrayMinSize,
   IsObject,
   Allow,
+  IsIn,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PROMPT_ENHANCER_IDS } from '../prompt-enhancers/prompt-enhancer.ids';
 
 function parseOptionalJsonField(value: unknown): unknown {
   if (value === undefined || value === null || value === '') {
@@ -113,6 +115,29 @@ export class UploadQuestionPdfDto {
     message: 'Each tag ID must be a valid MongoDB ObjectId',
   })
   tagIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Optional prompt enhancer ids applied during AI enrich (e.g. shared-passage). ' +
+      'Omit or pass an empty list for the default pipeline with no additive prompts.',
+    example: ['shared-passage'],
+    type: [String],
+    enum: PROMPT_ENHANCER_IDS,
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    const parsed = parseOptionalJsonField(value);
+    if (parsed === undefined) {
+      return undefined;
+    }
+    return Array.isArray(parsed) ? parsed : [parsed];
+  })
+  @IsArray({ message: 'Prompt enhancers must be an array' })
+  @IsIn([...PROMPT_ENHANCER_IDS], {
+    each: true,
+    message: `Each prompt enhancer must be one of: ${PROMPT_ENHANCER_IDS.join(', ')}`,
+  })
+  promptEnhancers?: string[];
 
   @ApiPropertyOptional({
     description: 'Additional metadata as key-value pairs',

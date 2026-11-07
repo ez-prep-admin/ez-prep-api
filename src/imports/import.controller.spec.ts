@@ -20,6 +20,7 @@ describe('ImportController', () => {
     deleteFailedQuestion: jest.fn(),
     getUploadDetails: jest.fn(),
     listUploads: jest.fn(),
+    listPromptEnhancers: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -38,6 +39,20 @@ describe('ImportController', () => {
   });
 
   const user = { id: 'user-1' } as never;
+
+  it('listPromptEnhancers wraps the registry catalog', () => {
+    importService.listPromptEnhancers.mockReturnValue([
+      {
+        id: 'shared-passage',
+        label: 'Shared passage (multiple questions)',
+        description: 'RC',
+      },
+    ]);
+    expect(controller.listPromptEnhancers()).toMatchObject({
+      message: 'Prompt enhancers retrieved successfully',
+      data: [{ id: 'shared-passage' }],
+    });
+  });
 
   it('persistQuestions wraps the service result', async () => {
     importService.persistQuestions.mockResolvedValue({

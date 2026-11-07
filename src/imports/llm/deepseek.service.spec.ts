@@ -1,4 +1,9 @@
 import { ConfigService } from '@nestjs/config';
+import { BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT } from '../prompt/question.prompt';
+import { SHARED_PASSAGE_ENHANCER_ID } from '../prompt-enhancers/prompt-enhancer.ids';
+import { PromptEnhancerComposer } from '../prompt-enhancers/prompt-enhancer.composer';
+import { PromptEnhancerRegistry } from '../prompt-enhancers/prompt-enhancer.registry';
+import { SHARED_PASSAGE_ENRICH_SYSTEM_ADDON } from '../prompt-enhancers/shared-passage.enhancer';
 import { DeepseekService } from './deepseek.service';
 
 const mockCreate = jest.fn();
@@ -35,6 +40,8 @@ describe('DeepseekService', () => {
     },
   };
 
+  const composer = new PromptEnhancerComposer(new PromptEnhancerRegistry());
+
   function buildService(config: Record<string, unknown> = {}) {
     const configService = {
       get: jest.fn((key: string) => {
@@ -48,7 +55,7 @@ describe('DeepseekService', () => {
         return defaults[key];
       }),
     } as unknown as ConfigService;
-    return new DeepseekService(configService);
+    return new DeepseekService(configService, composer);
   }
 
   beforeEach(() => {
@@ -59,9 +66,12 @@ describe('DeepseekService', () => {
   it('requires DEEPSEEK_API_KEY', () => {
     expect(
       () =>
-        new DeepseekService({
-          get: () => undefined,
-        } as unknown as ConfigService),
+        new DeepseekService(
+          {
+            get: () => undefined,
+          } as unknown as ConfigService,
+          composer,
+        ),
     ).toThrow(/DEEPSEEK_API_KEY/);
   });
 
@@ -94,6 +104,21 @@ describe('DeepseekService', () => {
     const request = mockCreate.mock.calls[0][0];
     expect(request.thinking).toEqual({ type: 'enabled' });
     expect(request.max_tokens).toBe(65536);
+    expect(request.messages[0].content).toBe(
+      BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT,
+    );
+  });
+
+  it('appends prompt enhancer addons to the batch system prompt when selected', async () => {
+    const service = buildService();
+    await service.extractQuestionsBatch([matched], {
+      promptEnhancers: [SHARED_PASSAGE_ENHANCER_ID],
+    });
+    const system = mockCreate.mock.calls[0][0].messages[0].content as string;
+    expect(system.startsWith(BATCH_QUESTION_EXTRACTION_SYSTEM_PROMPT)).toBe(
+      true,
+    );
+    expect(system).toContain(SHARED_PASSAGE_ENRICH_SYSTEM_ADDON);
   });
 
   it('honors DEEPSEEK_THINKING_MAX_OUTPUT_TOKENS when thinking is enabled', async () => {

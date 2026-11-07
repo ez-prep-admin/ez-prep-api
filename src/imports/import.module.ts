@@ -39,6 +39,8 @@ import {
 import { AwsModule } from '../aws/aws.module';
 import { MathpixModule } from '../integrations/mathpix/mathpix.module';
 import { ImportQueueModule } from '../queues/import-queue.module';
+import { PromptEnhancerRegistry } from './prompt-enhancers/prompt-enhancer.registry';
+import { PromptEnhancerComposer } from './prompt-enhancers/prompt-enhancer.composer';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { ImportQueueModule } from '../queues/import-queue.module';
     AdaptiveParserStrategy,
     DocumentParserFactory,
     StructureDetectorService,
+    PromptEnhancerRegistry,
+    PromptEnhancerComposer,
     DeepseekService,
     AiOutputValidator,
     BusinessValidator,

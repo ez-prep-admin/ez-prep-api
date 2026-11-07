@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsMongoId,
   IsOptional,
@@ -10,6 +11,7 @@ import {
 } from 'class-validator';
 import { MatchedQuestion } from '../types/matched-question';
 import { ImportQuestionPayloadDto } from './import-question.dto';
+import { PROMPT_ENHANCER_IDS } from '../prompt-enhancers/prompt-enhancer.ids';
 
 export class EnrichQuestionsDto {
   @ApiPropertyOptional({
@@ -97,6 +99,21 @@ export class EnrichQuestionsDto {
   @Min(1)
   @Max(5)
   maxConcurrentChunks?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Prompt enhancer ids for this enrich run. For enrich/:uploadId these are taken from the upload when omitted.',
+    type: [String],
+    enum: PROMPT_ENHANCER_IDS,
+    example: ['shared-passage'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn([...PROMPT_ENHANCER_IDS], {
+    each: true,
+    message: `Each prompt enhancer must be one of: ${PROMPT_ENHANCER_IDS.join(', ')}`,
+  })
+  promptEnhancers?: string[];
 }
 
 export class MatchedQuestionDto {
