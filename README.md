@@ -1,6 +1,6 @@
 # EzPrep API
 
-Backend for the EzPrep exam-prep app. One codebase can also run another instance (for example ExamFlex) by changing environment variables. Do not commit `.env`.
+Backend for the EzPrep exam-prep app. Do not commit `.env`.
 
 NestJS, MongoDB, JWT. Node `24.16.0`. Routes are under `/api/v1`. Interactive docs: `/api/docs`. Health check: `GET /api/v1/health`.
 
@@ -17,7 +17,7 @@ Fill `.env` before starting. `CORS_ORIGINS` must include the browser origin (loc
 | Variable | Purpose |
 | --- | --- |
 | `MONGODB_URI` | Database |
-| `INSTANCE_ID`, `INSTANCE_NAME` | Which deployment this process is |
+| `INSTANCE_ID`, `INSTANCE_NAME` | Process identity (`ezprep` / `EZ Prep`) |
 | `JWT_SECRET`, `JWT_EXPIRES_IN` | Session tokens (default expiry `7d`) |
 | `MSG91_AUTH_KEY` | Mobile OTP verification |
 | `GOOGLE_CLIENT_ID` | Web OAuth client |
@@ -62,7 +62,9 @@ npm run test:cov     # coverage (80% minimum)
 
 ## Deploy
 
-Each droplet has its own `.env`. Set `INSTANCE_ID`, `INSTANCE_NAME`, `MONGODB_URI`, `JWT_SECRET`, `CORS_ORIGINS`, and the Google values for that host. Build with `npm run build` and run `npm run start:prod` (`node dist/main`).
+Production deploys from `main` via `.github/workflows/deploy.yml` to the EZ Prep droplet (`/var/www/ez-prep-api`). The workflow SSHs in and runs `scripts/deploy.sh`, which syncs `main`, builds, and restarts PM2 from `ecosystem.config.js`.
+
+On the droplet, set `INSTANCE_ID`, `INSTANCE_NAME`, `MONGODB_URI`, `JWT_SECRET`, `CORS_ORIGINS`, and the Google values in `.env`. Manual run: `npm run build` then `npm run start:prod` (`node dist/main`).
 
 ## Account linking
 

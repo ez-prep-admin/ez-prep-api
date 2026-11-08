@@ -23,7 +23,7 @@ IMPORT_QUEUE_DRIVER=memory
 
 `rediss://` (two s) turns on TLS. Upstash rejects a plain `redis://` URL. Put the Redis URL in `REDIS_URL`, not the `redis-cli` command and not the REST URL.
 
-`INSTANCE_ID` is the namespace. EZ Prep and ExamFlex can share one Redis database only if their `INSTANCE_ID` values differ. Separate Upstash databases with different `REDIS_URL` values are isolated even when the ids match. Both are supported. Nothing else is hardcoded.
+`INSTANCE_ID` is the namespace for Redis keys and BullMQ queue names. A dedicated Upstash database (`REDIS_URL`) is the usual production setup. Nothing else is hardcoded.
 
 The setting is read at process start. `IMPORT_QUEUE_DRIVER=memory` returns uploads to the in-process path without clearing `REDIS_URL`. A restart is required. Jobs already sitting in Redis are not picked up by the in-process path.
 
@@ -67,7 +67,7 @@ Two logical queues exist:
 | `import-parse` | `{INSTANCE_ID}-import-parse` | Mathpix PDF to markdown |
 | `import-enrich` | `{INSTANCE_ID}-import-enrich` | Parse markdown, chunk, DeepSeek |
 
-BullMQ forbids `:` inside a queue name, so the instance is joined with a hyphen. Isolation of the keys still uses a Redis hash tag in the BullMQ prefix: `{ezprep}:bull`. An ExamFlex process uses `{examflex}:bull` and cannot consume EZ Prep jobs.
+BullMQ forbids `:` inside a queue name, so the instance is joined with a hyphen. Isolation of the keys still uses a Redis hash tag in the BullMQ prefix: `{ezprep}:bull`.
 
 A finished job is removed from the active set immediately. A completed record is kept for up to 1 day (at most 1,000 records). A failed record is kept for up to 7 days (at most 5,000). BullMQ applies those limits when a later job finishes. The PDF and the enriched questions are not in Redis. They stay in S3 and MongoDB.
 
@@ -224,19 +224,18 @@ A poll that finds work costs the stalled check and the fetch, plus one `extendLo
 - `worker.run()`, `QueueEvents`, sandboxed processors, repeatable jobs, job schedulers, flows, and rate-limit groups.
 - A separate worker process. The Nest API process is the worker unless `QUEUE_WORKER_ENABLED=false`.
 - Priority, delay-on-add, or LIFO. Jobs run in queue order, except delayed retries.
-- Shared job payloads across instances. Prefix and queue name both include the instance namespace.
+- Shared job payloads across unrelated prefixes. Prefix and queue name both include the instance namespace.
 
-### Multiple instances
+### Namespace
 
 ```text
-EZ Prep process                          ExamFlex process
-INSTANCE_ID=ezprep                       INSTANCE_ID=examflex
-prefix {ezprep}:bull                     prefix {examflex}:bull
-queue  ezprep-import-parse               queue  examflex-import-parse
-queue  ezprep-import-enrich              queue  examflex-import-enrich
+INSTANCE_ID=ezprep
+prefix {ezprep}:bull
+queue  ezprep-import-parse
+queue  ezprep-import-enrich
 ```
 
-Same `REDIS_URL` is safe because those names do not overlap. A different `REDIS_URL` per deployment is also safe and is the simpler Upstash setup. `queueName` is the only builder of queue names. `IMPORT_PARSE_QUEUE` and `IMPORT_ENRICH_QUEUE` in `redis.constants.ts` are the only logical names.
+`queueName` is the only builder of queue names. `IMPORT_PARSE_QUEUE` and `IMPORT_ENRICH_QUEUE` in `redis.constants.ts` are the only logical names.
 
 ---
 

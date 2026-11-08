@@ -1,11 +1,10 @@
 # EZ Prep Multi-Instance / White-Label Architecture & Implementation Plan
 
-**Document purpose:** This is the implementation plan for evolving the current EZ Prep application into a reusable, multi-instance platform. The immediate goal is to support two independent production instances:
+> **Obsolete for deployment.** ExamFlex is a standalone repository. This repo deploys only EZ Prep (see `.github/workflows/deploy.yml`). Keep this file as historical planning notes only.
 
-- `ezprep`
-- `examflex`
+**Document purpose:** This was the implementation plan for evolving EZ Prep into a reusable, multi-instance platform. The immediate goal at the time was two independent production instances (`ezprep` and `examflex`). That dual-deploy model no longer applies here.
 
-The long-term goal is to support many white-label clients/institutions without creating client-specific code forks, while allowing each instance to have isolated application data, sessions/cache/queues, domains, branding, payment configuration, and feature configuration.
+The long-term white-label goal (many clients without client-specific forks) may still be relevant later; the dual-droplet CI/CD sections below are not.
 
 ---
 

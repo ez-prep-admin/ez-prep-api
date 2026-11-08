@@ -1,6 +1,6 @@
-# Go-live guide: EZ Prep and ExamFlex
+# Go-live guide: EZ Prep
 
-**This is the single source of truth for taking payments live.** Every production step for both instances is here and nowhere else. Other documents link to it and do not repeat it. If a step changes, change it here.
+**This is the single source of truth for taking EZ Prep payments live.** ExamFlex now lives in its own repository and is no longer deployed from this codebase. Historical **B** / ExamFlex steps below are archival only — follow the **A** / EZ Prep path.
 
 Related: `[STATUS.md](STATUS.md)` (record progress) · `[LEGAL_COPY.md](LEGAL_COPY.md)` (customer-facing wording) · `[GOLIVE_TODOS.md](GOLIVE_TODOS.md)` (compliance log) · `[PRE_RELEASE_REVIEW.md](PRE_RELEASE_REVIEW.md)` (why each step exists)
 
@@ -8,9 +8,9 @@ Related: `[STATUS.md](STATUS.md)` (record progress) · `[LEGAL_COPY.md](LEGAL_CO
 
 ## How to read this guide
 
-- **A** = EZ Prep. **B** = ExamFlex. A step with no letter is identical for both instances: run it on the instance you are launching.
-- Steps marked **(once)** are shared and run a single time. They affect both instances at the same moment.
-- **Order:** Stage 0 → Stage 1 → Stage 2 (once) → Stages 3–6 for EZ Prep (all **A** steps). ExamFlex comes later: Stages 3–6 again with the **B** steps. Running ExamFlex after EZ Prep has been clean for 7 days is recommended, not required.
+- **A** = EZ Prep (active). **B** = ExamFlex (archival; separate repo / droplet).
+- Steps marked **(once)** are shared setup that only needs to run once for EZ Prep.
+- **Order:** Stage 0 → Stage 1 → Stage 2 (once) → Stages 3–6 for EZ Prep (all **A** steps).
 - **Each step has a Check.** If a check fails, stop. Do not continue to the next step. Use the [Playbooks](#playbooks) or [Rollback](#rollback).
 - **Secrets** (Razorpay key secret, webhook secret, AWS keys) live only in your password manager and the droplet's API `.env`. Never put them in git, this file, chat, the admin app, or any `NEXT_PUBLIC_`* variable.
 - Record each finished stage in the `STATUS.md` session log with the date.
@@ -223,13 +223,13 @@ grep -n COMMERCE_ENABLED /path/to/ez-prep-api/.env   # expect nothing, or COMMER
 ### Step 9 — Merge the API (once)
 
 1. Merge `payment-gateway` into `main` in `ez-prep-api`.
-2. Watch GitHub Actions. Both the EZ Prep job and `deploy-examflex` must succeed.
-3. On each droplet, run `pm2 logs <process> --lines 100`.
+2. Watch GitHub Actions. The EZ Prep deploy job must succeed.
+3. On the EZ Prep droplet, run `pm2 logs <process> --lines 100`.
 
 **Check:**
 
-- Each droplet logs the effective commerce config once, with `commerceEnabled=false` and no secrets printed. There is no crash loop.
-- On both sites: sign in, open the paper list, and start and submit a free test.
+- The droplet logs the effective commerce config once, with `commerceEnabled=false` and no secrets printed. There is no crash loop.
+- On the EZ Prep site: sign in, open the paper list, and start and submit a free test.
 
 If anything fails, see [Rollback](#rollback) R4.
 
