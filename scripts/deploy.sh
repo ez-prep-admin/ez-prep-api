@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ###############################################################################
-# API Deployment Script (shared across instances)
+# EZ Prep API Deployment Script
 ###############################################################################
 
 set -Eeuo pipefail
@@ -30,10 +30,9 @@ echo "Using npm $(npm -v)"
 cd "$APP_DIR"
 
 ###############################################################################
-# Instance label for this script's logs.
+# Labels for this script's logs.
 # Do not source .env. Values often contain $, spaces, or a UTF-8 BOM, and bash
 # would execute them. Nest and PM2 load .env themselves.
-# Discord titles are fixed per job in .github/workflows/deploy.yml.
 ###############################################################################
 
 read_dotenv_value() {
@@ -61,8 +60,8 @@ read_dotenv_value() {
     printf '%s' "$value"
 }
 
-INSTANCE_NAME="API"
-INSTANCE_ID="api"
+INSTANCE_NAME="EZ Prep"
+INSTANCE_ID="ezprep"
 
 if [ -f "$APP_DIR/.env" ]; then
     name_from_file="$(read_dotenv_value "$APP_DIR/.env" INSTANCE_NAME)"
