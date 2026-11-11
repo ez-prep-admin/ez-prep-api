@@ -220,6 +220,7 @@ describe('TopicWiseDraftsService', () => {
         {
           exam: EXAM_ID,
           subject: SUB_ID,
+          topic: TOP_ID,
           totalQuestions: 10,
           durationInMinutes: 10,
           difficultyDistribution: { easy: 10, medium: 0, hard: 0 },
@@ -479,16 +480,53 @@ describe('TopicWiseDraftsService', () => {
     ).rejects.toMatchObject({ response: { error: 'DUPLICATE_QUESTION' } });
   });
 
-  it('allows another topic on a subject-wide draft', async () => {
+  it('rejects a sampled draft without a topic', async () => {
+    activeExam();
+
+    await expect(
+      service.createDraft(
+        {
+          exam: EXAM_ID,
+          subject: SUB_ID,
+          totalQuestions: 10,
+          durationInMinutes: 10,
+          difficultyDistribution: { easy: 10, medium: 0, hard: 0 },
+        },
+        USER_ID,
+      ),
+    ).rejects.toMatchObject({ response: { error: 'TOPIC_REQUIRED' } });
+    expect(questionModel.aggregate).not.toHaveBeenCalled();
+    expect(draftModel.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a replacement when the draft has no topic', async () => {
     const draft = makeDraft({ topic: undefined, topicName: undefined });
     draftModel.findById.mockReturnValue(chainable(draft));
     questionModel.findById.mockReturnValue(
       chainable(questionRow(Q2, { topic: new Types.ObjectId(OTHER_TOP) })),
     );
 
-    await service.replaceQuestion(DRAFT_ID, 0, Q2, USER_ID);
+    await expect(
+      service.replaceQuestion(DRAFT_ID, 0, Q2, USER_ID),
+    ).rejects.toMatchObject({ response: { error: 'TOPIC_REQUIRED' } });
+    expect(draft.save).not.toHaveBeenCalled();
+  });
 
-    expect(draft.questions[0].topic.toString()).toBe(OTHER_TOP);
+  it('refuses to publish a draft that has no topic', async () => {
+    const draft = makeDraft({ topic: undefined, topicName: undefined });
+    draftModel.findOneAndUpdate.mockResolvedValue(draft);
+    draftModel.updateOne.mockReturnValue(chainable({}));
+
+    await expect(
+      service.publishDraft(DRAFT_ID, {}, USER_ID),
+    ).rejects.toMatchObject({ response: { error: 'TOPIC_REQUIRED' } });
+    expect(mockTestModel.create).not.toHaveBeenCalled();
+    expect(draftModel.updateOne).toHaveBeenCalledWith(
+      { _id: draft._id, status: 'PUBLISHING' },
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: 'REVIEW' }),
+      }),
+    );
   });
 
   it('publishes a TOPIC_WISE mock test with the draft fields', async () => {

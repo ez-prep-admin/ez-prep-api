@@ -187,6 +187,28 @@ MockTestSchema.index({ exam: 1, subject: 1 }); // For filtering by exam and subj
 MockTestSchema.index({ exam: 1, subject: 1, topic: 1 }); // For filtering with topic
 MockTestSchema.index({ paperType: 1, exam: 1, isActive: 1, isDeleted: 1 });
 
+// Topic is required only for TOPIC_WISE. Sprint and full-exam papers share
+// this collection and are stored without a paper-level topic.
+MockTestSchema.pre('validate', function () {
+  if (this.paperType === PaperType.TOPIC_WISE && !this.topic) {
+    this.invalidate('topic', 'A topic-wise test must have a topic');
+  }
+});
+
+MockTestSchema.pre('findOneAndUpdate', function () {
+  const raw = this.getUpdate();
+  if (!raw || Array.isArray(raw)) {
+    return;
+  }
+  const set =
+    '$set' in raw && raw.$set && typeof raw.$set === 'object'
+      ? (raw.$set as { paperType?: string; topic?: unknown })
+      : (raw as { paperType?: string; topic?: unknown });
+  if (set.paperType === PaperType.TOPIC_WISE && !set.topic) {
+    throw new Error('A topic-wise test must have a topic');
+  }
+});
+
 // Virtual for id field (removes _id and adds id)
 MockTestSchema.virtual('id').get(function () {
   return this._id.toHexString();

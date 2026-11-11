@@ -9,6 +9,7 @@ function basePayload(overrides: Record<string, unknown> = {}) {
     durationInMinutes: 10,
     exam: '64f123456789abcdef123456',
     subject: '64f123456789abcdef123457',
+    topic: '64f123456789abcdef123458',
     difficultyDistribution: { easy: 4, medium: 4, hard: 2 },
     ...overrides,
   };
@@ -37,6 +38,13 @@ describe('CreateTopicWiseMockTestDto accessMode', () => {
     const dto = plainToInstance(CreateTopicWiseMockTestDto, basePayload());
     expect(await validate(dto)).toHaveLength(0);
     expect(dto.accessMode).toBeUndefined();
+  });
+
+  it('rejects a topic-wise test without a topic', async () => {
+    const dto = plainToInstance(CreateTopicWiseMockTestDto, basePayload());
+    delete (dto as { topic?: string }).topic;
+    const errors = await validate(dto);
+    expect(errors.some(error => error.property === 'topic')).toBe(true);
   });
 
   it('rejects invalid accessMode', async () => {

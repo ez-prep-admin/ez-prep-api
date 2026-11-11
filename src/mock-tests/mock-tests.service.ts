@@ -250,6 +250,7 @@ export class MockTestsService {
     dto: CreateTopicWiseMockTestDto,
     userId: string,
   ): Promise<MockTestResponseDto> {
+    this.assertTopic(dto.topic);
     this.assertDifficultySum(dto);
     const questionIds = await this.sampleQuestionIds(dto);
 
@@ -260,7 +261,7 @@ export class MockTestsService {
       durationInMinutes: dto.durationInMinutes,
       exam: new Types.ObjectId(dto.exam),
       subject: new Types.ObjectId(dto.subject),
-      topic: dto.topic ? new Types.ObjectId(dto.topic) : null,
+      topic: new Types.ObjectId(dto.topic),
       difficultyDistribution: dto.difficultyDistribution,
       title: dto.title || null,
       description: dto.description || null,
@@ -296,6 +297,7 @@ export class MockTestsService {
       throw new NotFoundException(`Mock test with ID "${id}" not found`);
     }
 
+    this.assertTopic(dto.topic);
     this.assertDifficultySum(dto);
     const shouldResample = this.shouldResampleTopicWise(existing, dto);
     const questionIds = shouldResample
@@ -314,7 +316,7 @@ export class MockTestsService {
             durationInMinutes: dto.durationInMinutes,
             exam: new Types.ObjectId(dto.exam),
             subject: new Types.ObjectId(dto.subject),
-            topic: dto.topic ? new Types.ObjectId(dto.topic) : null,
+            topic: new Types.ObjectId(dto.topic),
             difficultyDistribution: dto.difficultyDistribution,
             title: dto.title,
             description: dto.description,
@@ -362,6 +364,15 @@ export class MockTestsService {
     return { message: 'Mock test deleted successfully' };
   }
 
+  private assertTopic(topic?: string): asserts topic is string {
+    if (!topic || !Types.ObjectId.isValid(topic)) {
+      throw new BadRequestException({
+        message: 'A topic-wise test must have a topic',
+        error: 'TOPIC_REQUIRED',
+      });
+    }
+  }
+
   private assertDifficultySum(dto: CreateTopicWiseMockTestDto) {
     const { easy, medium, hard } = dto.difficultyDistribution;
     const sum = easy + medium + hard;
@@ -377,7 +388,7 @@ export class MockTestsService {
     dto: CreateTopicWiseMockTestDto,
   ): boolean {
     const existingTopic = existing.topic?.toString() || '';
-    const nextTopic = dto.topic || '';
+    const nextTopic = dto.topic;
     const existingDist = existing.difficultyDistribution || {
       easy: 0,
       medium: 0,

@@ -177,14 +177,14 @@ export class TopicWiseDraftsService {
       query.difficultyLevel = params.difficultyLevel;
     }
 
-    if (draft.topic) {
-      query.topic = draft.topic;
-    } else if (params.topicId) {
-      if (!Types.ObjectId.isValid(params.topicId)) {
-        throw new BadRequestException('Invalid topic ID');
-      }
-      query.topic = new Types.ObjectId(params.topicId);
+    if (!draft.topic) {
+      throw new BadRequestException({
+        message:
+          'This draft has no topic. Discard it and create the test again with a topic.',
+        error: 'TOPIC_REQUIRED',
+      });
     }
+    query.topic = draft.topic;
 
     if (params.search?.trim()) {
       const term = escapeRegex(params.search.trim());
@@ -330,6 +330,12 @@ export class TopicWiseDraftsService {
     if (!dto.subject || !Types.ObjectId.isValid(dto.subject)) {
       throw new BadRequestException('A subject is required');
     }
+    if (!dto.topic || !Types.ObjectId.isValid(dto.topic)) {
+      throw new BadRequestException({
+        message: 'A topic-wise test must have a topic',
+        error: 'TOPIC_REQUIRED',
+      });
+    }
     if (!dto.difficultyDistribution) {
       throw new BadRequestException(
         'Difficulty distribution (easy, medium, hard) is required',
@@ -345,10 +351,7 @@ export class TopicWiseDraftsService {
       });
     }
 
-    let topicName: string | undefined;
-    if (dto.topic) {
-      topicName = await this.assertTopicOnSubject(subject, dto.topic);
-    }
+    const topicName = await this.assertTopicOnSubject(subject, dto.topic);
 
     const sampled = await sampleTopicWiseQuestionIds(this.questionModel, {
       exam: dto.exam,
@@ -359,10 +362,11 @@ export class TopicWiseDraftsService {
 
     const marksPerQuestion = dto.marksPerQuestion ?? 1;
     const negativeMarking = dto.negativeMarking ?? 0;
+    const topicId = new Types.ObjectId(dto.topic);
     const questions = sampled.map((question, position) => ({
       question: question._id,
       subject: new Types.ObjectId(dto.subject),
-      topic: dto.topic ? new Types.ObjectId(dto.topic) : question.topic,
+      topic: topicId,
       difficultyLevel: question.difficultyLevel,
       position,
       marksPerQuestion,
@@ -376,7 +380,7 @@ export class TopicWiseDraftsService {
         userId,
         subjectId: subject._id as Types.ObjectId,
         subjectName: subject.name,
-        topicId: dto.topic ? new Types.ObjectId(dto.topic) : undefined,
+        topicId,
         topicName,
         difficultyDistribution: dto.difficultyDistribution,
         marksPerQuestion,
@@ -494,6 +498,14 @@ export class TopicWiseDraftsService {
     dto: PublishTopicWiseDraftDto,
     userId: string,
   ): Promise<{ mockTestId: string; draft: TopicWiseDraftResponseDto }> {
+    if (!draft.topic) {
+      throw new BadRequestException({
+        message:
+          'A topic-wise test must have a topic. Discard this draft and create it again with a topic.',
+        error: 'TOPIC_REQUIRED',
+      });
+    }
+
     const ordered = [...draft.questions].sort(
       (a, b) => a.position - b.position,
     );
@@ -545,7 +557,7 @@ export class TopicWiseDraftsService {
       durationInMinutes: draft.durationInMinutes,
       exam: draft.exam,
       subject: draft.subject,
-      topic: draft.topic ?? null,
+      topic: draft.topic,
       difficultyDistribution: draft.difficultyDistribution,
       title,
       description: description || null,
@@ -734,7 +746,14 @@ export class TopicWiseDraftsService {
     draftTopicId?: string,
     incomingTopicId?: string,
   ): void {
-    if (draftTopicId && incomingTopicId !== draftTopicId) {
+    if (!draftTopicId) {
+      throw new BadRequestException({
+        message:
+          'This draft has no topic. Discard it and create the test again with a topic.',
+        error: 'TOPIC_REQUIRED',
+      });
+    }
+    if (incomingTopicId !== draftTopicId) {
       throw new BadRequestException({
         message: 'Replacement question must belong to the same topic',
         error: 'TOPIC_MISMATCH',
