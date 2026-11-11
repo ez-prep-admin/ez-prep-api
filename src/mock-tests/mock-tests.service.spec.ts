@@ -498,7 +498,15 @@ describe('MockTestsService', () => {
       expect(result.id).toBe(TEST_ID);
     });
 
-    it('creates without an optional topic and uses dto defaults', async () => {
+    it('rejects a topic-wise test without a topic', async () => {
+      await expect(
+        service.createTopicWise({ ...dto, topic: undefined as never }, USER_ID),
+      ).rejects.toMatchObject({ response: { error: 'TOPIC_REQUIRED' } });
+      expect(mockTestModel.create).not.toHaveBeenCalled();
+      expect(questionModel.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('uses dto defaults when optional scoring fields are omitted', async () => {
       questionModel.aggregate
         .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q1 })))
         .mockResolvedValueOnce(Array.from({ length: 4 }, () => ({ _id: Q2 })))
@@ -511,7 +519,6 @@ describe('MockTestsService', () => {
       await service.createTopicWise(
         {
           ...dto,
-          topic: undefined,
           title: undefined,
           description: undefined,
           generationMode: undefined,
@@ -527,7 +534,7 @@ describe('MockTestsService', () => {
 
       expect(mockTestModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          topic: null,
+          topic: expect.any(Object),
           generationMode: 'STATIC',
           marksPerQuestion: 1,
           accessMode: 'FREE',
@@ -579,11 +586,7 @@ describe('MockTestsService', () => {
       mockTestModel.findOneAndUpdate.mockReturnValue(chainable(existing));
       mockTestModel.findOne.mockReturnValue(chainable(existing));
 
-      await service.updateTopicWise(
-        TEST_ID,
-        { ...dto, topic: undefined },
-        USER_ID,
-      );
+      await service.updateTopicWise(TEST_ID, dto, USER_ID);
 
       expect(questionModel.aggregate).toHaveBeenCalled();
     });

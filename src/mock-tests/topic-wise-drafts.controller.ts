@@ -59,7 +59,7 @@ export class TopicWiseDraftsController {
   @ApiOperation({
     summary: 'Create a topic-wise mock draft (Admin)',
     description: `
-When \`questionIds\` is omitted, samples questions with the same rules as instant topic-wise create: exam tag, subject, optional topic, and the easy/medium/hard mix.
+When \`questionIds\` is omitted, samples questions with the same rules as instant topic-wise create: exam tag, subject, topic, and the easy/medium/hard mix. A topic is required.
 When \`questionIds\` is set, those questions are frozen in that order. They must share one subject and one topic.
 The result is a draft in \`topicwisetestdrafts\` with status \`REVIEW\`. Nothing is written to \`mocktests\` until publish.
     `,
@@ -112,7 +112,7 @@ The result is a draft in \`topicwisetestdrafts\` with status \`REVIEW\`. Nothing
   @ApiOperation({
     summary: 'Search questions for a topic-wise draft replacement (Admin)',
     description:
-      'Scoped to the draft exam and subject. When the draft has a topic, results stay on that topic. Any eligible difficulty may be returned. Questions already on the paper are excluded.',
+      'Scoped to the draft exam, subject, and topic. Any eligible difficulty may be returned. Questions already on the paper are excluded.',
   })
   @ApiQuery({ name: 'draftId', required: true })
   @ApiQuery({ name: 'search', required: false })
@@ -168,7 +168,7 @@ The result is a draft in \`topicwisetestdrafts\` with status \`REVIEW\`. Nothing
   @ApiOperation({
     summary: 'Replace one question in a topic-wise draft (Admin)',
     description:
-      'The replacement must match the slot subject, be tagged to the draft exam, and not already be on the paper. When the draft has a topic, the replacement must be that topic. Difficulty may change.',
+      'The replacement must match the slot subject and the draft topic, be tagged to the draft exam, and not already be on the paper. Difficulty may change.',
   })
   @ApiParam({ name: 'id', description: 'Draft ID' })
   @ApiParam({ name: 'position', description: '0-based index across the paper' })

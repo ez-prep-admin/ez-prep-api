@@ -59,10 +59,12 @@ export class CreateTopicWiseMockTestDto {
   @IsMongoId()
   subject: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({
+    description:
+      'Every topic-wise paper is a single topic. Questions from several topics belong on a sprint test.',
+  })
   @IsMongoId()
-  topic?: string;
+  topic: string;
 
   @ApiProperty({ type: DifficultyDistributionInputDto })
   @ValidateNested()
