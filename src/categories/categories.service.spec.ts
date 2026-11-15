@@ -130,8 +130,11 @@ describe('CategoriesService', () => {
   describe('update', () => {
     it('updates a category', async () => {
       model.findOne.mockReturnValue(chain(null));
+      model.findById.mockReturnValue(
+        chain(doc({ name: 'Banking', shortName: 'BANK', scope: 'central' })),
+      );
       model.findByIdAndUpdate.mockReturnValue(
-        chain(doc({ name: 'Updated', shortName: 'UPD' })),
+        chain(doc({ name: 'Updated', shortName: 'UPD', scope: 'central' })),
       );
       await expect(
         service.update('c1', { name: 'Updated', shortName: 'UPD' }),
@@ -146,7 +149,7 @@ describe('CategoriesService', () => {
     });
 
     it('throws NotFoundException', async () => {
-      model.findByIdAndUpdate.mockReturnValue(chain(null));
+      model.findById.mockReturnValue(chain(null));
       await expect(service.update('c1', { description: 'x' })).rejects.toThrow(
         NotFoundException,
       );

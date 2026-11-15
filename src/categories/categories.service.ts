@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, FilterQuery } from 'mongoose';
@@ -16,6 +17,8 @@ import {
   updatedByFields,
 } from '../common/types/to-actor-object-id';
 import { compareByDashboardPriority } from './category-priority';
+import { CategoryScope } from './enums/category-scope.enum';
+import { isIndiaStateCode } from './india-states';
 
 @Injectable()
 export class CategoriesService {
@@ -48,7 +51,7 @@ export class CategoriesService {
     }
 
     const category = await this.categoryModel.create({
-      ...createCategoryDto,
+      ...this.normalizeScopeFields(createCategoryDto),
       ...createdByFields(actorUserId),
     });
     return this.toResponseDto(category);
@@ -163,12 +166,35 @@ export class CategoriesService {
       }
     }
 
+    const existing = await this.categoryModel.findById(id).exec();
+    if (!existing) {
+      throw new NotFoundException(`Category with ID "${id}" not found`);
+    }
+
+    const nextScope =
+      updateCategoryDto.scope ?? existing.scope ?? CategoryScope.CENTRAL;
+    const nextStateCode =
+      updateCategoryDto.stateCode !== undefined
+        ? updateCategoryDto.stateCode
+        : existing.stateCode;
+
+    this.assertScopeStatePair(nextScope, nextStateCode);
+
+    const updatePayload: Record<string, unknown> = {
+      ...updateCategoryDto,
+      scope: nextScope,
+      ...updatedByFields(actorUserId),
+    };
+
+    if (nextScope === CategoryScope.STATE) {
+      updatePayload.stateCode = nextStateCode;
+    } else {
+      updatePayload.$unset = { stateCode: 1 };
+      delete updatePayload.stateCode;
+    }
+
     const category = await this.categoryModel
-      .findByIdAndUpdate(
-        id,
-        { ...updateCategoryDto, ...updatedByFields(actorUserId) },
-        { new: true },
-      )
+      .findByIdAndUpdate(id, updatePayload, { new: true })
       .exec();
 
     if (!category) {
@@ -219,6 +245,45 @@ export class CategoriesService {
     return new CategoryResponseDto({
       ...obj,
       priority: obj.priority ?? 0,
+      scope: obj.scope ?? CategoryScope.CENTRAL,
     });
+  }
+
+  private normalizeScopeFields(dto: CreateCategoryDto): {
+    name: string;
+    shortName: string;
+    imageUrl?: string;
+    description?: string;
+    priority?: number;
+    scope: CategoryScope;
+    stateCode?: string;
+  } {
+    const scope = dto.scope ?? CategoryScope.CENTRAL;
+    this.assertScopeStatePair(scope, dto.stateCode);
+
+    return {
+      name: dto.name,
+      shortName: dto.shortName,
+      imageUrl: dto.imageUrl,
+      description: dto.description,
+      priority: dto.priority,
+      scope,
+      ...(scope === CategoryScope.STATE ? { stateCode: dto.stateCode } : {}),
+    };
+  }
+
+  private assertScopeStatePair(
+    scope: CategoryScope,
+    stateCode?: string,
+  ): void {
+    if (scope !== CategoryScope.STATE) {
+      return;
+    }
+
+    if (!stateCode || !isIndiaStateCode(stateCode)) {
+      throw new BadRequestException(
+        'A valid ISO 3166-2:IN state code is required when scope is state',
+      );
+    }
   }
 }
