@@ -18,6 +18,17 @@ export class AppUserLocationDto {
 }
 
 /**
+ * Distinct product on a learner's usable entitlements (for admin directory cards).
+ */
+export class AppUserAccessProductDto {
+  @ApiProperty({ example: '64f123456789abcdef123456' })
+  productId: string;
+
+  @ApiProperty({ example: 'RRB NTPC CBT-1' })
+  productName: string;
+}
+
+/**
  * Paid access matches accounting: at least one usable entitlement.
  */
 export class AppUserAccessDto {
@@ -39,6 +50,13 @@ export class AppUserAccessDto {
       'Soonest end among usable grants. Omitted when any usable grant does not expire.',
   })
   expiresAt?: Date;
+
+  @ApiProperty({
+    type: [AppUserAccessProductDto],
+    description:
+      'Distinct products from usable entitlements that have a productId, in first-seen order. Empty when free or when grants have no product (e.g. support grants).',
+  })
+  products: AppUserAccessProductDto[];
 }
 
 export class AppUserTargetExamDto {

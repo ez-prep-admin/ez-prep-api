@@ -382,6 +382,7 @@ describe('RefundsService', () => {
     expect(result.data).toHaveLength(1);
     expect(result.data[0].user).toEqual(maskedUser);
     expect(result.data[0].userId).toBe(String(order.userId));
+    expect(result.data[0].items).toEqual([]);
     expect(JSON.stringify(result.data[0].user)).not.toContain(
       'ada@example.com',
     );
@@ -391,6 +392,37 @@ describe('RefundsService', () => {
     expect(detail.user).toEqual(maskedUser);
     expect(JSON.stringify(detail.user)).not.toContain('ada@example.com');
     expect(JSON.stringify(detail.user)).not.toContain('9876543210');
+  });
+
+  it('includes purchased item snapshots on the order list', async () => {
+    const order = seedPaid();
+    order.items = [
+      {
+        productName: 'SSC CGL Pack',
+        durationPreset: '3M',
+        amount: 49900,
+      },
+      {
+        productName: 'RRB NTPC Pack',
+        durationPreset: 'LIFETIME',
+        amount: 50000,
+      },
+    ];
+
+    const result = await service.list({});
+
+    expect(result.data[0].items).toEqual([
+      {
+        productName: 'SSC CGL Pack',
+        durationPreset: '3M',
+        amount: 49900,
+      },
+      {
+        productName: 'RRB NTPC Pack',
+        durationPreset: 'LIFETIME',
+        amount: 50000,
+      },
+    ]);
   });
 
   it('keeps the order paid when the provider refund is still pending', async () => {

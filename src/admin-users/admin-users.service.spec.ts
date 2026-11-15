@@ -6,6 +6,7 @@ import { AdminUsersService } from './admin-users.service';
 import { User } from '../users/schemas/user.schema';
 import { MockTestAttempt } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
 import { Entitlement } from '../entitlements/schemas/entitlement.schema';
+import { Product } from '../products/schemas/product.schema';
 import { EntitlementStatus } from '../common/enums/entitlement-status.enum';
 import { UserRole } from '../common/enums/user-role.enum';
 import { MembershipTier } from '../common/enums/membership-tier.enum';
@@ -84,6 +85,9 @@ describe('AdminUsersService', () => {
   const entitlementModel: any = {
     find: jest.fn(),
   };
+  const productModel: any = {
+    find: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -98,12 +102,17 @@ describe('AdminUsersService', () => {
           provide: getModelToken(Entitlement.name),
           useValue: entitlementModel,
         },
+        {
+          provide: getModelToken(Product.name),
+          useValue: productModel,
+        },
       ],
     }).compile();
 
     service = module.get(AdminUsersService);
     jest.clearAllMocks();
     entitlementModel.find.mockReturnValue(selectChain([]));
+    productModel.find.mockReturnValue(selectChain([]));
   });
 
   it('should be defined', () => {
@@ -481,6 +490,8 @@ describe('AdminUsersService', () => {
   it('resolves paid access for the page in one usable-entitlement query', async () => {
     const paidId = '507f1f77bcf86cd799439011';
     const lifetimeId = '507f1f77bcf86cd799439012';
+    const productA = '507f1f77bcf86cd799439021';
+    const productB = '507f1f77bcf86cd799439022';
     const soon = new Date('2026-06-01T00:00:00.000Z');
     const later = new Date('2026-12-01T00:00:00.000Z');
     userModel.find.mockReturnValue(
@@ -497,10 +508,16 @@ describe('AdminUsersService', () => {
     attemptModel.aggregate.mockReturnValue(chain([]));
     entitlementModel.find.mockReturnValue(
       selectChain([
-        { userId: paidId, expiresAt: later },
-        { userId: paidId, expiresAt: soon },
-        { userId: lifetimeId, expiresAt: null },
-        { userId: lifetimeId, expiresAt: later },
+        { userId: paidId, expiresAt: later, productId: productA },
+        { userId: paidId, expiresAt: soon, productId: productA },
+        { userId: lifetimeId, expiresAt: null, productId: productB },
+        { userId: lifetimeId, expiresAt: later, productId: productA },
+      ]),
+    );
+    productModel.find.mockReturnValue(
+      selectChain([
+        { _id: productA, name: 'SSC CGL Pack' },
+        { _id: productB, name: 'RRB NTPC Pack' },
       ]),
     );
 
@@ -515,9 +532,22 @@ describe('AdminUsersService', () => {
       { expiresAt: null },
       { expiresAt: { $gt: expect.any(Date) } },
     ]);
+    expect(productModel.find).toHaveBeenCalledTimes(1);
     expect(result.data.map(item => item.access)).toEqual([
-      { paid: true, usableCount: 2, expiresAt: soon },
-      { paid: true, usableCount: 2 },
+      {
+        paid: true,
+        usableCount: 2,
+        expiresAt: soon,
+        products: [{ productId: productA, productName: 'SSC CGL Pack' }],
+      },
+      {
+        paid: true,
+        usableCount: 2,
+        products: [
+          { productId: productB, productName: 'RRB NTPC Pack' },
+          { productId: productA, productName: 'SSC CGL Pack' },
+        ],
+      },
     ]);
   });
 
@@ -529,8 +559,13 @@ describe('AdminUsersService', () => {
 
     const result = await service.listAppUsers();
 
-    expect(result.data[0].access).toEqual({ paid: false, usableCount: 0 });
+    expect(result.data[0].access).toEqual({
+      paid: false,
+      usableCount: 0,
+      products: [],
+    });
     expect(result.data[0]).not.toHaveProperty('subscription');
+    expect(productModel.find).not.toHaveBeenCalled();
   });
 });
 
@@ -545,6 +580,9 @@ describe('AdminUsersService.getAppUserDetails', () => {
     aggregate: jest.fn(),
   };
   const entitlementModel: any = {
+    find: jest.fn(),
+  };
+  const productModel: any = {
     find: jest.fn(),
   };
   const learnerId = '507f1f77bcf86cd799439011';
@@ -562,12 +600,17 @@ describe('AdminUsersService.getAppUserDetails', () => {
           provide: getModelToken(Entitlement.name),
           useValue: entitlementModel,
         },
+        {
+          provide: getModelToken(Product.name),
+          useValue: productModel,
+        },
       ],
     }).compile();
 
     service = module.get(AdminUsersService);
     jest.clearAllMocks();
     entitlementModel.find.mockReturnValue(selectChain([]));
+    productModel.find.mockReturnValue(selectChain([]));
   });
 
   function detailUser(overrides: Record<string, unknown> = {}) {
@@ -694,15 +737,23 @@ describe('AdminUsersService.getAppUserDetails', () => {
   });
 
   it('marks the profile paid when a usable grant does not expire', async () => {
+    const productId = '507f1f77bcf86cd799439021';
     userModel.findOne.mockReturnValue(chain(detailUser()));
     mockAggregates();
     entitlementModel.find.mockReturnValue(
-      selectChain([{ userId: learnerId, expiresAt: null }]),
+      selectChain([{ userId: learnerId, expiresAt: null, productId }]),
+    );
+    productModel.find.mockReturnValue(
+      selectChain([{ _id: productId, name: 'UPSC Prelims Pack' }]),
     );
 
     const result = await service.getAppUserDetails(learnerId);
 
-    expect(result.profile.access).toEqual({ paid: true, usableCount: 1 });
+    expect(result.profile.access).toEqual({
+      paid: true,
+      usableCount: 1,
+      products: [{ productId, productName: 'UPSC Prelims Pack' }],
+    });
     expect(result.profile).not.toHaveProperty('subscription');
   });
 
@@ -730,7 +781,7 @@ describe('AdminUsersService.getAppUserDetails', () => {
         topicWise: { finished: 3, open: 0 },
       },
       study: { studyTime: 'morning', weeklyStudyGoalHours: 12 },
-      access: { paid: false, usableCount: 0 },
+      access: { paid: false, usableCount: 0, products: [] },
     });
     expect(result.profile.dateOfBirth).toEqual(
       new Date('1998-04-05T00:00:00.000Z'),
