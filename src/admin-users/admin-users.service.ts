@@ -16,6 +16,7 @@ import {
   MockTestAttempt,
   MockTestAttemptDocument,
 } from '../mock-test-attempts/schemas/mock-test-attempt.schema';
+import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import {
   AttemptActivityCounts,
@@ -45,6 +46,7 @@ import {
 } from './dto/app-user-detail.dto';
 import {
   AppUserAccessDto,
+  AppUserAccessProductDto,
   AppUserListItemDto,
 } from './dto/app-user-list-item.dto';
 import { AppUsersActiveSummaryDto } from './dto/app-users-active-summary.dto';
@@ -60,6 +62,8 @@ export class AdminUsersService {
     private readonly attemptModel: Model<MockTestAttemptDocument>,
     @InjectModel(Entitlement.name)
     private readonly entitlementModel: Model<EntitlementDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
   ) {}
 
   async listAppUsers(
@@ -233,9 +237,8 @@ export class AdminUsersService {
   private async loadAccess(
     userIds: Types.ObjectId[],
   ): Promise<Map<string, AppUserAccessDto>> {
-    const access = new Map<string, AppUserAccessDto>();
     if (userIds.length === 0) {
-      return access;
+      return new Map();
     }
 
     const rows = await this.entitlementModel
@@ -243,11 +246,34 @@ export class AdminUsersService {
         userId: { $in: userIds },
         ...activeEntitlementFilter(new Date()),
       })
-      .select('userId expiresAt')
+      .select('userId expiresAt productId')
       .lean()
       .exec();
 
-    return summarizeAccess(rows);
+    const productIds = [
+      ...new Set(
+        rows
+          .map(row => row.productId)
+          .filter(
+            (id): id is Types.ObjectId =>
+              id != null && Types.ObjectId.isValid(String(id)),
+          )
+          .map(id => String(id)),
+      ),
+    ];
+    const namesByProductId = new Map<string, string>();
+    if (productIds.length > 0) {
+      const products = await this.productModel
+        .find({ _id: { $in: productIds.map(id => new Types.ObjectId(id)) } })
+        .select('name')
+        .lean()
+        .exec();
+      for (const product of products) {
+        namesByProductId.set(String(product._id), product.name);
+      }
+    }
+
+    return summarizeAccess(rows, namesByProductId);
   }
 
   private toListItem(
@@ -380,17 +406,27 @@ function mapAdminTargetExam(
 const EMPTY_USER_ACCESS: AppUserAccessDto = {
   paid: false,
   usableCount: 0,
+  products: [],
 };
 
 type AccessRow = {
   userId?: Types.ObjectId | string;
   expiresAt?: Date | null;
+  productId?: Types.ObjectId | string | null;
 };
 
-function summarizeAccess(rows: AccessRow[]): Map<string, AppUserAccessDto> {
+function summarizeAccess(
+  rows: AccessRow[],
+  namesByProductId: Map<string, string>,
+): Map<string, AppUserAccessDto> {
   const grouped = new Map<
     string,
-    { count: number; lifetime: boolean; soonest?: Date }
+    {
+      count: number;
+      lifetime: boolean;
+      soonest?: Date;
+      productIds: string[];
+    }
   >();
 
   for (const row of rows) {
@@ -398,7 +434,11 @@ function summarizeAccess(rows: AccessRow[]): Map<string, AppUserAccessDto> {
       continue;
     }
     const id = String(row.userId);
-    const current = grouped.get(id) ?? { count: 0, lifetime: false };
+    const current = grouped.get(id) ?? {
+      count: 0,
+      lifetime: false,
+      productIds: [],
+    };
     current.count += 1;
     const expiresAt = asOptionalDate(row.expiresAt);
     if (!expiresAt) {
@@ -406,14 +446,32 @@ function summarizeAccess(rows: AccessRow[]): Map<string, AppUserAccessDto> {
     } else if (!current.soonest || expiresAt < current.soonest) {
       current.soonest = expiresAt;
     }
+    if (row.productId != null) {
+      const productId = String(row.productId);
+      if (
+        Types.ObjectId.isValid(productId) &&
+        !current.productIds.includes(productId)
+      ) {
+        current.productIds.push(productId);
+      }
+    }
     grouped.set(id, current);
   }
 
   const access = new Map<string, AppUserAccessDto>();
   for (const [id, current] of grouped) {
+    const products: AppUserAccessProductDto[] = [];
+    for (const productId of current.productIds) {
+      const productName = namesByProductId.get(productId);
+      if (!productName) {
+        continue;
+      }
+      products.push({ productId, productName });
+    }
     const summary: AppUserAccessDto = {
       paid: true,
       usableCount: current.count,
+      products,
     };
     if (!current.lifetime && current.soonest) {
       summary.expiresAt = current.soonest;

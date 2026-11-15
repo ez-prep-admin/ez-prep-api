@@ -11,6 +11,7 @@ import {
   Entitlement,
   EntitlementSchema,
 } from '../entitlements/schemas/entitlement.schema';
+import { Product, ProductSchema } from '../products/schemas/product.schema';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import {
       { name: User.name, schema: UserSchema },
       { name: MockTestAttempt.name, schema: MockTestAttemptSchema },
       { name: Entitlement.name, schema: EntitlementSchema },
+      { name: Product.name, schema: ProductSchema },
     ]),
   ],
   controllers: [AdminUsersController],

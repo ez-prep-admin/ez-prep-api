@@ -15,6 +15,7 @@ import {
 } from '../admin-users/admin-users.guardrails';
 import { CommerceAuditService } from '../commerce-audit/commerce-audit.service';
 import { CommerceConfigService } from '../commerce/commerce-config.service';
+import { DurationPreset } from '../common/enums/duration-preset.enum';
 import { OrderStatus } from '../common/enums/order-status.enum';
 import { PaymentStatus } from '../common/enums/payment-status.enum';
 import { RefundStatus } from '../common/enums/refund-status.enum';
@@ -79,6 +80,13 @@ export type AdminOrderUser = {
   username?: string;
 };
 
+/** Slim line items for the admin orders table (order snapshot names). */
+export type AdminOrderListItemItem = {
+  productName: string;
+  durationPreset: DurationPreset;
+  amount: number;
+};
+
 export type AdminOrderListItem = {
   id: string;
   orderNumber: string;
@@ -90,6 +98,7 @@ export type AdminOrderListItem = {
   paymentProvider?: string;
   paidAt?: Date;
   createdAt?: Date;
+  items: AdminOrderListItemItem[];
 };
 
 export type AdminRefundView = {
@@ -116,7 +125,7 @@ export type AdminDuplicatePaymentView = {
   refundStatus: RefundStatus | null;
 };
 
-export type AdminOrderDetail = AdminOrderListItem & {
+export type AdminOrderDetail = Omit<AdminOrderListItem, 'items'> & {
   items: Order['items'];
   tax: Order['tax'];
   billing: Order['billing'];
@@ -1152,6 +1161,11 @@ export class RefundsService {
       paymentProvider: order.paymentProvider,
       paidAt: order.paidAt,
       createdAt: order.createdAt,
+      items: (order.items ?? []).map(item => ({
+        productName: item.productName,
+        durationPreset: item.durationPreset,
+        amount: item.amount,
+      })),
     };
   }
 
