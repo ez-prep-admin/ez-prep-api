@@ -31,6 +31,7 @@ import { CreateExamDto } from './dto/create-exam.dto';
 import { UpdateExamDto } from './dto/update-exam.dto';
 import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
+import { ExamsByCategoryQueryDto } from './dto/exams-by-category-query.dto';
 import { PaginationMetaDto } from '../common/dto/api-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -48,14 +49,14 @@ export class ExamsController {
   @ApiOperation({
     summary: 'Get all exams grouped by category (Public API)',
     description: `
-    Retrieves all active exams grouped by their categories.
+    Retrieves active exams grouped by their categories.
     Perfect for landing pages and exam browsing.
     
     Features:
     - Returns array of categories with their exams
-    - Includes all active exams per category
+    - Defaults to central categories (state PSCs omitted)
+    - Pass scope=state&stateCode=KL for a state's PSC categories
     - Includes topic-wise mock test counts per exam (full-exam papers are not counted)
-    - Returns all data (no pagination or filtering needed)
     - Categories are ordered by priority (highest first), then name
     - No authentication required
     
@@ -113,11 +114,13 @@ export class ExamsController {
       },
     },
   })
-  async getExamsByCategory(): Promise<{
+  async getExamsByCategory(
+    @Query() query: ExamsByCategoryQueryDto,
+  ): Promise<{
     message: string;
     data: ExamsByCategoryResponseDto;
   }> {
-    const data = await this.examsService.getExamsByCategory();
+    const data = await this.examsService.getExamsByCategory(query);
     return {
       message: 'Exams by category retrieved successfully',
       data,

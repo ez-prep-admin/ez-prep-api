@@ -7,9 +7,14 @@ import {
   MinLength,
   MaxLength,
   IsUrl,
+  IsEnum,
+  IsIn,
+  ValidateIf,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryScope } from '../enums/category-scope.enum';
+import { INDIA_STATE_CODES } from '../india-states';
 
 export class CreateCategoryDto {
   @ApiProperty({
@@ -69,4 +74,33 @@ export class CreateCategoryDto {
   @Min(0, { message: 'Priority cannot be negative' })
   @Max(9999, { message: 'Priority cannot exceed 9999' })
   priority?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Exam jurisdiction. Central categories appear on the main dashboard. State categories appear on the State PSC page. Defaults to central.',
+    enum: CategoryScope,
+    example: CategoryScope.CENTRAL,
+    default: CategoryScope.CENTRAL,
+  })
+  @IsOptional()
+  @IsEnum(CategoryScope, {
+    message: 'Scope must be either central or state',
+  })
+  scope?: CategoryScope;
+
+  @ApiPropertyOptional({
+    description:
+      'ISO 3166-2:IN two-letter state code (e.g. KL for Kerala). Required when scope is state.',
+    example: 'KL',
+    enum: INDIA_STATE_CODES,
+  })
+  @ValidateIf(o => o.scope === CategoryScope.STATE)
+  @IsString({ message: 'State code is required for state categories' })
+  @IsIn(INDIA_STATE_CODES, {
+    message: 'State code must be a valid ISO 3166-2:IN code',
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
+  stateCode?: string;
 }

@@ -1,5 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Query, Types } from 'mongoose';
+import { CategoryScope } from '../enums/category-scope.enum';
+import { INDIA_STATE_CODES } from '../india-states';
 
 export type CategoryDocument = Category & Document;
 
@@ -24,6 +26,28 @@ export class Category {
   /** Higher values appear first in dashboard category sections. */
   @Prop({ type: Number, default: 0, min: 0, index: true })
   priority: number;
+
+  /**
+   * Central exams appear on the main dashboard.
+   * State exams appear on the State PSC page for their stateCode.
+   */
+  @Prop({
+    type: String,
+    enum: Object.values(CategoryScope),
+    default: CategoryScope.CENTRAL,
+    index: true,
+  })
+  scope: CategoryScope;
+
+  /** ISO 3166-2:IN two-letter code. Required when scope is state. */
+  @Prop({
+    type: String,
+    uppercase: true,
+    trim: true,
+    enum: [...INDIA_STATE_CODES],
+    index: true,
+  })
+  stateCode?: string;
 
   @Prop({ default: true, index: true })
   isActive: boolean;
@@ -51,6 +75,9 @@ CategorySchema.index({ isActive: 1, isDeleted: 1 });
 
 // Dashboard and admin lists: higher priority first, then name
 CategorySchema.index({ priority: -1, name: 1 });
+
+// State PSC filtering: active state categories by ISO code
+CategorySchema.index({ scope: 1, stateCode: 1, isActive: 1 });
 
 // Virtual for id field
 CategorySchema.virtual('id').get(function () {

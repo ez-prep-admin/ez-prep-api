@@ -13,10 +13,12 @@ import { ExamResponseDto } from './dto/exam-response.dto';
 import { ExamsByCategoryResponseDto } from './dto/exams-by-category-response.dto';
 import { compareByDashboardPriority } from '../categories/category-priority';
 import { PaginatedExamsResponseDto } from './dto/paginated-exams-response.dto';
+import { ExamsByCategoryQueryDto } from './dto/exams-by-category-query.dto';
 import {
   Category,
   CategoryDocument,
 } from '../categories/schemas/category.schema';
+import { CategoryScope } from '../categories/enums/category-scope.enum';
 import {
   ExamGroup,
   ExamGroupDocument,
@@ -146,18 +148,38 @@ export class ExamsService {
   }
 
   /**
-   * Get exams grouped by category (PUBLIC API)
-   * Returns all active categories and their exams
+   * Get exams grouped by category (PUBLIC API).
+   * Defaults to central categories (missing scope counts as central).
+   * Pass scope=state&stateCode=KL for a state's PSC categories.
    */
-  async getExamsByCategory(): Promise<ExamsByCategoryResponseDto> {
+  async getExamsByCategory(
+    query: ExamsByCategoryQueryDto = {},
+  ): Promise<ExamsByCategoryResponseDto> {
+    const scope = query.scope ?? CategoryScope.CENTRAL;
+
+    if (scope === CategoryScope.STATE && !query.stateCode) {
+      throw new BadRequestException(
+        'stateCode is required when scope is state',
+      );
+    }
+
     const categoryQuery: FilterQuery<Category> = { isActive: true };
+
+    if (scope === CategoryScope.STATE) {
+      categoryQuery.scope = CategoryScope.STATE;
+      categoryQuery.stateCode = query.stateCode;
+    } else {
+      // Legacy documents without scope are treated as central
+      categoryQuery.scope = { $ne: CategoryScope.STATE };
+    }
+
     const examQuery: FilterQuery<Exam> = {
       isActive: true,
       isDeleted: { $ne: true },
       showInApp: true,
     };
 
-    // Get all active categories, highest dashboard priority first
+    // Get matching active categories, highest dashboard priority first
     const categories = (
       await this.categoryModel
         .find(categoryQuery)

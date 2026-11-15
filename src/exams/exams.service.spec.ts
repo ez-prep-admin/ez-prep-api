@@ -8,6 +8,7 @@ import {
 import { ExamsService } from './exams.service';
 import { Exam } from './schemas/exam.schema';
 import { Category } from '../categories/schemas/category.schema';
+import { CategoryScope } from '../categories/enums/category-scope.enum';
 import { ExamGroup } from '../exam-groups/schemas/exam-group.schema';
 
 const OID = '507f1f77bcf86cd799439011';
@@ -194,6 +195,10 @@ describe('ExamsService', () => {
       );
 
       const result = await service.getExamsByCategory();
+      expect(categoryModel.find).toHaveBeenCalledWith({
+        isActive: true,
+        scope: { $ne: 'state' },
+      });
       expect(examModel.find).toHaveBeenCalledWith({
         isActive: true,
         isDeleted: { $ne: true },
@@ -241,6 +246,36 @@ describe('ExamsService', () => {
         'Middle',
       ]);
       expect(result.map(category => category.priority)).toEqual([5, 1, 0]);
+    });
+
+    it('filters state categories by stateCode', async () => {
+      categoryModel.find.mockReturnValue(
+        chain([
+          {
+            _id: { toString: () => 'kl' },
+            name: 'Kerala PSC',
+            shortName: 'PSC',
+            scope: 'state',
+            stateCode: 'KL',
+            priority: 1,
+          },
+        ]),
+      );
+      examModel.find.mockReturnValue(chain([]));
+      examModel.aggregate.mockReturnValue(chain([]));
+
+      const result = await service.getExamsByCategory({
+        scope: CategoryScope.STATE,
+        stateCode: 'KL',
+      });
+
+      expect(categoryModel.find).toHaveBeenCalledWith({
+        isActive: true,
+        scope: CategoryScope.STATE,
+        stateCode: 'KL',
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Kerala PSC');
     });
   });
 

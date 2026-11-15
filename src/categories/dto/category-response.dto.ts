@@ -1,5 +1,6 @@
 import { Exclude, Expose } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CategoryScope } from '../enums/category-scope.enum';
 
 export class CategoryResponseDto {
   @ApiProperty({
@@ -44,6 +45,23 @@ export class CategoryResponseDto {
   })
   @Expose()
   priority: number;
+
+  @ApiProperty({
+    description:
+      'Exam jurisdiction. Central categories appear on the main dashboard. State categories appear on the State PSC page.',
+    enum: CategoryScope,
+    example: CategoryScope.CENTRAL,
+  })
+  @Expose()
+  scope: CategoryScope;
+
+  @ApiPropertyOptional({
+    description:
+      'ISO 3166-2:IN two-letter state code. Present when scope is state.',
+    example: 'KL',
+  })
+  @Expose()
+  stateCode?: string;
 
   @ApiProperty({
     description: 'Active status',
