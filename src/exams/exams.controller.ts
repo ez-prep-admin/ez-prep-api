@@ -114,9 +114,7 @@ export class ExamsController {
       },
     },
   })
-  async getExamsByCategory(
-    @Query() query: ExamsByCategoryQueryDto,
-  ): Promise<{
+  async getExamsByCategory(@Query() query: ExamsByCategoryQueryDto): Promise<{
     message: string;
     data: ExamsByCategoryResponseDto;
   }> {

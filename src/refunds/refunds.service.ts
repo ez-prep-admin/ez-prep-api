@@ -177,6 +177,7 @@ export class RefundsService {
     status?: string;
     search?: string;
     flag?: string;
+    productId?: string;
   }): Promise<{
     data: AdminOrderListItem[];
     pagination: {
@@ -204,6 +205,13 @@ export class RefundsService {
     }
     if (options.flag) {
       await this.applyOrderFlag(query, options.flag);
+    }
+    if (options.productId?.trim()) {
+      const productId = options.productId.trim();
+      if (!Types.ObjectId.isValid(productId)) {
+        throw new BadRequestException('Invalid product id');
+      }
+      query['items.productId'] = new Types.ObjectId(productId);
     }
 
     const [rows, total] = await Promise.all([

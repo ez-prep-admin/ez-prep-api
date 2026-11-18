@@ -15,6 +15,7 @@ import {
   LEARNER_FILTER,
   offerStatusFilter,
   orderRefundsPipeline,
+  paidUsersByProductPipeline,
   paidUsersPipeline,
   paymentsReceivedPipeline,
   productStatusFilter,
@@ -22,6 +23,7 @@ import {
 } from './accounting.filters';
 import { AccountingService } from './accounting.service';
 import { DEFAULT_CURRENCY } from './accounting.types';
+import { Types } from 'mongoose';
 
 function createModel() {
   const pipelines: unknown[] = [];
@@ -116,6 +118,24 @@ describe('accounting filters', () => {
       isDeleted: { $ne: true },
       status: ProductStatus.PUBLISHED,
     });
+  });
+
+  it('groups distinct paid users by product and looks up names', () => {
+    const pipeline = paidUsersByProductPipeline(now);
+    expect(pipeline[0]).toEqual({
+      $match: {
+        ...activeEntitlementFilter(now),
+        productId: { $type: 'objectId' },
+      },
+    });
+    expect(pipeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          $lookup: expect.objectContaining({ from: 'products' }),
+        }),
+        { $sort: { userCount: -1, productName: 1 } },
+      ]),
+    );
   });
 });
 
@@ -271,5 +291,49 @@ describe('AccountingService.compute', () => {
 
     expect(overview.people.paidUsers).toBe(3);
     expect(overview.people.freeUsers).toBe(0);
+  });
+
+  it('returns paid users broken down by product', async () => {
+    const productId = new Types.ObjectId();
+    entitlements.queueResults(
+      [{ count: 5 }],
+      [
+        {
+          productId,
+          productName: 'SSC CGL Pack',
+          productCode: 'SSC-CGL',
+          userCount: 4,
+        },
+        {
+          productId: new Types.ObjectId(),
+          productName: 'RRB Station Master',
+          userCount: 2,
+        },
+      ],
+    );
+
+    const result = await service.getPaidUsersByProduct(now);
+
+    expect(result).toEqual({
+      paidUsers: 5,
+      products: [
+        {
+          productId: String(productId),
+          productName: 'SSC CGL Pack',
+          productCode: 'SSC-CGL',
+          userCount: 4,
+        },
+        {
+          productId: expect.any(String),
+          productName: 'RRB Station Master',
+          userCount: 2,
+        },
+      ],
+    });
+    expect(entitlements.pipelines).toEqual([
+      paidUsersPipeline(now),
+      paidUsersByProductPipeline(now),
+    ]);
+    expect(entitlements.allowDiskUseCalls).toEqual([true, true]);
   });
 });

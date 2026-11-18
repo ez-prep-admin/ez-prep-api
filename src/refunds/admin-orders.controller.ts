@@ -56,12 +56,18 @@ export class AdminOrdersController {
   @ApiQuery({ name: 'status', required: false, enum: OrderStatus })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'flag', required: false })
+  @ApiQuery({
+    name: 'productId',
+    required: false,
+    description: 'Filter orders that include this product',
+  })
   async list(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('flag') flag?: string,
+    @Query('productId') productId?: string,
   ) {
     const result = await this.refundsService.list({
       page: page ? parseInt(page, 10) : undefined,
@@ -69,6 +75,7 @@ export class AdminOrdersController {
       status,
       search,
       flag,
+      productId,
     });
     return {
       message: 'Orders retrieved successfully',

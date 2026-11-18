@@ -272,10 +272,7 @@ export class CategoriesService {
     };
   }
 
-  private assertScopeStatePair(
-    scope: CategoryScope,
-    stateCode?: string,
-  ): void {
+  private assertScopeStatePair(scope: CategoryScope, stateCode?: string): void {
     if (scope !== CategoryScope.STATE) {
       return;
     }

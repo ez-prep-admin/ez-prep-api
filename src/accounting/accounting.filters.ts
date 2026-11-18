@@ -60,6 +60,58 @@ export function paidUsersPipeline(now: Date): PipelineStage[] {
 }
 
 /**
+ * Distinct paid users per product from usable entitlements.
+ * A learner with two products appears in both rows.
+ */
+export function paidUsersByProductPipeline(now: Date): PipelineStage[] {
+  return [
+    {
+      $match: {
+        ...activeEntitlementFilter(now),
+        productId: { $type: 'objectId' },
+      },
+    },
+    {
+      $group: {
+        _id: { productId: '$productId', userId: '$userId' },
+      },
+    },
+    {
+      $group: {
+        _id: '$_id.productId',
+        userCount: { $sum: 1 },
+      },
+    },
+    {
+      $lookup: {
+        from: 'products',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'product',
+      },
+    },
+    {
+      $unwind: {
+        path: '$product',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        productId: '$_id',
+        productName: {
+          $ifNull: ['$product.name', 'Unknown product'],
+        },
+        productCode: '$product.code',
+        userCount: 1,
+      },
+    },
+    { $sort: { userCount: -1, productName: 1 } },
+  ];
+}
+
+/**
  * A completed refund moves the payment from CAPTURED to REFUNDED.
  * Gross receipts include both. Duplicate captures are not revenue.
  */

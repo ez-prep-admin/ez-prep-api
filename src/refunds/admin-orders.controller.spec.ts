@@ -81,4 +81,36 @@ describe('AdminOrdersController', () => {
     });
     expect(service.refund).toHaveBeenCalledWith('order1', 'admin1', 'support');
   });
+
+  it('passes productId through to the list service', async () => {
+    service.list.mockResolvedValue({
+      data: [],
+      pagination: {
+        total: 0,
+        page: 1,
+        limit: 20,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      },
+    });
+
+    await controller.list(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      '507f1f77bcf86cd799439011',
+    );
+
+    expect(service.list).toHaveBeenCalledWith({
+      page: undefined,
+      limit: undefined,
+      status: undefined,
+      search: undefined,
+      flag: undefined,
+      productId: '507f1f77bcf86cd799439011',
+    });
+  });
 });

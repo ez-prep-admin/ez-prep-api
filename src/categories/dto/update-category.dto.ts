@@ -1,11 +1,5 @@
 import { PartialType, OmitType, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsBoolean,
-  IsEnum,
-  IsIn,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { CreateCategoryDto } from './create-category.dto';
 import { CategoryScope } from '../enums/category-scope.enum';
