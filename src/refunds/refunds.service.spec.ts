@@ -425,6 +425,26 @@ describe('RefundsService', () => {
     ]);
   });
 
+  it('filters the order list by productId', async () => {
+    seedPaid();
+    const productId = new Types.ObjectId().toHexString();
+
+    await service.list({ productId });
+
+    expect(orderModel.find).toHaveBeenCalledWith({
+      'items.productId': new Types.ObjectId(productId),
+    });
+    expect(orderModel.countDocuments).toHaveBeenCalledWith({
+      'items.productId': new Types.ObjectId(productId),
+    });
+  });
+
+  it('rejects an invalid productId on the order list', async () => {
+    await expect(
+      service.list({ productId: 'not-an-id' }),
+    ).rejects.toMatchObject({ message: 'Invalid product id' });
+  });
+
   it('keeps the order paid when the provider refund is still pending', async () => {
     const order = seedPaid();
     gateway.refund.mockResolvedValue({

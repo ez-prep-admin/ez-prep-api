@@ -21,6 +21,7 @@ import {
   LEARNER_FILTER,
   offerStatusFilter,
   orderRefundsPipeline,
+  paidUsersByProductPipeline,
   paidUsersPipeline,
   paymentsReceivedPipeline,
   productStatusFilter,
@@ -31,6 +32,8 @@ import {
   AccountingOverviewBody,
   DEFAULT_CURRENCY,
   MoneyTotal,
+  PaidUsersByProduct,
+  PaidUsersByProductRow,
 } from './accounting.types';
 
 type CountModel = {
@@ -38,9 +41,13 @@ type CountModel = {
 };
 
 type AggregateRow = {
-  _id?: string | null;
+  _id?: string | null | { toString(): string };
   amountPaise?: number;
   count?: number;
+  productId?: string | { toString(): string };
+  productName?: string;
+  productCode?: string;
+  userCount?: number;
 };
 
 type AggregateModel = {
@@ -68,6 +75,18 @@ export class AccountingService {
 
   getOverview(): Promise<AccountingOverview> {
     return this.cache.get(() => this.compute());
+  }
+
+  async getPaidUsersByProduct(now = new Date()): Promise<PaidUsersByProduct> {
+    const [paidRows, productRows] = await Promise.all([
+      this.aggregate(this.entitlements, paidUsersPipeline(now), true),
+      this.aggregate(this.entitlements, paidUsersByProductPipeline(now), true),
+    ]);
+
+    return {
+      paidUsers: paidRows[0]?.count ?? 0,
+      products: productRows.map(toPaidUsersByProductRow),
+    };
   }
 
   async compute(now = new Date()): Promise<AccountingOverviewBody> {
@@ -232,4 +251,25 @@ function sortMoney(rows: MoneyTotal[]): MoneyTotal[] {
   return [...rows].sort((left, right) =>
     left.currency.localeCompare(right.currency),
   );
+}
+
+function toPaidUsersByProductRow(row: AggregateRow): PaidUsersByProductRow {
+  const productId =
+    row.productId != null
+      ? String(row.productId)
+      : row._id != null
+        ? String(row._id)
+        : '';
+  const result: PaidUsersByProductRow = {
+    productId,
+    productName:
+      typeof row.productName === 'string' && row.productName.trim()
+        ? row.productName.trim()
+        : 'Unknown product',
+    userCount: row.userCount ?? 0,
+  };
+  if (typeof row.productCode === 'string' && row.productCode.trim()) {
+    result.productCode = row.productCode.trim();
+  }
+  return result;
 }

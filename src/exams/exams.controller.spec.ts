@@ -43,10 +43,11 @@ describe('ExamsController', () => {
 
   it('getExamsByCategory wraps data', async () => {
     service.getExamsByCategory.mockResolvedValue([]);
-    await expect(controller.getExamsByCategory()).resolves.toEqual({
+    await expect(controller.getExamsByCategory({})).resolves.toEqual({
       message: 'Exams by category retrieved successfully',
       data: [],
     });
+    expect(service.getExamsByCategory).toHaveBeenCalledWith({});
   });
 
   it('create wraps data', async () => {

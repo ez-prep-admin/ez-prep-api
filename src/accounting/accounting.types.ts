@@ -50,3 +50,15 @@ export interface AccountingOverview extends AccountingOverviewBody {
   computedAt: string;
   freshUntil: string;
 }
+
+export interface PaidUsersByProductRow {
+  productId: string;
+  productName: string;
+  productCode?: string;
+  userCount: number;
+}
+
+export interface PaidUsersByProduct {
+  paidUsers: number;
+  products: PaidUsersByProductRow[];
+}
